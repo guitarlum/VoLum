@@ -3615,6 +3615,28 @@ TEST_CASE("IR import and delete fixes are wired into their UI paths")
   RequireContains(rig, "const volum::rig::RigLabels labels = _VolumRigLabels();");
 }
 
+TEST_CASE("Manage > Add never skips a file for a name clash, only an identical one")
+{
+  // Two long IRs that differ only in a trailing number used to be cut to the same
+  // 24-character prefix, and the second was skipped as "already exists".
+  const std::string overlay = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumCustomOverlay.h");
+  const auto start = overlay.find("void StartImport()");
+  REQUIRE(start != std::string::npos);
+  const auto end = overlay.find("volum::custom::CustomAmp NewBuilderAmp(", start);
+  REQUIRE(end != std::string::npos);
+  const std::string body = overlay.substr(start, end - start);
+  RequireContains(body, "volum::custom::UniqueImportName(");
+  RequireContains(body, "IdenticalLibraryItemName(fn.Get())");
+  RequireContains(body, "volum::custom::ImportOutcomeSummary(renamed, duplicates)");
+  RequireDoesNotContain(body, "ClampName(BaseName(");
+  RequireDoesNotContain(body, "already exists - skipped");
+  // The identity check runs before anything is copied into the owned library.
+  CHECK(body.find("IdenticalLibraryItemName(fn.Get())") < body.find("ImportFileCopy"));
+
+  const std::string row = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSpeakerRow.h");
+  RequireContains(row, "volum::custom::IrChipLabel(mIrName)");
+}
+
 TEST_CASE("F-76 SUPPORT IR fallback lands on a real cab and is shared with reconcile")
 {
   const std::string rig = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumSceneRig.inc.cpp");

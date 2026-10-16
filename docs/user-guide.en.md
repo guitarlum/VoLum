@@ -324,7 +324,7 @@ A custom IR replaces the cab, so the current channel needs a No Cab capture. Eve
 2. Click **Manage custom IRs...**, then **+ Import IR (.wav)**.
 3. Pick the IR from the **Custom IR** menu.
 
-VoLum checks that an import is a readable WAV before copying it into the library.
+VoLum checks that an import is a readable WAV before copying it into the library. You can pick several files at once. Long file names are shortened in the middle, so `Cab_..._1` and `Cab_..._2` stay apart; a name that is already taken gets a number, and only a file that is already in your library is skipped. Custom pedals work the same way.
 
 To shape an IR, click the **gear** on its row in **Manage custom IRs**: **Level**, **Low cut** and **High cut**.
 

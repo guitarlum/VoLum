@@ -9,6 +9,7 @@
 #include "VoLumCabStep.h"
 #include "VoLumColorHelpers.h"
 #include "VoLumCustomModel.h"
+#include "VoLumImportNaming.h"
 #include "VoLumSecondPress.h"
 
 #include <algorithm>
@@ -334,15 +335,7 @@ private:
     }
   }
 
-  std::string TruncatedIr() const
-  {
-    if (mIrName.size() <= 12)
-      return mIrName;
-    // Utf8Prefix, not substr: an IR named with non-ASCII characters would otherwise
-    // be cut mid-sequence, and the label is drawn from the same string that gets
-    // persisted.
-    return volum::custom::Utf8Prefix(mIrName, 11) + "\xE2\x80\xA6";
-  }
+  std::string TruncatedIr() const { return volum::custom::IrChipLabel(mIrName); }
 
   // No Cab (index 0) is gated by DIRECT availability on the current channel; cab
   // slots 1-3 with an empty label have no capture. Either way the slot cannot be

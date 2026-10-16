@@ -22,7 +22,7 @@
 [CmdletBinding()]
 param(
   [ValidateSet("all", "fresh", "roundtrip", "custom", "brokenrefs", "future", "upgrade", "presets", "corrupt",
-    "samplerate", "savedialog", "pack", "packrestore", "chrome", "midi")]
+    "samplerate", "savedialog", "pack", "packrestore", "chrome", "midi", "import")]
   [string]$Scenario = "all",
   [string]$Exe,
   # Seed state for the round-trip and upgrade scenarios. Defaults to a copy of the
@@ -927,6 +927,15 @@ public static class VoLumE2eUi {
     IntPtr at = (IntPtr)((y << 16) | (x & 0xFFFF));
     SendMessage(plug, 0x0200, IntPtr.Zero, at);     // WM_MOUSEMOVE
     SendMessage(plug, 0x0201, (IntPtr)1, at);       // WM_LBUTTONDOWN, MK_LBUTTON
+    SendMessage(plug, 0x0202, IntPtr.Zero, at);     // WM_LBUTTONUP
+  }
+  public static void DoubleClick(IntPtr plug, int cx, int cy) {
+    Click(plug, cx, cy);
+    RECT r; GetClientRect(plug, out r);
+    double s = (r.Right - r.Left) / 900.0;
+    int x = (int)Math.Round(cx * s), y = (int)Math.Round(cy * s);
+    IntPtr at = (IntPtr)((y << 16) | (x & 0xFFFF));
+    SendMessage(plug, 0x0203, (IntPtr)1, at);       // WM_LBUTTONDBLCLK, MK_LBUTTON
     SendMessage(plug, 0x0202, IntPtr.Zero, at);     // WM_LBUTTONUP
   }
   // iPlug derives the character from WM_KEYDOWN via ToAscii on the app thread's own
@@ -2329,6 +2338,155 @@ function Test-Midi {
 }
 
 # --------------------------------------------------------------------------
+# Scenario: Manage > Add with long, near-identical filenames
+#
+# Reported on 1.3.0: IRs named alike up to a trailing number (Cab_..._1,
+# Cab_..._2) were cut to the same 24-character name and every one after the
+# first was skipped as "already exists". Each Add here picks, in one batch, three
+# long files that differ only at the end, a byte-identical copy of the first
+# under another name, and a different file with the first one's exact name.
+# Expected: four entries with distinct names (the last one numbered), and only
+# the identical copy skipped. Runs for IRs and for pedals.
+#
+# VOLUM_IMPORT_OPEN_PATHS stands in for the native multi-select Open dialog
+# (VoLumHarnessEnv.h). Canvas coordinates (900x600, BUILD): Custom IR cab
+# (665, 80); its menu's only row on an empty library is Manage (first row
+# ~(690, 108)); PRE NAM1 card (455, 230), clicked twice, opens the pedal chooser,
+# whose last row is Manage (490, 576) with no custom pedals; the Manage panel's
+# Import button spans y 161-189 (VoLumCustomOverlay.h PanelRect / DrawManage).
+# --------------------------------------------------------------------------
+$script:ImportUi = @{
+  irCab = @(665, 80); irManage = @(690, 108)
+  preKey = 0x31; nam1 = @(455, 230); pedalManage = @(490, 576)
+  importBtn = @(450, 175); firstRow = @(300, 216)
+}
+
+function New-TestWav {
+  param([string]$Path, [int]$Seed)
+  $frames = 256
+  $data = New-Object byte[] ($frames * 2)
+  for ($i = 0; $i -lt $frames; $i++) {
+    $v = [int16](([Math]::Exp(-$i / 24.0)) * 12000 * [Math]::Cos(($i + $Seed) * 0.7))
+    $data[2 * $i] = [byte]($v -band 0xFF)
+    $data[2 * $i + 1] = [byte](($v -shr 8) -band 0xFF)
+  }
+  $ms = New-Object IO.MemoryStream
+  $w = New-Object IO.BinaryWriter($ms)
+  $w.Write([Text.Encoding]::ASCII.GetBytes("RIFF")); $w.Write([int](36 + $data.Length))
+  $w.Write([Text.Encoding]::ASCII.GetBytes("WAVEfmt ")); $w.Write([int]16)
+  $w.Write([int16]1); $w.Write([int16]1); $w.Write([int]48000); $w.Write([int](48000 * 2))
+  $w.Write([int16]2); $w.Write([int16]16)
+  $w.Write([Text.Encoding]::ASCII.GetBytes("data")); $w.Write([int]$data.Length); $w.Write($data)
+  $w.Flush()
+  New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
+  [IO.File]::WriteAllBytes($Path, $ms.ToArray())
+}
+
+function Invoke-ImportBatch {
+  param([string]$Kind, [string]$Ext, [scriptblock]$NewFile, [scriptblock]$OpenManage, [scriptblock]$AfterImport)
+  Write-Host ("  [import] {0}" -f $Kind) -ForegroundColor Cyan
+  $sandbox = New-Sandbox ("import-" + $Kind)
+  Write-SandboxAudioConfig $sandbox
+  $root = Join-Path $sandbox "VoLum"
+  $settingsPath = Join-Path $root "volum-settings.json"
+  $contentPath = Join-Path $root "content\volum-content.json"
+  $cap = Join-Path $sandbox "capture"
+  New-Item -ItemType Directory -Path $cap -Force | Out-Null
+
+  $first = Invoke-VoLumRun -SandboxRoot $sandbox
+  Assert-True "[$Kind] first launch opened a window" $first.started
+  $settings = Read-Json $settingsPath
+  if (-not $settings) { Assert-True "[$Kind] first launch wrote volum-settings.json" $false; return }
+  $settings | Add-Member -NotePropertyName volumUiMode -NotePropertyValue "build" -Force
+  $settings | Add-Member -NotePropertyName buildTipSeen -NotePropertyValue $true -Force
+  $settings | ConvertTo-Json -Depth 60 | Set-Content $settingsPath -Encoding UTF8
+
+  $src = Join-Path $sandbox "picked"
+  $stem = "Cab_XY_asdasd_Studio_412_Brit_V30_D57"
+  $files = @(
+    (Join-Path $src "$($stem)_1.$Ext"),
+    (Join-Path $src "$($stem)_2.$Ext"),
+    (Join-Path $src "$($stem)_3.$Ext"),
+    (Join-Path $src "Copy of take 1.$Ext"),
+    (Join-Path $src "other\$($stem)_1.$Ext"))
+  & $NewFile $files[0] 1
+  & $NewFile $files[1] 2
+  & $NewFile $files[2] 3
+  Copy-Item -LiteralPath $files[0] -Destination $files[3]
+  & $NewFile $files[4] 4
+
+  $run = Invoke-VoLumRun -SandboxRoot $sandbox -SettleSec 7 `
+    -Environment @{ VOLUM_IMPORT_OPEN_PATHS = ($files -join "|"); VOLUM_SELF_CAPTURE_DIR = $cap } -Drive {
+    param($proc)
+    $h = [VoLumE2eUi]::PlugWindow($proc.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw "no IPlugWndClass child under the main window" }
+    & $OpenManage $h
+    Save-PackShot $cap "07-import-$Kind-manage"
+    $ui = $script:ImportUi
+    [VoLumE2eUi]::Click($h, $ui.importBtn[0], $ui.importBtn[1]); Start-Sleep -Milliseconds 1500
+    Save-PackShot $cap "07-import-$Kind-done"
+    if ($AfterImport) { & $AfterImport $h }
+  }
+  Assert-True "[$Kind] app opened a window" $run.started
+  Assert-True "[$Kind] app closed gracefully" $run.graceful
+
+  $reg = Read-Json $contentPath
+  $items = @(if ($reg) { if ($Kind -eq "IR") { $reg.irLibrary } else { $reg.customPedals } })
+  $names = @($items | ForEach-Object { $_.name })
+  Assert-Equal "[$Kind] four of five picked files imported (only the identical copy skipped)" 4 $items.Count
+  Assert-Equal "[$Kind] every imported name is distinct" $items.Count (@($names | Sort-Object -Unique)).Count
+  Assert-True "[$Kind] every name fits 24 bytes" (
+    @($names | Where-Object { [Text.Encoding]::UTF8.GetByteCount($_) -gt 24 }).Count -eq 0) ($names -join " / ")
+  foreach ($n in 1..3) {
+    Assert-True "[$Kind] the _$n file keeps its own ending" (
+      @($names | Where-Object { $_ -like "*_$n" }).Count -ge 1) ($names -join " / ")
+  }
+  Assert-True "[$Kind] the same-name different file got a number" (
+    @($names | Where-Object { $_ -like "* 2" }).Count -eq 1) ($names -join " / ")
+  $shas = @($items | ForEach-Object { Get-FileSha (Get-StoredFile $root $_.path) })
+  Assert-Equal "[$Kind] every entry has its own stored file" 4 (@($shas | Where-Object { $_ } | Sort-Object -Unique)).Count
+  $wanted = @(0, 1, 2, 4 | ForEach-Object { Get-FileSha $files[$_] }) | Sort-Object
+  Assert-Equal "[$Kind] stored bytes are the four distinct picks" ($wanted -join ",") (($shas | Sort-Object) -join ",")
+  if ($Kind -eq "IR" -and $items.Count -ge 1) {
+    # Positive control: the first imported IR loads on the cab it was double-clicked for.
+    $settings = Read-Json $settingsPath
+    $lane = $settings.amps.PSObject.Properties.Name[$settings.lastAmpIdx]
+    Assert-Equal "[IR] double-clicked import is the active IR" $items[0].id $settings.amps.$lane.activeIrId
+  }
+  if (-not $KeepSandbox) { Remove-Item $sandbox -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+function Test-Import {
+  Write-Host "`n[import] Manage > Add keeps long near-identical files apart" -ForegroundColor Cyan
+  $ui = $script:ImportUi
+  Invoke-ImportBatch -Kind "IR" -Ext "wav" -NewFile { param($p, $s) New-TestWav $p $s } -OpenManage {
+    param($h)
+    [VoLumE2eUi]::Click($h, $ui.irCab[0], $ui.irCab[1]); Start-Sleep -Milliseconds 500
+    Save-PackShot $cap "07-import-IR-menu"
+    [VoLumE2eUi]::Click($h, $ui.irManage[0], $ui.irManage[1]); Start-Sleep -Milliseconds 600
+  } -AfterImport {
+    param($h)
+    [VoLumE2eUi]::DoubleClick($h, $ui.firstRow[0], $ui.firstRow[1]); Start-Sleep -Milliseconds 1500
+    Save-PackShot $cap "07-import-IR-chip"
+  }
+  $pedalSrc = Join-Path (Split-Path -Parent $slnDir) "rigs\PrePedals\FX-Minotaur-Klon-1.nam"
+  Invoke-ImportBatch -Kind "pedal" -Ext "nam" -NewFile {
+    param($p, $s)
+    New-Item -ItemType Directory -Path (Split-Path -Parent $p) -Force | Out-Null
+    [byte[]]$bytes = [IO.File]::ReadAllBytes($pedalSrc) + [byte[]](@(0x20) * $s)
+    [IO.File]::WriteAllBytes($p, $bytes)
+  } -OpenManage {
+    param($h)
+    [VoLumE2eUi]::Key($h, $ui.preKey); Start-Sleep -Milliseconds 400
+    # The default rig has a capture in NAM1: the first click focuses, the second opens the chooser.
+    [VoLumE2eUi]::Click($h, $ui.nam1[0], $ui.nam1[1]); Start-Sleep -Milliseconds 500
+    [VoLumE2eUi]::Click($h, $ui.nam1[0], $ui.nam1[1]); Start-Sleep -Milliseconds 600
+    Save-PackShot $cap "07-import-pedal-menu"
+    [VoLumE2eUi]::Click($h, $ui.pedalManage[0], $ui.pedalManage[1]); Start-Sleep -Milliseconds 600
+  }
+}
+
+# --------------------------------------------------------------------------
 
 Get-Process -Name VoLum, VoLum_x64 -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
@@ -2351,6 +2509,7 @@ if ($Scenario -in @("all", "pack")) { Test-Pack }
 if ($Scenario -in @("all", "packrestore")) { Test-PackRestore }
 if ($Scenario -in @("all", "chrome")) { Test-Chrome }
 if ($Scenario -in @("all", "midi")) { Test-Midi }
+if ($Scenario -in @("all", "import")) { Test-Import }
 
 Write-Host ""
 if ($script:Failures.Count -eq 0) {

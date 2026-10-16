@@ -171,6 +171,7 @@
     <ClCompile Include="..\tests\test_volum_tremolo.cpp" />
     <ClCompile Include="..\tests\test_volum_chorus.cpp" />
     <ClCompile Include="..\tests\test_volum_ir_file_guard.cpp" />
+    <ClCompile Include="..\tests\test_volum_import_naming.cpp" />
     <ClCompile Include="..\tests\test_volum_pre_post_lock.cpp" />
     <ClCompile Include="..\tests\test_volum_level_mute.cpp" />
     <ClCompile Include="..\tests\test_volum_knob_wheel.cpp" />
