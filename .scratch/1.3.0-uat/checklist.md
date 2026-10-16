@@ -1,80 +1,76 @@
-# 1.3.0 UAT: what is left for you (about 50 min)
+# 1.3.0 UAT: what only you can check (about 55 min)
 
-Machines covered everything else overnight (see `.scratch/1.3.0-hunt/loop.md`): golden
-renders, 1,300+ unit tests plus AddressSanitizer, the Windows end-to-end scenarios with real
-WinMM MIDI, REAPER VST3 on Windows (Program Change and CC 102, save/reopen, two instances,
-restore guard), audio loopback and driver switching on the UA-2X2, and on the macOS CI
-runner: universal binaries, strict codesign, Rosetta auval, and REAPER AU + VST3 with
-Program Change, CC 102 and project reload. What no machine could do: a real Mac with the HX,
-Gatekeeper, an elevated Windows installer, and two repo/product decisions.
+Machines cover the rest on every build: golden renders, 1,470 unit tests (plus
+AddressSanitizer on macOS), the Windows end-to-end scenarios (484 checks, including the
+custom IR / pedal import), both installer upgrade jobs, the macOS standalone e2e, and
+pluginval on both platforms. What no machine can do: a real Mac with the HX, Gatekeeper, an
+elevated Windows installer over your install, REAPER with your projects, and your ears.
+
+Use the release assets of the **re-cut** v1.3.0 draft (16/10, after the import fix). Older
+assets and CI artifacts predate it.
 
 Tick `[x]` when it works. Anything odd: one line under Findings, and keep going.
 
-## Release blockers (5 min)
+## Release blockers
 
-- [x] **Enable GitHub Pages (Q-07).** Done: Pages builds from workflows and the
-  `github-pages` environment accepts `main` and `v*` tags.
-- [ ] **Skim the defaults in `.scratch/1.3.0-hunt/questions.md` (Q-01..Q-18).** Every one
-  shipped with the default named there; only reply on the ones you disagree with.
+- [x] **Enable GitHub Pages (Q-07).** Done.
+- [x] **Defaults in `.scratch/1.3.0-hunt/questions.md` (Q-01..Q-18).** Decided 11/10: all
+  ship as-is.
 
-## Mac pass (about 35 min)
+## Ears (about 5 min, either machine)
 
-Build: the release asset `VoLum-v1.3.0-macos-installer.dmg` from the
-[v1.3.0 release](https://github.com/guitarlum/VoLum/releases/tag/v1.3.0) (while it is a
-draft, open it from the Releases page signed in). Do not use an older CI artifact: those
-predate the audio-device fix.
-Hardware: HX Stomp XL over one USB cable as audio interface and MIDI. On the HX, Global
-Settings > MIDI/Tempo: MIDI Over USB On, PC Send On, channel 1.
+Bug-sweep items no test can close: listen once.
 
-- [ ] **1. Install over 1.2.x with Gatekeeper.** Run the DMG. If macOS blocks it, System
-  Settings > Privacy & Security > Open Anyway. Write down the exact wording of each step
-  (Findings). Expect: standalone, VST3 and AU installed; your 1.2.x presets and custom
-  content still there.
-- [ ] **2. Audio device and persistence.** VoLum > Preferences... (also Settings > SIGNAL >
-  Audio & MIDI devices...). Pick the HX for input, output and MIDI. Play at buffer 64 and
-  128, listen for crackle. Turn a knob, Cmd+Q right away, reopen. Expect: device, buffer and
-  knob kept.
+- [ ] **Oktaverb at Mix 0** is the dry signal: no octave bleeding through.
+- [ ] **Pitch and Compressor reset**: switch each off and on mid-note; no burst, no stuck
+  tail.
+- [ ] **Chorus at full mix** on each voice (CLASSIC, WARPED, CLEAR, ENSEMBLE): no zipper or
+  click when you move Mix or Rate.
+
+## Mac pass (about 30 min)
+
+Asset: `VoLum-v1.3.0-macos-installer.dmg` from the v1.3.0 draft (open it from the Releases
+page signed in). Hardware: HX Stomp XL over one USB cable as audio interface and MIDI; on
+the HX, Global Settings > MIDI/Tempo: MIDI Over USB On, PC Send On, channel 1.
+
+- [ ] **1. Install over 1.2.x with Gatekeeper.** If macOS blocks it, System Settings >
+  Privacy & Security > Open Anyway. Write down the exact wording (Findings). Expect:
+  standalone, VST3 and AU installed; your 1.2.x presets and custom content still there.
+- [ ] **2. Audio device and persistence.** Settings > SIGNAL > Audio & MIDI devices...: the
+  HX for input, output and MIDI. Play at buffer 64 and 128, listen for crackle. Turn a knob,
+  Cmd+Q right away, reopen. Expect: device, buffer and knob kept.
 - [ ] **3. Apple silicon listening.** Tuner agrees with the HX tuner. Octaver on a high-gain
   amp, frets 12-19 on the high E with bends: no wobble. Transpose INSTANT -2: clean. Dual
-  Amp in PLAY (Tab): both lanes audible, no click when toggling.
-- [ ] **4. Retina look.** Glance at BUILD, PLAY (art moves while you play, P toggles),
-  Settings SIGNAL/MIDI/SYSTEM, the MIDI footswitch board, a Dual Amp lane. Expect: crisp
-  text, nothing clipped. Screenshot anything odd. Then minimise the window, switch to
-  another Space and back, and close and reopen the AU editor a few times: the editor redraws
-  every time, never freezes or goes blank (1.3.0 changed how the Metal renderer skips frames
-  it cannot draw).
+  Amp in PLAY: both lanes audible, and **Tab** (switching which lane you edit) does not
+  click. Known and not a finding: switching Dual Amp itself on or off clicks once (F-97,
+  1.3.1).
+- [ ] **4. Retina look and the Metal change.** Glance at BUILD, PLAY (art moves while you
+  play), Settings SIGNAL/MIDI/SYSTEM, the MIDI footswitch board. Expect: crisp, nothing
+  clipped. Then minimise, switch Spaces and back, and close/reopen the AU editor a few
+  times: it redraws every time, never freezes or goes blank.
 - [ ] **5. Standalone MIDI with the HX.** Settings > MIDI: assign 3 Sounds to programs 0-2.
-  Turn the HX preset knob through 01A/01B/01C: VoLum follows, the LIVE lamp moves. "One
-  channel" = 2: VoLum ignores the HX; set it back to All. Pull the USB cable while running,
+  HX preset knob through 01A/01B/01C: VoLum follows. Pull the USB cable while running,
   replug, reselect the device: no crash. Quit: the app exits.
-- [ ] **6. AU in Reaper with the HX (quick).** VoLum (AU) on a track with HX audio in and HX
-  MIDI as track input. HX presets switch the Sound. Save, quit Reaper, reopen: same Sound.
-- [ ] **7. Small Mac-only paths.** Settings > SYSTEM > Check now gives a clear answer
-  (before publish: "Could not check"; after publish: up to date). About > "Read the manual" opens the browser.
-- [ ] **8. Pack from Windows to Mac.** Copy `presetSounds.volumpack` to the Mac, Settings >
-  SYSTEM > Import Pack. Expect: all presets, with names and art.
+- [ ] **6. AU in REAPER (quick).** HX presets switch the Sound. Save, quit, reopen: same
+  Sound.
 
-## Windows pass: installer upgrade (about 10 min)
+## Windows pass (about 15 min)
 
-The overnight lane could not elevate, so the real installer was never run over an installed
-version. This laptop still has 1.2.1 installed (backup:
-`.scratch/1.3.0-hunt/l6/backup-initial-121/`).
+This laptop still has 1.2.1 installed (backup: `.scratch/1.3.0-hunt/l6/backup-initial-121/`).
 
-- [ ] **1. Upgrade install.** Download the release asset `VoLum-v1.3.0-windows-setup.exe`
-  from the v1.3.0 draft and run it (accept UAC). Expect: no error, `C:\Program Files\VoLum\VoLum.exe` and
-  the VST3 report 1.3.0, one "VoLum" entry in Apps (no duplicate 1.2.1 entry).
-- [ ] **2. Your normal library.** Launch from the Start menu. Your custom amps, presets and
-  settings are intact; PLAY is not re-filled (your test builds already created a MIDI map).
-- [ ] **3. Reaper VST3 project from 1.2.x.** Open an existing project that uses VoLum: same
-  Sound and knobs as before.
-- [ ] **4. Portable next to the install (the 1.2.3 placeholder-pedal report).** Unzip
-  `VoLum-v1.3.0-windows-portable.zip` to a folder of its own and run its `VoLum.exe` while
-  the installed 1.3.0 is still there. Open the PRE pedal menu. Expect: the real factory
-  pedals (no "Klon - Gold Horse", "TS - Green Drive" or the other old placeholders), and
-  a pedal you switch on is audible. `%LOCALAPPDATA%\VoLum\volum.log` has a
-  `[startup] rigs root:` line pointing at the portable's own `VoLumRigs`.
-- [ ] **5. (Optional) Uninstall and reinstall.** Apps > VoLum > Uninstall: program and VST3
-  gone, your library in `%LOCALAPPDATA%\VoLum` stays. Reinstall to keep using it.
+- [ ] **1. Upgrade install.** Run `VoLum-v1.3.0-windows-setup.exe` from the draft (accept
+  UAC). Expect: no error, VoLum.exe and the VST3 report 1.3.0, one "VoLum" in Apps.
+- [ ] **2. Your library.** Launch from the Start menu: custom amps, presets and settings
+  intact; PLAY not re-filled.
+- [ ] **3. Your long-named IRs (the tester's report).** Manage custom IRs > + Import IR:
+  pick the IRs that differ only by their trailing number, all at once. Expect: every one is
+  added, the list tells them apart by their ends, and picking one shows a cab-row chip that
+  differs from its neighbour's. Importing the same files again says they are already in your
+  library.
+- [ ] **4. REAPER VST3 project from 1.2.x.** Same Sound and knobs as before.
+- [ ] **5. Portable next to the install.** Unzip `VoLum-v1.3.0-windows-portable.zip` to its
+  own folder and run it while 1.3.0 is installed. PRE pedal menu: the real factory pedals,
+  no placeholders; a pedal you switch on is audible.
 
 ## Findings
 

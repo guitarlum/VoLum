@@ -21,6 +21,7 @@
 - The standalone holds on to your audio interface and MIDI controller across restarts, even when it was unplugged at launch or you added new devices.
 - DAW projects reopen on the Sound you saved, and Program Change now reaches the VST3 in REAPER.
 - The portable build uses its own amps and pedals, even on a PC with an older VoLum installed.
+- Importing IRs or pedals with long, similar file names keeps every file: names are shortened in the middle, a taken name gets a number, and only exact duplicates are skipped.
 
 ### Get it
 

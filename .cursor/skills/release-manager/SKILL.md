@@ -26,9 +26,10 @@ description: Prepare VoLum PRs and GitHub releases. Use when creating release PR
      change. No engineering narrative, no test-strategy or process sections, no
      recap of how the bug was found - that belongs in the PR and changelog.
 5. CI on a release branch:
-   - Pushing `release/*` triggers nothing; CI auto-runs only on `dev`/`main`.
-   - `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref release/x.y.z -Dispatch`
-     starts a run and follows it to green, naming the failing step if it is not.
+   - Pushing `release/**` (and a PR from it) starts the full CI matrix on its own;
+     do not dispatch another. Follow it with
+     `pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -Ref release/x.y.z`, which names
+     the failing step if it is not green.
    - Artifacts for manual testing: `VoLum-win` (installer + portable zip + pdbs)
      and `VoLum-mac`; fetch with `gh run download <id> -n VoLum-win -D <dir>`.
 6. Human checks (CI has no audio device; do not keep a dated checklist):
