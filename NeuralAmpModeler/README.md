@@ -98,14 +98,16 @@ Example: `rigs/Marshall JMP 2203 1976/V30-2203-f.nam`
 
 ## Rig discovery
 
-`VoLumPaths.h` > `FindRigsRootDirectory()` checks in order:
+`VoLumPaths.h` > `FindRigsRootDirectory()` takes the first candidate that holds VoLum's own content (`factory-presets.json`, or `.nam` captures in `PrePedals/`), else the first candidate that exists. Candidates in order:
 
-1. **Windows registry** `HKLM\Software\VoLum\NeuralAmpModeler\VoLumRigsRoot` (set by the Inno installer so VST3 under Common Files can reach models in the VoLum install directory)
-2. Walk up from the **plugin module** (VST3 DLL or standalone exe -- uses `GetModuleHandleEx` on Windows so it resolves to the plugin, not the host process). Checks for `VoLumRigs/` then `rigs/` at each level.
+1. Walk up from the **plugin module** (VST3 DLL or standalone exe -- uses `GetModuleHandleEx` on Windows so it resolves to the plugin, not the host process). Checks for `VoLumRigs/` then `rigs/` at each level, so a portable build uses its own tree.
+2. **Windows registry** `HKLM\Software\VoLum\NeuralAmpModeler\VoLumRigsRoot` (set by the Inno installer so VST3 under Common Files can reach models in the VoLum install directory)
 3. **macOS .app bundle** `Contents/Resources/VoLumRigs` (then `rigs`) for the standalone app
 4. **macOS Application Support** lookup in `~/Library/Application Support/VoLum/VoLumRigs` and `/Library/Application Support/VoLum/VoLumRigs` (then legacy `rigs`) for installed rigs outside the app bundle
-5. Walk up from the module / extracted archive and check sibling `VoLumRigs/` then `rigs/` (used by portable VST3 packaging)
+5. On macOS, walk up from the module / extracted archive and check sibling `VoLumRigs/` then `rigs/` (used by portable VST3 packaging)
 6. **CWD** `./VoLumRigs` then `./rigs` (dev fallback)
+
+The chosen root is written to `volum.log` at startup (`[startup] rigs root: ...`).
 
 Settings are stored under the user profile (`%LOCALAPPDATA%\VoLum\` on Windows, `~/Library/Application Support/VoLum/` on macOS) so they work regardless of install location.
 
