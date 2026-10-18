@@ -151,7 +151,14 @@ target_compile_definitions(NeuralAmpModeler-Tests PRIVATE
 )
 
 if(APPLE)
-  target_link_libraries(NeuralAmpModeler-Tests PRIVATE "-framework CoreFoundation" "-framework Accelerate")
+  enable_language(OBJCXX)
+  target_sources(NeuralAmpModeler-Tests PRIVATE
+    test_volum_http_get_mac.mm
+    "${PROJECT_DIR}/VoLumHttpGet.mm"
+  )
+  set_source_files_properties(test_volum_http_get_mac.mm "${PROJECT_DIR}/VoLumHttpGet.mm"
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  target_link_libraries(NeuralAmpModeler-Tests PRIVATE "-framework CoreFoundation" "-framework Foundation" "-framework Accelerate")
 endif()
 
 if(VOLUM_ENABLE_SANITIZERS)

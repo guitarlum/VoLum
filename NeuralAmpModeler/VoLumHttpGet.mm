@@ -1,11 +1,31 @@
 #include "VoLumHttpGet.h"
+#include "VoLumHttpGetMac.h"
 
-#import <Foundation/Foundation.h>
+#include <memory>
 
-bool VolumHttpGetString(const char* url, std::string& out, int timeoutMs)
+#if !__has_feature(objc_arc)
+  #error "VoLumHttpGet.mm must be compiled with -fobjc-arc"
+#endif
+
+namespace
+{
+
+constexpr NSUInteger kMaximumBytes = 1024 * 1024;
+
+struct HttpResult
+{
+  bool received = false;
+  NSInteger statusCode = 0;
+  std::string body;
+};
+
+} // namespace
+
+bool VolumHttpGetStringWithConfiguration(NSURLSessionConfiguration* config, const char* url, std::string& out,
+                                         int timeoutMs)
 {
   out.clear();
-  if (!url || !*url || timeoutMs <= 0)
+  if (!config || !url || !*url || timeoutMs <= 0)
     return false;
 
   @autoreleasepool
@@ -15,7 +35,6 @@ bool VolumHttpGetString(const char* url, std::string& out, int timeoutMs)
     if (!nsUrl || ![[nsUrl scheme] isEqualToString:@"https"])
       return false;
 
-    NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
     config.HTTPCookieStorage = nil;
     config.URLCredentialStorage = nil;
     config.URLCache = nil;
@@ -23,18 +42,22 @@ bool VolumHttpGetString(const char* url, std::string& out, int timeoutMs)
     config.timeoutIntervalForRequest = timeoutMs / 1000.0;
     config.timeoutIntervalForResource = timeoutMs / 1000.0;
 
+    // The completion handler can outlive this call after a timeout, and the
+    // NSData it receives is only valid until it returns: it copies into a
+    // result it co-owns and never touches this frame.
+    auto result = std::make_shared<HttpResult>();
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
-    __block NSData* received = nil;
-    __block NSInteger statusCode = 0;
-    __block NSError* requestError = nil;
     NSURLSession* session = [NSURLSession sessionWithConfiguration:config];
     NSURLSessionDataTask* task =
       [session dataTaskWithURL:nsUrl
             completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
-              received = data;
-              requestError = error;
               if ([response isKindOfClass:[NSHTTPURLResponse class]])
-                statusCode = static_cast<NSHTTPURLResponse*>(response).statusCode;
+                result->statusCode = static_cast<NSHTTPURLResponse*>(response).statusCode;
+              if (!error && data && data.length <= kMaximumBytes)
+              {
+                result->body.assign(static_cast<const char*>(data.bytes), data.length);
+                result->received = true;
+              }
               dispatch_semaphore_signal(done);
             }];
     [task resume];
@@ -45,10 +68,15 @@ bool VolumHttpGetString(const char* url, std::string& out, int timeoutMs)
       [task cancel];
     [session finishTasksAndInvalidate];
 
-    constexpr NSUInteger kMaximumBytes = 1024 * 1024;
-    if (waitResult != 0 || requestError || statusCode != 200 || !received || received.length > kMaximumBytes)
+    if (waitResult != 0 || !result->received || result->statusCode != 200)
       return false;
-    out.assign(static_cast<const char*>(received.bytes), received.length);
+    out = std::move(result->body);
     return true;
   }
+}
+
+bool VolumHttpGetString(const char* url, std::string& out, int timeoutMs)
+{
+  return VolumHttpGetStringWithConfiguration([NSURLSessionConfiguration ephemeralSessionConfiguration], url, out,
+                                             timeoutMs);
 }

@@ -397,6 +397,35 @@ jobs:
           bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
         shell: bash
 
+      - name: macOS REAPER and standalone crash smoke
+        timeout-minutes: 30
+        env:
+          REAPER_DMG_URL: https://dlcf.reaper.fm/7.x/reaper769_universal.dmg
+          REAPER_DMG_SHA256: c9a042bc4c58be8e3af8bb5c0fe0c44cf387caf3f51ccb439c04f2fa4b14549a
+        run: |
+          set -euo pipefail
+          dmg="$RUNNER_TEMP/reaper.dmg"
+          mnt="$RUNNER_TEMP/reaper-dmg"
+          curl -fsSL --retry 3 -o "$dmg" "$REAPER_DMG_URL"
+          echo "$REAPER_DMG_SHA256  $dmg" | shasum -a 256 -c -
+          # The image shows REAPER's license on attach and waits for a yes.
+          { yes || true; } | hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg" > /dev/null
+          rm -rf "$RUNNER_TEMP/REAPER.app"
+          cp -R "$mnt/REAPER.app" "$RUNNER_TEMP/REAPER.app"
+          hdiutil detach "$mnt" > /dev/null
+          bash NeuralAmpModeler/scripts/smoke-reaper-mac.sh --format all --runs 3 \
+            --reaper "$RUNNER_TEMP/REAPER.app" --app "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}" \
+            --out "$RUNNER_TEMP/reaper-smoke"
+        shell: bash
+
+      - name: Upload macOS REAPER smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-mac-reaper-smoke
+          path: ${{ runner.temp }}/reaper-smoke/
+          if-no-files-found: ignore
+
       - name: Upload macOS launch smoke artifacts
         if: always()
         uses: actions/upload-artifact@v4
