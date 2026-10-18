@@ -413,6 +413,10 @@ jobs:
           rm -rf "$RUNNER_TEMP/REAPER.app"
           cp -R "$mnt/REAPER.app" "$RUNNER_TEMP/REAPER.app"
           hdiutil detach "$mnt" > /dev/null
+          # REAPER opens the default input on launch and waits on the microphone
+          # prompt, which nobody answers on a runner.
+          sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
+            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceMicrophone', 'com.cockos.reaper', 0, 2, 3, 1, 0);"
           bash NeuralAmpModeler/scripts/smoke-reaper-mac.sh --format all --runs 3 \
             --reaper "$RUNNER_TEMP/REAPER.app" --app "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}" \
             --out "$RUNNER_TEMP/reaper-smoke"
