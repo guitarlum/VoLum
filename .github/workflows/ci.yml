@@ -387,6 +387,45 @@ jobs:
         run: bash NeuralAmpModeler/scripts/smoke-installer-mac.sh
         shell: bash
 
+      # Before the standalone smokes: they leave VoLum's microphone prompt
+      # unanswered, and while it is up macOS holds REAPER's request as well.
+      - name: macOS REAPER and standalone crash smoke
+        timeout-minutes: 30
+        env:
+          REAPER_DMG_URL: https://dlcf.reaper.fm/7.x/reaper769_universal.dmg
+          REAPER_DMG_SHA256: c9a042bc4c58be8e3af8bb5c0fe0c44cf387caf3f51ccb439c04f2fa4b14549a
+        run: |
+          set -euo pipefail
+          dmg="$RUNNER_TEMP/reaper.dmg"
+          mnt="$RUNNER_TEMP/reaper-dmg"
+          curl -fsSL --retry 3 -o "$dmg" "$REAPER_DMG_URL"
+          echo "$REAPER_DMG_SHA256  $dmg" | shasum -a 256 -c -
+          # The image shows REAPER's license on attach and waits for a yes.
+          { yes || true; } | hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg" > /dev/null
+          rm -rf "$RUNNER_TEMP/REAPER.app"
+          cp -R "$mnt/REAPER.app" "$RUNNER_TEMP/REAPER.app"
+          hdiutil detach "$mnt" > /dev/null
+          # REAPER opens the default input on launch and waits on the microphone
+          # prompt, which nobody answers on a runner.
+          sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
+            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceMicrophone', 'com.cockos.reaper', 0, 2, 3, 1, 0);"
+          bash NeuralAmpModeler/scripts/smoke-reaper-mac.sh --format all --runs 3 \
+            --reaper "$RUNNER_TEMP/REAPER.app" --app "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}" \
+            --out "$RUNNER_TEMP/reaper-smoke"
+        shell: bash
+
+      - name: Upload macOS REAPER smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-mac-reaper-smoke
+          path: |
+            ${{ runner.temp }}/reaper-smoke/*.png
+            ${{ runner.temp }}/reaper-smoke/*.ips
+            ${{ runner.temp }}/reaper-smoke/*/result.txt
+            ${{ runner.temp }}/reaper-smoke/*/*.log
+          if-no-files-found: ignore
+
       - name: macOS standalone launch smoke
         run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
         shell: bash
