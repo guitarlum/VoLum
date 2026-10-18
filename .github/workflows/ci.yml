@@ -387,16 +387,8 @@ jobs:
         run: bash NeuralAmpModeler/scripts/smoke-installer-mac.sh
         shell: bash
 
-      - name: macOS standalone launch smoke
-        run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
-        shell: bash
-
-      - name: macOS standalone audio config smoke
-        run: |
-          chmod +x NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh
-          bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
-        shell: bash
-
+      # Before the standalone smokes: they leave VoLum's microphone prompt
+      # unanswered, and while it is up macOS holds REAPER's request as well.
       - name: macOS REAPER and standalone crash smoke
         timeout-minutes: 30
         env:
@@ -427,8 +419,22 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VoLum-mac-reaper-smoke
-          path: ${{ runner.temp }}/reaper-smoke/
+          path: |
+            ${{ runner.temp }}/reaper-smoke/*.png
+            ${{ runner.temp }}/reaper-smoke/*.ips
+            ${{ runner.temp }}/reaper-smoke/*/result.txt
+            ${{ runner.temp }}/reaper-smoke/*/*.log
           if-no-files-found: ignore
+
+      - name: macOS standalone launch smoke
+        run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
+        shell: bash
+
+      - name: macOS standalone audio config smoke
+        run: |
+          chmod +x NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh
+          bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
+        shell: bash
 
       - name: Upload macOS launch smoke artifacts
         if: always()
