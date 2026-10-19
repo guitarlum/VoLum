@@ -111,5 +111,12 @@ Same identity, different layout and interaction model:
 - Locks: `flock ~/volum-android/locks/build{1,2}.lock` (at most two Gradle builds)
   and `locks/emu.lock` (one emulator user at a time). Never touch
   `~/localai-platform`, never stop Ollama.
+- Smoke-tested 00:46: KVM boot in 12 s, `adb exec-out screencap` works, the
+  launcher stays portrait. The app forces landscape in its manifest, and
+  `Capture` fails any frame that is not 2400×1080.
+- Upload box scripts with `scp` of an LF-only file
+  (`[IO.File]::WriteAllText` with CRs removed). Piping a file through ssh adds a
+  CR to its last line, and a remote `sed` inside a single-quoted PowerShell
+  argument loses its quotes (it once deleted the first "r" of every line).
 - PowerShell → ssh traps: pipe scripts to `bash -s` with CRs stripped and a
   sacrificial trailing `#` line; never inline `$` in a double-quoted ssh argument.

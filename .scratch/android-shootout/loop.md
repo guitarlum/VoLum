@@ -102,3 +102,4 @@ Write the question to `reports/escalations.md`, mark only the affected ticket `S
 
 <!-- append-only: timestamp | unit | what changed | predicate moved yes/no -->
 - 2026-10-20 00:55 | setup | effort written, box provisioned, PoC deleted, pstack unbanned (a3b2124e) | no
+- 2026-10-20 00:50 | setup | box smoke: NDK 29.0.14206865, AVD volum_phone boots in 12 s, screencap fetched; provision.sh on feature/android-shootout 412fae13 | no
