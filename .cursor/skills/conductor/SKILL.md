@@ -10,7 +10,7 @@ Implementation loop. Write a checkable **predicate** before the first edit, keep
 
 **Skip this skill** when the user is here for one slice (a bug with a failing test, a small feature they will review live). Use Plan mode or implement under `vo-lum-workflow`. Foggy multi-session headlines stay `/wayfinder` until the map is clear. Invoke `/conductor` for AFK / overnight, a `loop.md` that must survive compression, spec overnight, or release dispatch.
 
-Do not install pstack and do not replace Cursor’s Task tool, `/loop`, or cloud agents. This skill is standing orders those already run: predicate on disk, VoLum escalate, verifier, spawn order. Do not invent a second orchestrator, queue files, or Graphite.
+Do not replace Cursor’s Task tool, `/loop`, or cloud agents. pstack skills such as `/arena` may run inside a loop. This skill is standing orders those already run: predicate on disk, VoLum escalate, verifier, spawn order. Do not invent a second orchestrator, queue files, or Graphite.
 
 ## First tool call every turn
 

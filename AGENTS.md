@@ -24,7 +24,7 @@ Rules below auto-attach on the files they own; you do not need to open them by h
 - Retraining bundled NAM captures to A2: skill `a2-training` (ops in `training/cloud/`).
 - Writing or trimming rules/skills/`AGENTS.md`: `.cursor/rules/ai-artifact-authoring.mdc`.
 - Wayfinder maps / scratch tickets: `.cursor/rules/volum-scratch-planning.mdc`.
-- Goal+verify loops: `/conductor` for AFK, overnight, spec overnight, or dispatching a clear map. Ordinary one-slice features and bugs: Plan mode or implement (`vo-lum-workflow`). Foggy headlines: `/wayfinder`. Skip all three for one-step edits. Do not install pstack.
+- Goal+verify loops: `/conductor` for AFK, overnight, spec overnight, or dispatching a clear map. Ordinary one-slice features and bugs: Plan mode or implement (`vo-lum-workflow`). Foggy headlines: `/wayfinder`. Skip all three for one-step edits. pstack skills (`/arena`, `/swarm`, `/interrogate`, `/poteto-mode`) are allowed; set their models with `/setup-pstack`.
 
 ## Agent skills
 
