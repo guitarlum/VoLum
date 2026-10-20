@@ -1,14 +1,12 @@
-# Mechanical gate for one Android shootout unit at the current branch head:
-# Sync -> Build -> Unit -> Test -> Capture -> Motion -> Fetch on the box, then
-# evidence/<x>/<sha>/verify-candidate.json in the main checkout's
-# .scratch/android-shootout/. Exit 0 only when every gate passes; 1 when a gate
-# fails; 2 when the box pipeline itself could not run.
+# Mechanical gate for one Android shootout unit at the branch head. Writes
+# evidence/<x>/<sha>/verify-candidate.json in the main checkout's .scratch/android-shootout/
+# so reviewers in any worktree read the same file.
 #
-#   pwsh NeuralAmpModeler/scripts/android-box/verify-candidate.ps1 -Candidate a
-#   pwsh NeuralAmpModeler/scripts/android-box/verify-candidate.ps1 -Candidate design
+#   pwsh NeuralAmpModeler/scripts/android-box/verify-candidate.ps1 -Candidate a|b|c|design
 #
-# The harness gate is the harness self-test (a probe UI the coverage, reachability
-# and touch checks must accept and reject correctly). The design system has no
+# Exit 0 only when every gate passes; 1 when a gate fails; 2 when the box pipeline
+# itself could not run. The harness gate is the harness self-test, so a harness that
+# cannot tell a wrong UI from a right one fails the gate. The design system has no
 # feature surfaces: for -Candidate design the harness, coverage, reachability and
 # touch gates are reported as skipped.
 [CmdletBinding()]

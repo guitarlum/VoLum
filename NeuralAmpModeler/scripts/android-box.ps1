@@ -1,18 +1,6 @@
-# Laptop side of the Android shootout box pipeline (box: lum@192.168.178.91,
-# Ubuntu under WSL2, provisioned by android-box/provision.sh). Each step runs
-# android-box/box.sh from the box worktree of the commit under test.
+# Laptop side of the Android shootout box pipeline (box provisioned by android-box/provision.sh).
 #
-#   pwsh NeuralAmpModeler/scripts/android-box.ps1 -Step Sync,Build,Unit -Candidate a
-#   pwsh NeuralAmpModeler/scripts/android-box.ps1 -Step Test,Capture,Motion,Fetch -Candidate a
-#
-# Steps:
-#   Sync     push the commit to ~/volum-android/VoLum.git and check it out in ~/volum-android/wt/<branch-slug>
-#   Build    assemble the flavor's app + test APKs and dump the registries (build lock)
-#   Unit     :core unit tests (build lock)
-#   Test     coverage, reachability and touch-target instrumented tests (emu lock; boots the AVD if needed)
-#   Capture  every screen id x fixture at font scale 1.0 and 1.3 (emu lock)
-#   Motion   screenrecord of the motion scripts -> ffmpeg contact sheets (emu lock)
-#   Fetch    pack the box results and unpack them into <main checkout>/.scratch/android-shootout/evidence/<x>/<sha>/
+#   pwsh NeuralAmpModeler/scripts/android-box.ps1 -Step Sync,Build,Unit,Test,Capture,Motion,Fetch -Candidate a
 #
 # Never changes git config: the box remote and key go in through GIT_SSH_COMMAND for this process only.
 [CmdletBinding()]
@@ -46,8 +34,7 @@ function Get-EvidenceRoot {
   return Join-Path $main ".scratch\android-shootout\evidence"
 }
 
-# Pipes a bash script to the box. CRs are stripped and a sacrificial comment
-# line absorbs the CR PowerShell appends to the last piped line.
+# PowerShell appends a CR to the last piped line; the sacrificial comment line absorbs it.
 function Invoke-BoxBash([string] $script) {
   $clean = ($script -replace "`r", "") + "`n#"
   $clean | & ssh @SshOpts $BoxHost "bash -s" | Out-Host

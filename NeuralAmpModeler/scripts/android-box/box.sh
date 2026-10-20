@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
-# Box side of the Android shootout pipeline. Runs from the box worktree of the
-# commit under test (android-box.ps1 Sync checks it out), so the steps always
-# match the project they build.
+# Box side of the Android shootout pipeline. It runs from the box worktree of the
+# commit under test, so it always builds the project it belongs to.
 #
-#   box.sh build   <flavor> <x> <sha>   assemble app + test APKs, dump registries   (build lock)
-#   box.sh unit    <flavor> <x> <sha>   :core unit tests                             (build lock)
-#   box.sh test    <flavor> <x> <sha>   coverage, reachability, touch-target tests   (emu lock)
-#   box.sh capture <flavor> <x> <sha>   every screen x fixture at font scale 1.0/1.3 (emu lock)
-#   box.sh motion  <flavor> <x> <sha>   screenrecord of motion scripts -> sheets     (emu lock)
-#   box.sh pack    <flavor> <x> <sha>   tar the results for Fetch
+#   box.sh <build|unit|test|capture|motion|pack> <flavor> <x> <sha>
 #
-# Results land in ~/volum-android/out/<x>/<sha>/{results,apk,captures,motion,logs,registry}.
-# At most two Gradle builds (locks/build1|2.lock) and one emulator user
-# (locks/emu.lock). Never touches ~/localai-platform.
+# The box shares its RAM with Ollama: at most two Gradle builds (locks/build1|2.lock)
+# and one emulator user (locks/emu.lock). Never touches ~/localai-platform.
 set -euo pipefail
 
 STEP="${1:?step}"

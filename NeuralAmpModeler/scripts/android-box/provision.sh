@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Provision the box (Ubuntu under WSL2, KVM) as the VoLum Android build and
-# emulator host. Idempotent: every step checks before it installs.
+# Provisions the box (Ubuntu under WSL2, KVM) as the VoLum Android build and
+# emulator host. Idempotent, so it is safe to rerun after a partial failure.
 #
 #   bash provision.sh            # toolchain, SDK packages, AVD, bare repo, locks
 #   bash provision.sh --smoke    # also boot the AVD headless and write smoke.png

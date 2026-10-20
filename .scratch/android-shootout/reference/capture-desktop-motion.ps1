@@ -109,13 +109,12 @@ function New-Sheet([string] $name, [object[]] $frames, [string] $title, [string[
 
 $tmp = Join-Path $env:TEMP "volum-ref-nav.png"
 
-# 1. BUILD hero art idle: the seed opens on BUILD with THC Sunset (no art debug, idle hero).
+# The seed opens on BUILD with THC Sunset, so the hero needs no navigation.
 Start-Sandbox ""
 Invoke-Drive "10,10" "" 1500 (Join-Path $Out "build_idle-start.png")
 $f = Get-Frames "build_idle" 6000
 New-Sheet "build_idle" $f "desktop BUILD hero art idle (THC Sunset, seed) - 6 s, every frame stamped"
 
-# 2. PLAY art at energy 0 / 0.5 / 1 (THC Sunset art 14, motion clock running).
 $all = @()
 foreach ($e in @("0", "0.5", "1")) {
   Start-Sandbox "14:$($e):run"
@@ -128,13 +127,12 @@ foreach ($e in @("0", "0.5", "1")) {
 }
 New-Sheet "play_energy" $all "desktop PLAY art (THC Sunset) at energy 0 / 0.5 / 1, VOLUM_ART_ANIM_DEBUG=14:<e>:run"
 
-# 3. Pedal toggle: PRE opens on Compressor in the seed; one Tab selects NAM 1 (Klon, on); Space toggles it twice.
+# The seed opens PRE on Compressor, so one Tab selects NAM 1 (Klon, on).
 Start-Sandbox ""
 Invoke-Drive "10,10" "1;{TAB}" 800 (Join-Path $Out "pedal_toggle-start.png")
 $f = Get-Frames "pedal_toggle" 6000 @(@{ at = 1500; keys = "{SPACE}" }, @{ at = 3500; keys = "{SPACE}" })
 New-Sheet "pedal_toggle" $f "desktop PRE pedal toggle: Space on the selected NAM 1 card, sent at 1.5 s and 3.5 s (lands ~1.4 s later: ui-drive start-up)"
 
-# 4. Section switch: PRE -> AMP at 1.5 s -> POST at 3.5 s.
 Invoke-Drive "" "1" 800 $tmp
 $f = Get-Frames "section_switch" 6000 @(@{ at = 1500; keys = "2" }, @{ at = 3500; keys = "3" })
 New-Sheet "section_switch" $f "desktop section switch PRE -> AMP -> POST, keys sent at 1.5 s and 3.5 s (land ~1.4 s later: ui-drive start-up)"
