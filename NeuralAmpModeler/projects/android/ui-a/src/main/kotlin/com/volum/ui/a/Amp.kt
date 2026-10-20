@@ -98,7 +98,8 @@ internal fun AmpEditor(c: Ctx) {
                 if (support) {
                     VoLumToggle(s.on(Param.SUPPORT_POLARITY), { c.d(Action.ToggleParam(Param.SUPPORT_POLARITY)) }, Modifier.ids("dual.polarity").desc("Invert SUPPORT phase"), label = "PHASE")
                 } else if (s.dual) {
-                    VoLumButton(supportAmp?.name ?: "Add SUPPORT amp", { c.d(Action.Open(Overlay.SupportAmpMenu)) }, Modifier.ids("dual.support.choose").desc("Choose SUPPORT amp"))
+                    GlyphAction(if (supportAmp == null) VoLumGlyph.Plus else VoLumGlyph.ChevronDown, "SUPPORT AMP", { c.d(Action.Open(Overlay.SupportAmpMenu)) },
+                        Modifier.ids("dual.support.choose").desc("Choose SUPPORT amp"), tint = VoLumColors.Teal, vertical = true)
                 }
             }
         },

@@ -119,6 +119,8 @@ private fun Stage(c: Ctx, modifier: Modifier) {
     }
 }
 
+private data class Recall(val program: Int?, val title: String, val amp: String?, val dirty: Boolean)
+
 /** The LIVE Sound under the stage, with large prev / next on either side for a fingertip at arm's length. */
 @Composable
 private fun SoundBanner(c: Ctx) {
@@ -128,18 +130,18 @@ private fun SoundBanner(c: Ctx) {
     Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
         GlyphButton(VoLumGlyph.Prev, { c.d(Action.StepSound(-1)) }, "Previous sound", Modifier.ids("play.sound.prev").size(56.dp), tint = VoLumColors.Gold, size = 18.dp)
         AnimatedContent(
-            Triple(live, name, s.rig.dirty),
+            Recall(live, name, s.amp?.name, s.rig.dirty),
             Modifier.weight(1f).fillMaxHeight(),
             transitionSpec = {
-                val up = (targetState.first ?: 0) >= (initialState.first ?: 0)
+                val up = (targetState.program ?: 0) >= (initialState.program ?: 0)
                 val dir = if (up) 1 else -1
                 (fadeIn(tween(RecallMs, easing = FastOutSlowInEasing)) + slideInVertically(tween(RecallMs, easing = FastOutSlowInEasing)) { dir * it / 2 }) togetherWith
                     (fadeOut(tween(RecallMs / 2)) + slideOutVertically(tween(RecallMs)) { -dir * it / 2 })
             },
-            contentKey = { it.first to it.second },
+            contentKey = { it.program to it.title },
             label = "recall",
-        ) { (program, title, dirty) ->
-            PlayBanner(title, Modifier.fillMaxSize().ids("play.sound.name"), program = program, secondary = s.amp?.name, dirty = dirty)
+        ) { r ->
+            PlayBanner(r.title, Modifier.fillMaxSize().ids("play.sound.name"), program = r.program, secondary = r.amp, dirty = r.dirty)
         }
         GlyphButton(VoLumGlyph.Next, { c.d(Action.StepSound(1)) }, "Next sound", Modifier.ids("play.sound.next").size(56.dp), tint = VoLumColors.Gold, size = 18.dp)
     }
@@ -200,7 +202,7 @@ private fun SoundsColumn(c: Ctx, modifier: Modifier) {
     val liveRow = programs.indexOf(s.library.live)
     Column(modifier.padding(start = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         VoLumListCaption("SOUNDS  ·  ${programs.size} OF 128")
-        RowList(SoundPitch, Modifier.weight(1f).fillMaxWidth(), scrollToRow = liveRow - 1) {
+        RowList(SoundPitch, Modifier.weight(1f).fillMaxWidth(), scrollToRow = liveRow) {
             programs.forEach { p -> SoundRow(c, p) }
         }
         VoLumButton("+  Add this sound", { c.d(Action.AddThisSound) }, Modifier.fillMaxWidth().ids("play.add_this", "play.add_this.unnamed", "play.add_this.full"))

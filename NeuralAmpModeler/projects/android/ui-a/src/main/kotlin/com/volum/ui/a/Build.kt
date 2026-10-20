@@ -45,8 +45,8 @@ import com.volum.design.art.ArtRef
 import com.volum.design.art.Motif
 import com.volum.design.components.LockFace
 import com.volum.design.components.MotifArt
-import com.volum.design.components.PedalCard
 import com.volum.design.components.VoLumBanner
+import com.volum.design.components.VoLumLed
 import com.volum.design.components.VoLumBannerKind
 import com.volum.design.components.VoLumBlockHeader
 import com.volum.design.components.VoLumPowerSwitch
@@ -121,7 +121,7 @@ private fun ChainStrip(c: Ctx) {
         ) {
             SectionCap("PRE", inPre, s.locks.pre != null, "nav.section.pre") { c.d(Action.SetSection(Section.PRE)) }
             PreBlock.entries.forEach { b ->
-                ChainCard(c, b.motif, stompLabel(b, s), b.onParam, inPre && s.ui.preFocus == b, "pre.card.${b.key}", "pre.${b.key}.on", pitchVariant(b, s)) { c.d(Action.FocusPre(b)) }
+                ChainCard(c, b.motif, stompLabel(b, s), b.onParam, inPre && s.ui.preFocus == b, "pre.card.${b.key}", pitchVariant(b, s)) { c.d(Action.FocusPre(b)) }
             }
         }
         AmpTile(c, Modifier.weight(1.75f).fillMaxHeight())
@@ -130,24 +130,44 @@ private fun ChainStrip(c: Ctx) {
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             PostBlock.entries.forEach { b ->
-                ChainCard(c, b.motif, postCard(b), b.onParam, inPost && s.ui.postFocus == b, "post.card.${b.key}", "post.${b.key}.on", 0) { c.d(Action.FocusPost(b)) }
+                ChainCard(c, b.motif, postCard(b), b.onParam, inPost && s.ui.postFocus == b, "post.card.${b.key}", 0) { c.d(Action.FocusPost(b)) }
             }
             SectionCap("POST", inPost, s.locks.post != null, "nav.section.post") { c.d(Action.SetSection(Section.POST)) }
         }
     }
 }
 
+/**
+ * A block in the chain: its motif, lit or ghosted, and its lamp, framed teal when on and
+ * amber when focused. The whole card is one target that focuses the block; on and off
+ * live on the editor's power switch. `PedalCard` is not used here: its 48 dp lamp target
+ * covers the centre of a card this small, so a tap in the middle would toggle instead.
+ */
 @Composable
-private fun RowScope.ChainCard(c: Ctx, motif: Motif, label: String, p: Param, focused: Boolean, id: String, onId: String, variant: Int, onFocus: () -> Unit) {
-    PedalCard(
-        motif, label, c.s.on(p),
-        onClick = onFocus,
-        onToggle = { c.d(Action.ToggleParam(p)) },
-        modifier = Modifier.weight(1f).fillMaxHeight().ids(id),
-        focused = focused,
-        variant = variant,
-        ledModifier = Modifier.ids(onId),
-    )
+private fun RowScope.ChainCard(c: Ctx, motif: Motif, label: String, p: Param, focused: Boolean, id: String, variant: Int, onFocus: () -> Unit) {
+    val on = c.s.on(p)
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val edge = when {
+        focused -> VoLumColors.Amber
+        pressed -> if (on) VoLumColors.Teal else VoLumColors.GoldDim
+        on -> VoLumColors.TealDim
+        else -> VoLumColors.Frame
+    }
+    Box(
+        Modifier.weight(1f).fillMaxHeight().ids(id)
+            .clickable(source, indication = null, role = Role.Tab, onClickLabel = "Edit $label", onClick = onFocus)
+            .panelDepth(4.dp)
+            .volumSelection(focused, pressed, VoLumSelectionStyle.Brass, radius = 4.dp, inset = 0.dp)
+            .hairlineFrame(edge, radius = 4.dp)
+            .cornerBrackets(edge, 8.dp, 4.dp),
+    ) {
+        MotifArt(motif, on, Modifier.fillMaxSize().padding(start = 3.dp, end = 3.dp, top = 3.dp, bottom = 22.dp), variant)
+        Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(22.dp).padding(start = 7.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            VFitText(label, Modifier.weight(1f), style = VoLumType.label(10.sp, if (on) VoLumColors.Cream else VoLumColors.CreamDim), minSize = 6.5.sp)
+            VoLumLed(on)
+        }
+    }
 }
 
 /** The PRE / POST end of the chain: selects the whole section; its padlock shows a section lock at a glance. */

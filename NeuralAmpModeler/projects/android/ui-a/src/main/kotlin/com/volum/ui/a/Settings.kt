@@ -48,8 +48,8 @@ import com.volum.design.components.VoLumButton
 import com.volum.design.components.VoLumChannelStepper
 import com.volum.design.components.VoLumGlyph
 import com.volum.design.components.VoLumIcon
-import com.volum.design.components.VoLumSegmentSwitch
 import com.volum.design.components.VoLumSelectionStyle
+import com.volum.design.components.VoLumSubModePill
 import com.volum.design.components.VoLumTextField
 import com.volum.design.components.VoLumToggle
 import com.volum.design.components.hairlineFrame
@@ -74,6 +74,14 @@ internal fun Card(title: String, modifier: Modifier = Modifier, content: @Compos
         content()
     }
 }
+
+/**
+ * A two-state choice in the AmberPicker pill (FULL | LITE, ALL | ONE). `VoLumSegmentSwitch`
+ * draws the desktop's look but its halves are 28 dp tall, under the 48 dp touch minimum.
+ */
+@Composable
+private fun TwoWay(first: String, second: String, secondActive: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier, idOf: (second: Boolean) -> Modifier) =
+    VoLumSubModePill(listOf(first, second), if (secondActive) 1 else 0, { i -> onSelect(i == 1) }, modifier, itemModifier = { i -> idOf(i == 1) })
 
 private fun tabHint(t: SettingsTab) = when (t) {
     SettingsTab.SIGNAL -> "How audio gets in and out of VoLum"
@@ -131,12 +139,10 @@ private fun RowScope.SignalTab(c: Ctx) {
                 }
             }
             Card("Performance", Modifier.weight(1f).fillMaxHeight()) {
-                VoLumSegmentSwitch("FULL", "LITE", sig.lite, { c.d(Action.SetLite(it)) }, Modifier.fillMaxWidth(),
-                    segmentModifier = { lite -> Modifier.ids(if (lite) "signal.perf.lite" else "signal.perf.full") })
+                TwoWay("FULL", "LITE", sig.lite, { c.d(Action.SetLite(it)) }, Modifier.fillMaxWidth()) { lite -> Modifier.ids(if (lite) "signal.perf.lite" else "signal.perf.full") }
                 Hint(if (sig.lite) "Smaller A2 slice, lower CPU." else "The full A2 model.", lines = 1)
                 Caption("ANIMATE ART IN PLAY")
-                VoLumSegmentSwitch("OFF", "ON", sig.animateArt, { on -> if (on != sig.animateArt) c.d(Action.SetAnimateArt(on)) }, Modifier.fillMaxWidth(),
-                    segmentModifier = { Modifier.ids("signal.animate_art") })
+                TwoWay("OFF", "ON", sig.animateArt, { on -> if (on != sig.animateArt) c.d(Action.SetAnimateArt(on)) }, Modifier.fillMaxWidth()) { Modifier.ids("signal.animate_art") }
             }
         }
         VoLumButton("Audio & MIDI devices", { c.d(Action.Open(Overlay.AudioDevices)) }, Modifier.align(Alignment.CenterHorizontally).width(300.dp).ids("signal.audio_devices"))
@@ -150,8 +156,9 @@ private fun RowScope.MidiTab(c: Ctx) {
     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Card("What this VoLum listens to", Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                VoLumSegmentSwitch("All channels", "One channel", m.channel != 0, { one -> c.d(Action.SetMidiChannel(if (one) m.lastOneChannel else 0)) }, Modifier.width(250.dp),
-                    segmentModifier = { one -> Modifier.ids(if (one) "midi.channel.one" else "midi.channel.all") })
+                TwoWay("ALL CHANNELS", "ONE CHANNEL", m.channel != 0, { one -> c.d(Action.SetMidiChannel(if (one) m.lastOneChannel else 0)) }, Modifier.width(250.dp)) { one ->
+                    Modifier.ids(if (one) "midi.channel.one" else "midi.channel.all")
+                }
                 val ch = if (m.channel == 0) m.lastOneChannel else m.channel
                 val chIds = Modifier.ids("midi.channel.number")
                 Row(Modifier.alpha(if (m.channel == 0) 0.4f else 1f), verticalAlignment = Alignment.CenterVertically) {
