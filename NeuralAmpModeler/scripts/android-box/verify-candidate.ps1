@@ -7,8 +7,10 @@
 #   pwsh NeuralAmpModeler/scripts/android-box/verify-candidate.ps1 -Candidate a
 #   pwsh NeuralAmpModeler/scripts/android-box/verify-candidate.ps1 -Candidate design
 #
-# The design system has no feature surfaces: for -Candidate design the
-# coverage, reachability and touch gates are reported as skipped.
+# The harness gate is the harness self-test (a probe UI the coverage, reachability
+# and touch checks must accept and reject correctly). The design system has no
+# feature surfaces: for -Candidate design the harness, coverage, reachability and
+# touch gates are reported as skipped.
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
@@ -71,6 +73,7 @@ if ($isDesign) {
   $coverage = [pscustomobject]@{ total = 0; passed = 0; missing = @(); pass = $true; skipped = $skipped.skipped }
   $reach = $skipped
   $touch = $skipped
+  $harness = $skipped
 } else {
   $cov = Read-Result "coverage.json" $notRun
   $missing = @()
@@ -85,6 +88,7 @@ if ($isDesign) {
   if ($cov.PSObject.Properties.Name -contains "error") { $coverage | Add-Member -NotePropertyName error -NotePropertyValue $cov.error }
   $reach = Read-Result "reachability.json" $notRun
   $touch = Read-Result "touch.json" $notRun
+  $harness = Read-Result "harness.json" $notRun
 }
 $crash = Read-Result "crash_anr.json" "no crash scan"
 $captures = Read-Result "captures.json" $notRun
@@ -93,6 +97,7 @@ $motion = Read-Result "motion.json" $notRun
 $gates = [ordered]@{
   build = [bool]$build.pass
   unit = [bool]$unit.pass
+  harness = [bool]$harness.pass
   coverage = [bool]$coverage.pass
   reachability = [bool]$reach.pass
   touch = [bool]$touch.pass
@@ -112,6 +117,7 @@ $report = [ordered]@{
   gates = $gates
   build = $build
   unit = $unit
+  harness = $harness
   coverage = $coverage
   reachability = $reach
   touch = $touch

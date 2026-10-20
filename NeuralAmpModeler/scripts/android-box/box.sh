@@ -175,6 +175,15 @@ step_test() {
   install_apks with-tests
   adbx logcat -c || true
   rm -f "$RES/crash.txt"
+  log "instrumented HarnessSelfTest"
+  timeout 900 adb -s "$SERIAL" shell am instrument -w -r -e class com.volum.harness.tests.HarnessSelfTest \
+    "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" < /dev/null > "$LOGS/instrument-HarnessSelfTest.txt" 2>&1 8>&- 9>&- || true
+  python3 - "$RES/harness.json" "$LOGS/instrument-HarnessSelfTest.txt" <<'PY'
+import json, sys
+text = open(sys.argv[2], errors="replace").read()
+ok = "\nOK (" in text or text.startswith("OK (")
+json.dump({"pass": ok, "log_tail": [] if ok else text.splitlines()[-40:]}, open(sys.argv[1], "w"), indent=2)
+PY
   run_instrumented CoverageTest coverage.json
   run_instrumented ReachabilityTest reachability.json
   run_instrumented TouchTargetTest touch.json

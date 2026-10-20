@@ -28,10 +28,10 @@ typealias HarnessRule = AndroidComposeTestRule<ActivityScenarioRule<HarnessActiv
 /** A fresh store composed from scratch; replacing it resets the candidate's composition and local state. */
 class Session(val store: VoLumStore, val generation: Int)
 
-class SessionHost(private val rule: HarnessRule) {
+class SessionHost(private val rule: HarnessRule, private val override: CandidateUi? = null) {
     private var generation = 0
     private lateinit var session: MutableState<Session>
-    val candidate: CandidateUi get() = (rule.activity.application as CandidateHost).candidate
+    val candidate: CandidateUi get() = override ?: (rule.activity.application as CandidateHost).candidate
     val store: VoLumStore get() = session.value.store
 
     fun start(store: VoLumStore) {
