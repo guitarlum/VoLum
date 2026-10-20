@@ -114,7 +114,8 @@ internal fun captureName(s: VoLumState, slot: Param): String? {
 /**
  * The `:design` pedal card with its footer name drawn here at the size of [names], so a
  * row of stomps reads at one size (CHORUS and TREMOLO alike). [card] carries the ids and
- * semantics of the card's own clickable; [lamp] false hides the card's bypass lamp.
+ * semantics of the card's own clickable; [lamp] false takes the lamp's touch target away
+ * (the board's footswitch toggles bypass), the lamp itself still shows the state.
  */
 @Composable
 internal fun StompCard(
@@ -133,7 +134,7 @@ internal fun StompCard(
         PedalCard(motifOf(p), "", on, onClick = onClick, onToggle = { onToggle() }, card.fillMaxSize(), focused = focused,
             ledModifier = if (lamp) Modifier else Modifier.requiredSize(0.dp))
         FitText(name, VoLumType.label(11.5.sp, if (on) VoLumColors.Cream else VoLumColors.CreamDim),
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(22.dp).padding(start = 10.dp, end = if (lamp) 24.dp else 10.dp),
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(22.dp).padding(start = 10.dp, end = 24.dp),
             align = TextAlign.Start, group = names)
     }
 }
@@ -180,7 +181,7 @@ private fun RowScope.SlotTools(s: VoLumState, labels: FitGroup) {
     val free = s.library.firstFreeProgram()
     Row(Modifier.weight(1f).height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         HeaderPad("ADD THIS SOUND", if (free != null) "to program ${twoDigit(free)}" else "all 128 programs used", VoLumGlyph.Plus, Tone.PRIMARY,
-            arrayOf("play.add_this", "play.add_this.unnamed", "play.add_this.full"), "Add this sound", labels, Modifier.weight(1.3f).fillMaxHeight()) {
+            arrayOf("play.add_this", "play.add_this.unnamed", "play.add_this.full"), "Add this sound", labels, Modifier.weight(1.5f).fillMaxHeight()) {
             st.go(Action.AddThisSound)
         }
         if (live != null && sound != null) {
@@ -189,7 +190,7 @@ private fun RowScope.SlotTools(s: VoLumState, labels: FitGroup) {
                 st.go(Action.Open(Overlay.SoundPicker(live, replace = true)))
             }
             HeaderPad("CLEAR", "Sound ${twoDigit(live)}", VoLumGlyph.Delete, Tone.DANGER, arrayOf("play.sound.clear"),
-                "Clear program ${twoDigit(live)}", labels, Modifier.weight(0.9f).fillMaxHeight()) {
+                "Clear program ${twoDigit(live)}", labels, Modifier.weight(0.85f).fillMaxHeight()) {
                 val name = s.library.preset(sound.presetId)?.name ?: "Invalid slot"
                 st.cleared.value = Cleared(live, sound, name)
                 st.go(Action.ClearSound(live))
@@ -212,11 +213,11 @@ private fun HeaderPad(
     onClick: () -> Unit,
 ) {
     Pad(onClick, modifier, ids, tone = tone, description = description) { ink ->
-        Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            VoLumIcon(glyph, color = ink, size = 14.dp)
-            Column(Modifier.weight(1f)) {
-                FitText(label, VoLumType.label(12.sp, ink), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = labels)
-                FitText(detail, VoLumType.label(9.sp, VoLumColors.TextDim), Modifier.fillMaxWidth().height(13.dp), align = TextAlign.Start)
+        Column(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.Center) {
+            FitText(label, VoLumType.label(12.sp, ink), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = labels)
+            Row(Modifier.fillMaxWidth().height(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                VoLumIcon(glyph, color = ink, size = 10.dp)
+                FitText(detail, VoLumType.label(9.sp, VoLumColors.TextDim), Modifier.weight(1f).height(13.dp), align = TextAlign.Start)
             }
         }
     }
