@@ -41,9 +41,9 @@ import org.junit.runner.RunWith
 
 /**
  * Proves the harness can pass a correct UI and catch a wrong one, independent of
- * the flavor's candidate: a probe UI implements a few features right, one wired
- * to the wrong parameter, one tagged but inert, one target too small, and a
- * three-tap-deep screen.
+ * the flavor's candidate: a probe UI implements a few features right, a stomp and
+ * a knob wired to the wrong parameter, one tagged but inert, one target too
+ * small, and a three-tap-deep screen.
  */
 @RunWith(AndroidJUnit4::class)
 class HarnessSelfTest {
@@ -61,6 +61,7 @@ class HarnessSelfTest {
         )
         val failed = shouldPass.associateWith { exerciser.exercise(FeatureRegistry.byId.getValue(it)) }.filterValues { it != null }
         assertEquals("probe features the harness should accept", emptyMap<String, String?>(), failed)
+        assertNotNull("a stomp that toggles Delay must not pass as Reverb", exerciser.exercise(FeatureRegistry.byId.getValue("play.stomp.reverb")))
         assertNotNull("a knob bound to BASS must not pass as MID", exerciser.exercise(FeatureRegistry.byId.getValue("amp.knob.mid")))
         assertNotNull("a tagged but inert node must not pass", exerciser.exercise(FeatureRegistry.byId.getValue("amp.eq.toggle")))
         assertNotNull("an absent feature must not pass", exerciser.exercise(FeatureRegistry.byId.getValue("amp.knob.gate")))
@@ -102,6 +103,7 @@ private object ProbeCandidate : CandidateUi {
                 Button("BUILD", "nav.view.build") { store.dispatch(Action.SetView(View.BUILD)) }
                 Button("TUNER", "nav.tuner.open") { store.dispatch(Action.Open(Overlay.Tuner)) }
                 Button("DLY", "play.stomp.delay") { store.dispatch(Action.ToggleParam(Param.DELAY_ON)) }
+                Button("REV", "play.stomp.reverb") { store.dispatch(Action.ToggleParam(Param.DELAY_ON)) }
                 Box(Modifier.size(96.dp).featureId("play.art"))
             }
             ScreenId.BUILD_AMP -> Row(Modifier.fillMaxSize().screen(screen)) {
