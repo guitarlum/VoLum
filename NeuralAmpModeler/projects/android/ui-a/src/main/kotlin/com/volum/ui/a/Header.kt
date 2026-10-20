@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.core.Action
@@ -22,16 +25,22 @@ import com.volum.core.SettingsTab
 import com.volum.core.View
 import com.volum.core.VoLumState
 
-/** One header for both views: logo, PLAY / BUILD, the preset bar (BUILD), input status, tuner, metronome, settings. */
+internal val HeaderH = 54.dp
+
+/**
+ * One header for both views: logo, PLAY / BUILD, the preset bar (BUILD), input
+ * status, tuner, metronome, settings. It is composed after the surface below it so
+ * the surface's controls come first in the tree; TalkBack still reads it first.
+ */
 @Composable
 internal fun Header(c: Ctx) {
     val s = c.s
     Row(
-        Modifier.fillMaxWidth().height(54.dp).padding(horizontal = 8.dp),
+        Modifier.fillMaxWidth().height(HeaderH).padding(horizontal = 8.dp).semantics { isTraversalGroup = true; traversalIndex = -1f },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        T("VoLum", Type.display(20.sp), Modifier.width(66.dp))
+        T("VoLum", Type.display(fixedSp(20.dp)), Modifier.width(66.dp))
         Chip("PLAY", { c.d(Action.SetView(View.PLAY)) }, Modifier.width(68.dp), listOf("nav.view.play"), selected = s.ui.view == View.PLAY)
         Chip("BUILD", { c.d(Action.SetView(View.BUILD)) }, Modifier.width(72.dp), listOf("nav.view.build"), selected = s.ui.view == View.BUILD)
         if (s.ui.view == View.BUILD) PresetBar(c, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))

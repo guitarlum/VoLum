@@ -65,10 +65,11 @@ private fun ChainStrip(c: Ctx) {
             BlockCard(preCard(b, s), s.on(b.onParam), s.ui.section == Section.PRE && s.ui.preFocus == b, s.ui.section == Section.PRE, Texture.PRE,
                 "pre.card.${b.key}", Modifier.weight(1f)) { c.d(Action.FocusPre(b)) }
         }
-        Tap({ c.d(Action.SetSection(Section.AMP)) }, Modifier.weight(1.7f).fillMaxHeight(), listOf("nav.section.amp"), selected = s.ui.section == Section.AMP) {
+        Tap({ c.d(Action.SetSection(Section.AMP)) }, Modifier.weight(1.7f).fillMaxHeight(), listOf("nav.section.amp"), selected = s.ui.section == Section.AMP, padding = 4.dp) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 T(s.amp?.name ?: "No amp", Type.display(15.sp))
-                T(ampSummary(c), Type.label(10.sp))
+                T("CH ${s.rig.channel + 1} · ${cabLabel(s.amp, s.rig.cab)}", Type.label(10.sp, spacing = 0.4.sp))
+                s.library.amp(s.rig.support.ampId)?.takeIf { s.dual }?.let { T("+ ${it.name}", Type.label(10.sp, Ink.text, 0.4.sp)) }
             }
         }
         PostBlock.entries.forEach { b ->
@@ -79,29 +80,22 @@ private fun ChainStrip(c: Ctx) {
     }
 }
 
-private fun ampSummary(c: Ctx): String {
-    val s = c.s
-    val base = "CH ${s.rig.channel + 1} · ${cabLabel(s.amp, s.rig.cab)}"
-    val support = s.library.amp(s.rig.support.ampId)?.takeIf { s.dual }?.name
-    return if (support != null) "$base · + ${support.uppercase()}" else base
-}
-
 @Composable
 private fun SectionTab(label: String, selected: Boolean, locked: Boolean, id: String, onClick: () -> Unit) {
-    Tap(onClick, Modifier.width(52.dp).fillMaxHeight(), listOf(id), selected = selected) {
+    Tap(onClick, Modifier.width(52.dp).fillMaxHeight(), listOf(id), selected = selected, padding = 0.dp) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            T(label, Type.label(12.sp, if (selected) Ink.selected else Ink.dim))
-            if (locked) T("LOCK", Type.label(9.sp, Ink.text))
+            T(label, Type.label(11.sp, if (selected) Ink.selected else Ink.dim, 0.4.sp))
+            if (locked) T("LOCK", Type.label(9.sp, Ink.text, 0.sp))
         }
     }
 }
 
 @Composable
 private fun BlockCard(label: String, on: Boolean, focused: Boolean, inSection: Boolean, texture: Texture, id: String, modifier: Modifier, onClick: () -> Unit) {
-    Tap(onClick, modifier.fillMaxHeight(), listOf(id), selected = focused, pick = Pick.AMBER) {
-        Frame(Modifier.fillMaxSize().padding(vertical = 4.dp), texture) {
+    Tap(onClick, modifier.fillMaxHeight(), listOf(id), selected = focused, pick = Pick.AMBER, padding = 0.dp) {
+        Frame(Modifier.fillMaxSize().padding(3.dp), texture) {
             Led(on, Modifier.align(Alignment.TopEnd).padding(6.dp).size(9.dp))
-            T(label, Type.label(10.sp, if (focused) Ink.selected else if (inSection) Ink.text else Ink.dim), Modifier.align(Alignment.BottomStart).padding(5.dp))
+            T(label, Type.label(10.sp, if (focused) Ink.selected else if (inSection) Ink.text else Ink.dim, 0.2.sp), Modifier.align(Alignment.BottomStart).padding(4.dp))
         }
     }
 }
@@ -134,7 +128,7 @@ internal fun ControlRow(modifier: Modifier = Modifier, content: @Composable RowS
 /** The knob row of a block in its current mode; [slot] lets a mode swap one knob for another control in place. */
 @Composable
 internal fun KnobRow(c: Ctx, params: List<Param>, modifier: Modifier = Modifier, slot: (@Composable () -> Unit)? = null) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.Start), verticalAlignment = Alignment.Top) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.Start), verticalAlignment = Alignment.CenterVertically) {
         slot?.invoke()
         params.forEach { p ->
             Knob(

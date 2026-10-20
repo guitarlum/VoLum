@@ -71,14 +71,14 @@ object CandidateA : CandidateUi {
         val c = Ctx(s, store::dispatch, tel)
         val modal = s.ui.overlays.isNotEmpty() || s.ui.confirm != null
         Box(Modifier.fillMaxSize().background(Ink.bg)) {
-            Column(Modifier.fillMaxSize().then(if (modal) Modifier.clearAndSetSemantics { } else Modifier.screen(baseScreen(s)))) {
-                Header(c)
-                Crossfade(s.ui.view, Modifier.weight(1f), tween(180), label = "view") { view ->
+            Box(Modifier.fillMaxSize().then(if (modal) Modifier.clearAndSetSemantics { } else Modifier.screen(baseScreen(s)))) {
+                Crossfade(s.ui.view, Modifier.fillMaxSize().padding(top = HeaderH), tween(180), label = "view") { view ->
                     when (view) {
                         View.PLAY -> PlaySurface(c)
                         View.BUILD -> BuildSurface(c)
                     }
                 }
+                Header(c)
             }
             OverlayLayer(c)
             s.ui.confirm?.let { ConfirmLayer(c) }

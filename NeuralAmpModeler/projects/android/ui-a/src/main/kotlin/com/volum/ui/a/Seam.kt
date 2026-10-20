@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,9 +59,13 @@ internal object Ink {
 
 internal object Type {
     fun display(size: TextUnit = 22.sp, color: Color = Ink.text) = TextStyle(color = color, fontSize = size, fontWeight = FontWeight.Light)
-    fun label(size: TextUnit = 12.sp, color: Color = Ink.dim) = TextStyle(color = color, fontSize = size, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp)
+    fun label(size: TextUnit = 12.sp, color: Color = Ink.dim, spacing: TextUnit = 0.8.sp) = TextStyle(color = color, fontSize = size, fontWeight = FontWeight.SemiBold, letterSpacing = spacing)
     fun value(size: TextUnit = 13.sp, color: Color = Ink.text) = TextStyle(color = color, fontSize = size)
 }
+
+/** Text that keeps its size at any font scale: the logo and the meter legends, which the desktop draws as artwork. */
+@Composable
+internal fun fixedSp(size: Dp): TextUnit = with(LocalDensity.current) { size.toSp() }
 
 internal val Corner = RoundedCornerShape(4.dp)
 
@@ -102,6 +107,7 @@ internal fun Tap(
     pick: Pick = Pick.AMBER,
     enabled: Boolean = true,
     minSize: Dp = 48.dp,
+    padding: Dp = 6.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
@@ -123,7 +129,7 @@ internal fun Tap(
             .border(if (selected) 1.5.dp else 1.dp, edge, Corner)
             .alpha(if (enabled) 1f else 0.4f)
             .defaultMinSizeBoth(minSize)
-            .padding(horizontal = 6.dp),
+            .padding(horizontal = padding),
         contentAlignment = Alignment.Center,
         content = content,
     )
@@ -167,7 +173,7 @@ enum class Glyph { TUNER, METRONOME, GEAR, PREV, NEXT, CLOSE, EDIT, DOWN, PLUS }
 
 @Composable
 internal fun GlyphIcon(glyph: Glyph, modifier: Modifier = Modifier, color: Color = Ink.text) {
-    Canvas(modifier.defaultMinSizeBoth(20.dp)) {
+    Canvas(modifier.size(20.dp)) {
         val w = size.width
         val h = size.height
         val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)

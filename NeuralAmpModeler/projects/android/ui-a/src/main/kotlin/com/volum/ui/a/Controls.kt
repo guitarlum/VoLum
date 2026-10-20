@@ -238,7 +238,7 @@ internal fun Meter(label: String, level: () -> Float, modifier: Modifier = Modif
             val l = level().coerceIn(0f, 1f)
             drawRect(if (alert) Ink.alert else Ink.text, Offset(0f, size.height * (1 - l)), Size(size.width, size.height * l))
         }
-        T(label, Type.label(9.sp, if (alert) Ink.alert else Ink.faint), Modifier.padding(top = 2.dp))
+        T(label, Type.label(fixedSp(8.dp), if (alert) Ink.alert else Ink.faint, 0.sp), Modifier.padding(top = 2.dp))
     }
 }
 
@@ -257,15 +257,16 @@ internal fun RowList(
 ) {
     val px = with(LocalDensity.current) { pitch.roundToPx() }
     LaunchedEffect(scrollToRow, px) { state.scrollTo(scrollToRow * px) }
-    Box(
-        modifier.layout { m, c ->
-            val p = pitch.roundToPx()
-            val h = if (c.hasBoundedHeight) (c.maxHeight / p) * p else c.maxHeight
-            val placeable = m.measure(c.copy(minHeight = 0, maxHeight = h))
-            layout(placeable.width, placeable.height) { placeable.place(0, 0) }
-        },
-    ) {
-        Column(Modifier.verticalScroll(state), content = content)
+    Box(modifier) {
+        Box(
+            Modifier.layout { m, c ->
+                val h = if (c.hasBoundedHeight) (c.maxHeight / px) * px else c.maxHeight
+                val placeable = m.measure(c.copy(minHeight = 0, maxHeight = h))
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            },
+        ) {
+            Column(Modifier.verticalScroll(state), content = content)
+        }
     }
 }
 

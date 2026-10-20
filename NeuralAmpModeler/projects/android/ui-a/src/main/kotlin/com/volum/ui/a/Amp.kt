@@ -91,9 +91,10 @@ private fun androidx.compose.foundation.layout.RowScope.ChannelAndCabs(c: Ctx, s
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.DualRow(c: Ctx, lane: Lane) {
     val s = c.s
-    Switch("DUAL AMP", s.dual, { c.d(Action.ToggleParam(Param.DUAL_ON)) }, ids = listOf("dual.toggle"))
+    val master = @Composable { Switch("DUAL AMP", s.dual, { c.d(Action.ToggleParam(Param.DUAL_ON)) }, ids = listOf("dual.toggle")) }
     if (!s.dual) {
-        T("Blend a second amp under this one.", Type.label(10.sp, Ink.faint))
+        T("Blend a second amp under this one.", Type.label(10.sp, Ink.faint), Modifier.weight(1f))
+        master()
         return
     }
     Chip("MAIN", { c.d(Action.FocusLane(Lane.MAIN)) }, ids = listOf("dual.focus.main"), selected = lane == Lane.MAIN)
@@ -103,4 +104,5 @@ private fun androidx.compose.foundation.layout.RowScope.DualRow(c: Ctx, lane: La
     if (lane == Lane.SUPPORT) {
         Switch("Ø", s.on(Param.SUPPORT_POLARITY), { c.d(Action.ToggleParam(Param.SUPPORT_POLARITY)) }, ids = listOf("dual.polarity"))
     }
+    master()
 }

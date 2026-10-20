@@ -112,11 +112,12 @@ internal fun NameField(text: String, onChange: (String) -> Unit, onDone: () -> U
     BasicTextField(
         text,
         onChange,
-        modifier.fillMaxWidth().height(48.dp).ids(ids).border(1.dp, Ink.dim, Corner).padding(horizontal = 12.dp, vertical = 12.dp),
+        modifier.fillMaxWidth().height(48.dp).ids(ids).border(1.dp, Ink.dim, Corner),
         textStyle = Type.value(16.sp),
         singleLine = true,
         cursorBrush = SolidColor(Ink.selected),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
+        decorationBox = { inner -> Box(Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) { inner() } },
     )
 }

@@ -155,7 +155,7 @@ private fun SoundRow(c: Ctx, p: Int) {
             }
         }
         if (live) {
-            Row(Modifier.fillMaxWidth().height(SoundPitch).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().height(SoundPitch).padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Chip("REPLACE", { c.d(Action.Open(Overlay.SoundPicker(p, replace = true))) }, Modifier.weight(1f), listOf("play.sound.replace"))
                 Chip("CLEAR", { c.d(Action.ClearSound(p)) }, Modifier.weight(1f), listOf("play.sound.clear"))
                 Chip("MOVE DOWN", { c.d(Action.MoveSound(p, 1)) }, Modifier.weight(1f).then(moveDown), listOf("play.sound.reorder"))
