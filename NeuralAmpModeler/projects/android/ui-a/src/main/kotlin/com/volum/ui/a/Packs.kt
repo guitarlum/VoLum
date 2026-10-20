@@ -206,12 +206,13 @@ internal fun PackImport(c: Ctx) {
                         }
                     }
                 }
+                Hint(if (reset) "Reset deletes your custom IRs, pedals and User presets first. A backup is kept." else "A backup of your library is kept before anything changes.", Modifier.padding(top = 4.dp))
             }
             Column(Modifier.width(270.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 VoLumListCaption("WHEN NAMES MATCH")
                 listOf(
                     Triple(MergeMode.OVERWRITE, "Overwrite", "Pack wins, mine stay"),
-                    Triple(MergeMode.ADD, "Add", "keep mine, add only what is new"),
+                    Triple(MergeMode.ADD, "Add", "Mine stay, add new"),
                     Triple(MergeMode.RESET, "Reset", if (pi.allTicked) "Pack wins, mine deleted" else "tick every row to reset"),
                 ).forEach { (m, label, desc) ->
                     val enabled = pi.everything && (m != MergeMode.RESET || pi.allTicked)
@@ -222,9 +223,7 @@ internal fun PackImport(c: Ctx) {
                     }
                 }
                 VoLumToggle(pi.restoreMachine, { c.d(Action.SetRestoreMachine(it)) }, Modifier.ids("pack.import.machine"), label = "Restore phone settings", enabled = pi.everything)
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomStart) {
-                    Hint(if (reset) "Deletes your custom IRs, pedals and User presets first. A backup is kept." else "A backup of your library is kept first.")
-                }
+                Fill()
                 val ok = !pi.refused
                 VoLumButton(if (reset) "Reset and import" else "Import", { c.d(Action.ConfirmImport) }, Modifier.fillMaxWidth().ids("pack.import.confirm").alpha(if (ok) 1f else 0.45f),
                     primary = ok, destructive = reset, enabled = ok)
