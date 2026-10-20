@@ -128,8 +128,33 @@ boot_completed() {
   [ "$(adbt 10 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]
 }
 
+# qemu grows about 0.2 GB per app relaunch and the box shares its RAM with Ollama, so a
+# long-lived AVD is OOM-killed mid-step; it is rebooted at the start of a step instead.
+EMU_RSS_LIMIT_MB="${BOX_EMU_RSS_LIMIT_MB:-7168}"
+
+emulator_pid() {
+  pgrep -u "$(id -u)" -f -- "qemu-system-x86_64.* -avd $AVD( |$)" | head -n 1 || true
+}
+
+stop_emulator() {
+  local pid="$1" t=0
+  kill -TERM "$pid" 2>/dev/null || true
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1; t=$((t + 1))
+    if [ "$t" -eq 30 ]; then log "emulator pid $pid still alive 30s after TERM; sending KILL"; kill -KILL "$pid" 2>/dev/null || true; fi
+    [ "$t" -lt 60 ] || die "emulator pid $pid still alive 30s after KILL"
+  done
+}
+
 ensure_emulator() {
-  if ! { adbt 10 get-state 2>/dev/null | grep -q device && boot_completed; }; then boot_emulator; fi
+  local pid rss_kb=""
+  pid="$(emulator_pid)"
+  [ -z "$pid" ] || rss_kb="$(awk '/^VmRSS:/ { print $2 }' "/proc/$pid/status" 2>/dev/null || true)"
+  if [ -n "$rss_kb" ] && [ "$rss_kb" -gt $((EMU_RSS_LIMIT_MB * 1024)) ]; then
+    log "emulator pid $pid resident $((rss_kb / 1024)) MB, over the ${EMU_RSS_LIMIT_MB} MB limit (BOX_EMU_RSS_LIMIT_MB); rebooting $AVD"
+    stop_emulator "$pid"
+    boot_emulator
+  elif ! { adbt 10 get-state 2>/dev/null | grep -q device && boot_completed; }; then boot_emulator; fi
   # Without this, Android's "Viewing full screen" confirmation covers the immersive app in every capture.
   adbx shell settings put secure immersive_mode_confirmations confirmed >/dev/null
 }
