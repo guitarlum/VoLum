@@ -93,7 +93,7 @@ internal fun IrMenu(c: Ctx) {
             VoLumListRow("None  ·  amp only (No Cab)", cab == Cab.NONE, {
                 c.d(if (support) Action.SelectSupportCab(Cab.NONE) else Action.SelectCab(Cab.NONE))
                 c.d(Action.Back)
-            }, Modifier.fillMaxWidth().height(Pitch), subtitle = "THE DIRECT CAPTURE WITHOUT A CAB")
+            }, Modifier.fillMaxWidth().height(Pitch).ids(if (support) "dual.support.cab" else "amp.cab.none"), subtitle = "THE DIRECT CAPTURE WITHOUT A CAB")
             s.library.irs.forEach { ir ->
                 VoLumListRow(ir.name, ir.id == playing, { c.d(Action.SelectIr(ir.id)) }, Modifier.fillMaxWidth().height(Pitch).ids("ir.menu.select", "dual.support.ir.select"),
                     subtitle = if (ir.id == playing) "PLAYING" else "IR")
@@ -139,7 +139,7 @@ internal fun CaptureMenu(c: Ctx, slot: Int) {
                     }
                     if (custom.isEmpty()) Note("Import your own pedal captures in Manage.")
                 }
-                VoLumButton("Manage custom pedals", { c.d(Action.Open(Overlay.PedalManage)) }, Modifier.fillMaxWidth().ids("pre.capture.manage"))
+                VoLumButton("Manage pedals", { c.d(Action.Open(Overlay.PedalManage)) }, Modifier.fillMaxWidth().ids("pre.capture.manage"))
             }
         }
     }

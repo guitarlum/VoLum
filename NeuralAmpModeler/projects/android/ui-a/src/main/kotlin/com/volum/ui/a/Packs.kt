@@ -158,7 +158,7 @@ private fun outcome(pi: PackImportState, r: PackRow): Pair<String, String> = whe
 }
 
 private fun kindLabel(kind: String) = when (kind) {
-    "amp" -> "Custom amp"
+    "amp" -> "Amp"
     "ir" -> "IR"
     "pedal" -> "Pedal"
     "preset" -> "Preset"

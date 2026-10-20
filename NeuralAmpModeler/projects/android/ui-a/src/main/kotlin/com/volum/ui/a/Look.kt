@@ -160,7 +160,7 @@ internal fun GlyphAction(
 
 /** The knob of one param, in the desktop's units; MAIN gold, SUPPORT teal. */
 @Composable
-internal fun ParamKnob(c: Ctx, p: Param, label: String = p.label, support: Boolean = false) {
+internal fun ParamKnob(c: Ctx, p: Param, label: String = p.label, support: Boolean = false, dial: Dp = 52.dp) {
     val v = c.s.param(p)
     VoLumKnob(
         value = v,
@@ -171,6 +171,7 @@ internal fun ParamKnob(c: Ctx, p: Param, label: String = p.label, support: Boole
         valueText = fmt(p, v),
         modifier = Modifier.ids(knobIds(p)),
         support = support,
+        dialSize = dial,
         parseEntry = ::parseNumber,
     )
 }
@@ -184,7 +185,7 @@ internal fun parseNumber(s: String): Double? = s.trim().replace(',', '.').trimEn
 @Composable
 internal fun MeterColumn(c: Ctx, out: Boolean, modifier: Modifier = Modifier, limited: Boolean = false) {
     val clip by remember(c.tel, out) { derivedStateOf { (if (out) c.tel.value.outDb else c.tel.value.inDb) > -1.0 } }
-    Column(modifier.width(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(modifier.width(26.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         VoLumLed(clip || (out && limited), color = VoLumColors.Danger)
         VoLumMeter({ if (out) c.outLevel() else c.inLevel() }, if (out) "OUT" else "IN", Modifier.weight(1f), out = out)
     }

@@ -232,7 +232,7 @@ private fun SoundRow(c: Ctx, p: Int) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            VText(twoDigits(p), Modifier.width(30.dp).ids("play.sound.program"), style = VoLumType.value(13.sp, if (live) VoLumColors.Gold else VoLumColors.GoldDim.withOpacity(0.7f)))
+            VText(twoDigits(p), Modifier.width(40.dp).ids("play.sound.program"), style = VoLumType.value(13.sp, if (live) VoLumColors.Gold else VoLumColors.GoldDim.withOpacity(0.7f)))
             if (valid && amp != null) AmpThumbnail(ArtRef.of(amp), Modifier.size(26.dp), live)
             Column(Modifier.weight(1f)) {
                 if (valid) {

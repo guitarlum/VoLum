@@ -167,7 +167,7 @@ private fun RowScope.MidiTab(c: Ctx) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 Hint("MIDI calls All channels Omni. One guitarist, one board: leave it on All. Two VoLums on one cable: give each its own channel.", Modifier.weight(1f))
-                Hint("Recall CC: the value is the program number. Use it when Program Change never arrives.", Modifier.width(260.dp))
+                Hint("Recall CC: the value is the program number. Use it when Program Change never arrives. Tap a slot below to choose its Sound.", Modifier.width(300.dp))
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -177,7 +177,7 @@ private fun RowScope.MidiTab(c: Ctx) {
             GlyphButton(VoLumGlyph.Next, { c.d(Action.SetMidiBank(m.bank + 1)) }, "Next bank", Modifier.ids("midi.bank.next"), enabled = m.bank < 15, tint = VoLumColors.Gold)
             BankDots(m.bank)
             Fill()
-            VText("Programs ${m.bank * 8}-${m.bank * 8 + 7}  ·  tap a slot to choose its Sound", style = VoLumType.label(10.sp, VoLumColors.CreamDim))
+            VText("Programs ${m.bank * 8}-${m.bank * 8 + 7}", style = VoLumType.label(10.sp, VoLumColors.CreamDim))
         }
         (0 until 8).chunked(4).forEach { row ->
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

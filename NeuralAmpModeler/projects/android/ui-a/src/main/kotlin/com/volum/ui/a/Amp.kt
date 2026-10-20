@@ -96,12 +96,13 @@ internal fun AmpEditor(c: Ctx) {
                 VoLumToggle(s.on(eq), { c.d(Action.ToggleParam(eq)) }, Modifier.ids(if (support) "dual.support.eq.toggle" else "amp.eq.toggle"), label = "EQ")
                 Fill()
                 if (support) {
-                    VoLumToggle(s.on(Param.SUPPORT_POLARITY), { c.d(Action.ToggleParam(Param.SUPPORT_POLARITY)) }, Modifier.ids("dual.polarity"), label = "PHASE INVERT")
+                    VoLumToggle(s.on(Param.SUPPORT_POLARITY), { c.d(Action.ToggleParam(Param.SUPPORT_POLARITY)) }, Modifier.ids("dual.polarity").desc("Invert SUPPORT phase"), label = "PHASE")
                 } else if (s.dual) {
                     VoLumButton(supportAmp?.name ?: "Add SUPPORT amp", { c.d(Action.Open(Overlay.SupportAmpMenu)) }, Modifier.ids("dual.support.choose").desc("Choose SUPPORT amp"))
                 }
             }
         },
+        leftWidth = if (s.dual) 300.dp else 262.dp,
     )
 }
 

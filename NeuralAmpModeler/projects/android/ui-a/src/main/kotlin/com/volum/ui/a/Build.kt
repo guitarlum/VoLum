@@ -124,7 +124,7 @@ private fun ChainStrip(c: Ctx) {
                 ChainCard(c, b.motif, stompLabel(b, s), b.onParam, inPre && s.ui.preFocus == b, "pre.card.${b.key}", "pre.${b.key}.on", pitchVariant(b, s)) { c.d(Action.FocusPre(b)) }
             }
         }
-        AmpTile(c, Modifier.weight(2.2f).fillMaxHeight())
+        AmpTile(c, Modifier.weight(1.75f).fillMaxHeight())
         Row(
             Modifier.weight(4.4f).fillMaxHeight().volumSectionFrame(s.locks.post != null, expanded = inPost).padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -202,13 +202,13 @@ private fun AmpTile(c: Ctx, modifier: Modifier) {
  * chip would otherwise switch Dual off before the SUPPORT chooser is tried.
  */
 @Composable
-internal fun Editor(left: @Composable ColumnScope.() -> Unit, right: @Composable ColumnScope.() -> Unit) {
+internal fun Editor(left: @Composable ColumnScope.() -> Unit, right: @Composable ColumnScope.() -> Unit, leftWidth: androidx.compose.ui.unit.Dp = 262.dp) {
     val ltr = LocalLayoutDirection.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CompositionLocalProvider(LocalLayoutDirection provides ltr) {
                 Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp), content = right)
-                Column(Modifier.width(262.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp), content = left)
+                Column(Modifier.width(leftWidth).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp), content = left)
             }
         }
     }

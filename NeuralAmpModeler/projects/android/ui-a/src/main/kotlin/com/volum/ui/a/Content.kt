@@ -31,10 +31,11 @@ private fun irSummary(ir: Ir) = "LEVEL ${f("%+.1f dB", ir.levelDb)}  ·  LOW ${h
 internal fun IrManage(c: Ctx) {
     val s = c.s
     val open = s.library.ir(s.ui.irConfigOpen)
-    Sheet("Custom IRs", listOf("ir.manage.close"), c, actions = {
+    val many = s.library.irs.size > 3
+    Sheet("Custom IRs", listOf("ir.manage.close"), c, fill = many, actions = {
         VoLumButton("+  Import WAV", { c.d(Action.PickFiles(PickKind.IR_FILES)) }, Modifier.ids("ir.import", "ir.import.invalid"), primary = true)
     }) {
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.fillMaxWidth().then(if (many) Modifier.weight(1f) else Modifier.height(196.dp)), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 VoLumListCaption("YOUR IRs  ·  ${s.library.irs.size}")
                 if (s.library.irs.isEmpty()) {
@@ -82,7 +83,7 @@ internal fun PedalManage(c: Ctx) {
         }
         RowList(ActionPitch, if (custom.size > 4) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth()) {
             custom.forEach { p ->
-                VoLumListRow(p.name, false, { c.d(Action.RequestRenamePedal(p.index)) }, Modifier.fillMaxWidth().height(ActionPitch), subtitle = "IN NAM 1 AND NAM 2  ·  CUSTOM") {
+                VoLumListRow(p.name, false, { c.d(Action.RequestRenamePedal(p.index)) }, Modifier.fillMaxWidth().height(ActionPitch).ids("pedal.rename"), subtitle = "IN NAM 1 AND NAM 2  ·  CUSTOM") {
                     GlyphAction(VoLumGlyph.Edit, "RENAME", { c.d(Action.RequestRenamePedal(p.index)) }, Modifier.ids("pedal.rename"))
                     GlyphAction(VoLumGlyph.Delete, "DELETE", { c.d(Action.RequestDeletePedal(p.index)) }, Modifier.ids("pedal.delete"), tint = VoLumColors.Danger)
                 }

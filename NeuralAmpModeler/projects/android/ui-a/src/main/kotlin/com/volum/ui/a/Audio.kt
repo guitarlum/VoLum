@@ -15,8 +15,6 @@ import com.volum.core.Action
 import com.volum.core.InterfaceStatus
 import com.volum.core.Overlay
 import com.volum.core.Permission
-import com.volum.design.components.VoLumBanner
-import com.volum.design.components.VoLumBannerKind
 import com.volum.design.components.VoLumButton
 import com.volum.design.components.VoLumListCaption
 import com.volum.design.components.VoLumSelectionStyle
@@ -31,7 +29,7 @@ internal fun AudioDevices(c: Ctx) {
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Card("Input", Modifier.weight(1f).fillMaxHeight()) {
                 a.inputs.forEach { d ->
-                    Choice(d.name, d.id == a.inputId, { c.d(Action.SelectInput(d.id)) }, Modifier.fillMaxWidth().ids("audio.input.device"), VoLumSelectionStyle.ListTeal)
+                    Choice(d.name, d.id == a.inputId, { c.d(Action.SelectInput(d.id)) }, Modifier.fillMaxWidth().ids("audio.input.device"), VoLumSelectionStyle.Brass)
                 }
                 val dev = a.inputs.firstOrNull { it.id == a.inputId }
                 if (dev != null && dev.channels > 1) {
@@ -45,7 +43,7 @@ internal fun AudioDevices(c: Ctx) {
             }
             Card("Output", Modifier.weight(1f).fillMaxHeight()) {
                 a.outputs.forEach { d ->
-                    Choice(d.name, d.id == a.outputId, { c.d(Action.SelectOutput(d.id)) }, Modifier.fillMaxWidth().ids("audio.output.device"), VoLumSelectionStyle.ListTeal)
+                    Choice(d.name, d.id == a.outputId, { c.d(Action.SelectOutput(d.id)) }, Modifier.fillMaxWidth().ids("audio.output.device"), VoLumSelectionStyle.Brass)
                 }
             }
             Card("Format", Modifier.weight(1f).fillMaxHeight()) {
@@ -61,13 +59,12 @@ internal fun AudioDevices(c: Ctx) {
                 }
             }
             Card("MIDI controller", Modifier.weight(1f).fillMaxHeight()) {
-                if (a.midiLost) VoLumBanner("Controller disconnected", VoLumBannerKind.ERROR, null, Modifier.fillMaxWidth().ids("midi.device.lost"))
+                if (a.midiLost) Note("Controller disconnected. Plug it back in, or pick another.", Modifier.fillMaxWidth(), alert = true, ids = listOf("midi.device.lost"))
                 a.midiDevices.forEach { d ->
                     Choice("${d.name}  ·  ${if (d.ble) "BLE" else "USB"}", d.id == a.midiDeviceId && !a.midiLost, { c.d(Action.SelectMidiDevice(d.id)) },
-                        Modifier.fillMaxWidth().ids("midi.device.select"), VoLumSelectionStyle.ListTeal)
+                        Modifier.fillMaxWidth().ids("midi.device.select"), VoLumSelectionStyle.Brass)
                 }
-                if (a.midiLost) Hint("Plug it back in, or pick another controller.")
-                VoLumButton(if (a.bleScanning) "Scanning..." else "Scan for Bluetooth MIDI", { c.d(Action.ScanBleMidi) }, Modifier.fillMaxWidth().ids("midi.device.ble_scan"))
+                VoLumButton(if (a.bleScanning) "Scanning..." else "Scan Bluetooth", { c.d(Action.ScanBleMidi) }, Modifier.fillMaxWidth().ids("midi.device.ble_scan"))
             }
         }
     }

@@ -96,11 +96,11 @@ internal fun PostEditor(c: Ctx, b: PostBlock) {
         left = { EffectArt(b.motif, s.on(b.onParam), 0, { c.d(Action.ToggleParam(b.onParam)) }, "post.${b.key}.on") },
         right = {
             EffectHeader(c, postTitle(b), Section.POST)
-            Row(Modifier.fillMaxWidth().heightIn(min = 62.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 62.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 when (b) {
                     PostBlock.CHORUS -> ModeGroup(c, "MODE", Param.CHORUS_MODE, listOf("classic", "warped", "clear", "ensemble").map { "post.chorus.mode.$it" }, 340.dp)
                     PostBlock.DELAY -> {
-                        ModeGroup(c, "MODE", Param.DELAY_MODE, listOf("digital", "analog", "reverse").map { "post.delay.mode.$it" }, 240.dp)
+                        ModeGroup(c, "MODE", Param.DELAY_MODE, listOf("digital", "analog", "reverse").map { "post.delay.mode.$it" }, 204.dp)
                         VoLumToggle(s.on(Param.DELAY_PING_PONG), { c.d(Action.ToggleParam(Param.DELAY_PING_PONG)) }, Modifier.ids("post.delay.pingpong"), label = "PING-PONG")
                         VoLumToggle(s.on(Param.DELAY_SYNC), { c.d(Action.ToggleParam(Param.DELAY_SYNC)) }, Modifier.ids("post.delay.sync"), label = "TEMPO SYNC")
                     }
@@ -109,7 +109,7 @@ internal fun PostEditor(c: Ctx, b: PostBlock) {
                         if (s.param(Param.REVERB_MODE) == 2.0) ModeGroup(c, "OKTAVERB VOICE", Param.REVERB_SUB, listOf("halo", "shimmer", "bloom").map { "post.reverb.sub.$it" }, 240.dp)
                     }
                     PostBlock.TREM -> {
-                        ModeGroup(c, "MODE", Param.TREM_MODE, listOf("optical", "bias", "harmonic").map { "post.trem.mode.$it" }, 270.dp)
+                        ModeGroup(c, "MODE", Param.TREM_MODE, listOf("optical", "bias", "harmonic").map { "post.trem.mode.$it" }, 240.dp)
                         VoLumToggle(s.on(Param.TREM_SYNC), { c.d(Action.ToggleParam(Param.TREM_SYNC)) }, Modifier.ids("post.trem.sync"), label = "TEMPO SYNC")
                     }
                 }

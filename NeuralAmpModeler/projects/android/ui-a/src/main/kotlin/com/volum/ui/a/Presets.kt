@@ -87,7 +87,7 @@ internal fun PresetManage(c: Ctx) {
         }
         RowList(ActionPitch, if (user.size > 4) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth()) {
             user.forEach { p ->
-                VoLumListRow(p.name, p.id == s.rig.presetId, { c.d(Action.LoadPreset(p.id)) }, Modifier.fillMaxWidth().height(ActionPitch),
+                VoLumListRow(p.name, p.id == s.rig.presetId, { c.d(Action.LoadPreset(p.id)) }, Modifier.fillMaxWidth().height(ActionPitch).ids("presets.menu.user"),
                     subtitle = if (p.id == s.rig.presetId) "LOADED" else null) {
                     GlyphAction(VoLumGlyph.Store, "OVERWRITE", { c.d(Action.RequestOverwritePreset(p.id)) }, Modifier.ids("presets.manage.overwrite"))
                     GlyphAction(VoLumGlyph.Edit, "RENAME", { c.d(Action.RequestRenamePreset(p.id)) }, Modifier.ids("presets.manage.rename"))
