@@ -242,7 +242,7 @@ private fun SoundRow(c: Ctx, p: Int) {
                     VText(amp?.name ?: "", style = VoLumType.label(9.sp, VoLumColors.TealDim))
                 } else {
                     VText("Invalid slot", Modifier.ids("play.sound.invalid"), style = VoLumType.label(13.sp, VoLumColors.Danger))
-                    VText("Its Sound is gone: tap to pick a new one", style = VoLumType.label(9.sp, VoLumColors.Danger.withOpacity(0.8f)))
+                    VFitText("Sound gone: tap to replace", style = VoLumType.label(9.sp, VoLumColors.Danger.withOpacity(0.8f)), minSize = 7.sp)
                 }
             }
             if (live) VText("LIVE", Modifier.ids("play.sound.live"), style = VoLumType.label(10.sp, VoLumColors.Gold))

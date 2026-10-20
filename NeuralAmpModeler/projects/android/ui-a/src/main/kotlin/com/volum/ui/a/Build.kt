@@ -203,16 +203,27 @@ private fun AmpTile(c: Ctx, modifier: Modifier) {
             .cornerBrackets(if (selected) VoLumColors.Gold else VoLumColors.TealDim, 6.dp, 3.dp)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        s.amp?.let { AmpThumbnail(ArtRef.of(it), Modifier.size(28.dp), selected) }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            VText("AMP", style = VoLumType.label(9.sp, VoLumColors.GoldDim))
-            VFitText(s.amp?.name ?: "No amp", style = VoLumType.label(13.sp, VoLumColors.Gold), minSize = 8.sp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                s.amp?.let { AmpThumbnail(ArtRef.of(it), Modifier.size(18.dp), selected) }
+                VText("AMP", style = VoLumType.label(9.sp, VoLumColors.GoldDim))
+            }
+            nameLines(s.amp?.name ?: "No amp").forEach { line ->
+                VFitText(line, style = VoLumType.label(13.sp, VoLumColors.Gold), minSize = 7.sp)
+            }
             VFitText("CH ${s.rig.channel + 1}  ·  ${cabLabel(s.amp, s.rig.cab, s.library.ir(s.rig.irId)?.name)}", style = VoLumType.label(9.5.sp, VoLumColors.Cream), minSize = 7.sp)
             s.library.amp(s.rig.support.ampId)?.takeIf { s.dual }?.let { VFitText("+ ${it.name}", style = VoLumType.label(9.5.sp, VoLumColors.Teal), minSize = 7.sp) }
         }
     }
+}
+
+/** A long amp name broken at the word boundary nearest its middle, so each half can shrink to the tile's width without losing a word. */
+internal fun nameLines(name: String): List<String> {
+    if (name.length <= 12 || !name.contains(' ')) return listOf(name)
+    val mid = name.length / 2
+    val cut = name.indices.filter { name[it] == ' ' }.minBy { kotlin.math.abs(it - mid) }
+    return listOf(name.substring(0, cut), name.substring(cut + 1))
 }
 
 /**
@@ -270,7 +281,7 @@ internal fun EffectHeader(c: Ctx, title: String, section: Section, extra: @Compo
             if (locked) "$key LOCKED".uppercase() else key.uppercase(),
             locked,
             onLockToggle = { c.d(Action.SetLock(section, !locked)) },
-            modifier = Modifier.width(if (locked && Reducer.lockDiffers(c.s, section)) 168.dp else 120.dp),
+            modifier = Modifier.width(if (locked && Reducer.lockDiffers(c.s, section)) 206.dp else if (locked) 158.dp else 120.dp),
             dirty = Reducer.lockDiffers(c.s, section),
             onStore = { c.d(Action.StoreLock(section)) },
             storeFirst = section == Section.POST,

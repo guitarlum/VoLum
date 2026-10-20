@@ -222,8 +222,9 @@ internal fun PackImport(c: Ctx) {
                     }
                 }
                 VoLumToggle(pi.restoreMachine, { c.d(Action.SetRestoreMachine(it)) }, Modifier.ids("pack.import.machine"), label = "Restore phone settings", enabled = pi.everything)
-                Fill()
-                Hint(if (reset) "Reset deletes your custom IRs, pedals and User presets first. A backup is kept." else "A backup of your library is kept before anything changes.")
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomStart) {
+                    Hint(if (reset) "Deletes your custom IRs, pedals and User presets first. A backup is kept." else "A backup of your library is kept first.")
+                }
                 val ok = !pi.refused
                 VoLumButton(if (reset) "Reset and import" else "Import", { c.d(Action.ConfirmImport) }, Modifier.fillMaxWidth().ids("pack.import.confirm").alpha(if (ok) 1f else 0.45f),
                     primary = ok, destructive = reset, enabled = ok)

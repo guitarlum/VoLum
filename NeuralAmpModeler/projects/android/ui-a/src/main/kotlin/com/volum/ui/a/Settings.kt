@@ -173,8 +173,8 @@ private fun RowScope.MidiTab(c: Ctx) {
                     prevModifier = ccIds.desc("Recall CC down"), nextModifier = ccIds.desc("Recall CC up"))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Hint("MIDI calls All channels Omni. One guitarist, one board: leave it on All. Two VoLums on one cable: give each its own channel.", Modifier.weight(1f))
-                Hint("Recall CC: the value is the program number. Use it when Program Change never arrives. Tap a slot below to choose its Sound.", Modifier.width(300.dp))
+                Hint("MIDI calls All channels Omni. One guitarist, one board: leave it on All. Two VoLums on one cable: give each its own channel.", Modifier.weight(1f), lines = 3)
+                Hint("Recall CC: the value is the program number. Use it when Program Change never arrives. Tap a slot below to choose its Sound.", Modifier.weight(1f), lines = 3)
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

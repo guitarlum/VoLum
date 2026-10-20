@@ -92,7 +92,7 @@ internal fun AmpEditor(c: Ctx) {
                 Channel(c, support, laneAmp)
                 val gate = if (support) Param.SUPPORT_GATE_ON else Param.GATE_ON
                 val eq = if (support) Param.SUPPORT_EQ_ON else Param.EQ_ON
-                VoLumToggle(s.on(gate), { c.d(Action.ToggleParam(gate)) }, Modifier.ids(if (support) "dual.support.gate.toggle" else "amp.gate.toggle"), label = "NOISE GATE")
+                VoLumToggle(s.on(gate), { c.d(Action.ToggleParam(gate)) }, Modifier.ids(if (support) "dual.support.gate.toggle" else "amp.gate.toggle").desc("Noise gate"), label = if (support) "GATE" else "NOISE GATE")
                 VoLumToggle(s.on(eq), { c.d(Action.ToggleParam(eq)) }, Modifier.ids(if (support) "dual.support.eq.toggle" else "amp.eq.toggle"), label = "EQ")
                 Fill()
                 if (support) {
