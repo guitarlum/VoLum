@@ -1,28 +1,27 @@
 package com.volum.ui.b
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,11 +29,16 @@ import com.volum.core.Action
 import com.volum.core.ScreenId
 import com.volum.core.TimeSig
 import com.volum.core.VoLumState
+import com.volum.design.components.VoLumBrassButton
+import com.volum.design.components.insetWell
+import com.volum.design.theme.VoLumColors
+import com.volum.design.theme.VoLumType
+import com.volum.design.theme.withOpacity
 import com.volum.harness.featureId
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Full-screen tuner readable from across the stage; the output is muted while it is open. */
+/** Full-panel tuner readable from across the stage; the output is muted while it is open. */
 @Composable
 internal fun Tuner(s: VoLumState) {
     val st = LocalStage.current
@@ -44,34 +48,35 @@ internal fun Tuner(s: VoLumState) {
     val cents by remember { derivedStateOf { tele.value.tunerCents.roundToInt() } }
     val hz by remember { derivedStateOf { (tele.value.tunerHz * 10).roundToInt() / 10.0 } }
     val inTune = abs(cents) <= 3
-    Panel(ScreenId.TUNER, "Tuner", arrayOf("tuner.close"), subtitle = "play one string; the needle centres when it is in tune") {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Panel(s, ScreenId.TUNER, "Tuner", arrayOf("tuner.close"), subtitle = "play one open string; the note turns teal when it is in tune") {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                FitText(if (cents < -3) "♭" else "", Type.display(56.sp, Ink.dim), Modifier.width(120.dp).fillMaxHeight())
+                FitText(if (cents < -3) "FLAT" else "", VoLumType.label(22.sp, VoLumColors.Amber), Modifier.width(150.dp).fillMaxHeight())
                 Box(Modifier.weight(1f).fillMaxHeight().featureId("tuner.note"), contentAlignment = Alignment.Center) {
-                    FitText("$note$octave", Type.display(150.sp, if (inTune) Ink.hot else Ink.text), Modifier.fillMaxSize(), fitHeight = true)
+                    FitText("$note$octave", VoLumType.display(150.sp, if (inTune) VoLumColors.Teal else VoLumColors.TextBright), Modifier.fillMaxSize(), fitHeight = true)
                 }
-                FitText(if (cents > 3) "♯" else "", Type.display(56.sp, Ink.dim), Modifier.width(120.dp).fillMaxHeight())
+                FitText(if (cents > 3) "SHARP" else "", VoLumType.label(22.sp, VoLumColors.Amber), Modifier.width(150.dp).fillMaxHeight())
             }
-            Box(Modifier.fillMaxWidth().height(64.dp).featureId("tuner.cents")) {
-                Canvas(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxWidth().height(60.dp).insetWell(3.dp).featureId("tuner.cents")) {
+                Spacer(Modifier.fillMaxSize().padding(horizontal = 12.dp).drawBehind {
                     val c = tele.value.tunerCents.toFloat().coerceIn(-50f, 50f)
                     val mid = size.width / 2
                     for (i in -50..50 step 5) {
-                        val x = mid + i / 50f * (size.width / 2 - 8.dp.toPx())
+                        val x = mid + i / 50f * (size.width / 2)
                         val long = i % 25 == 0
-                        drawLine(if (i == 0) Ink.hot else Ink.line, Offset(x, if (long) 4.dp.toPx() else 16.dp.toPx()), Offset(x, size.height - 20.dp.toPx()), if (long) 2.dp.toPx() else 1.dp.toPx())
+                        drawLine(if (i == 0) VoLumColors.Gold else VoLumColors.Frame, Offset(x, if (long) 6.dp.toPx() else 16.dp.toPx()),
+                            Offset(x, size.height - 22.dp.toPx()), if (long) 2.dp.toPx() else 1.dp.toPx())
                     }
-                    val x = mid + c / 50f * (size.width / 2 - 8.dp.toPx())
-                    drawLine(if (abs(c) <= 3) Ink.hot else Ink.alert, Offset(x, 0f), Offset(x, size.height - 16.dp.toPx()), 5.dp.toPx(), StrokeCap.Round)
-                }
-                FitText("${if (cents > 0) "+" else ""}$cents cents · $hz Hz", Type.tech(13.sp), Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(18.dp))
+                    val x = mid + c / 50f * (size.width / 2)
+                    drawLine(if (abs(c) <= 3) VoLumColors.Teal else VoLumColors.Amber, Offset(x, 2.dp.toPx()), Offset(x, size.height - 20.dp.toPx()), 5.dp.toPx(), StrokeCap.Round)
+                })
+                FitText("${if (cents > 0) "+" else ""}$cents cents · $hz Hz", VoLumType.value(12.sp, VoLumColors.Gold), Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(18.dp))
             }
-            Row(Modifier.fillMaxWidth().height(64.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(8.dp)).background(Ink.panel).featureId("tuner.muted"), contentAlignment = Alignment.Center) {
-                    FitText("OUTPUT MUTED WHILE TUNING", Type.label(13.sp, Ink.text), Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+            Row(Modifier.fillMaxWidth().height(64.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).featureId("tuner.muted")) {
+                    Status("OUTPUT MUTED WHILE THE TUNER IS OPEN", Modifier.fillMaxWidth().height(24.dp), VoLumColors.Amber)
                 }
-                TextPad("DONE", { st.go(Action.Back) }, Modifier.width(260.dp).fillMaxHeight(), arrayOf("tuner.close"), style = Type.label(18.sp, Ink.hot))
+                TextPad("DONE", { st.go(Action.Back) }, Modifier.width(240.dp).fillMaxHeight(), arrayOf("tuner.close"), tone = Tone.PRIMARY, size = 17.sp)
             }
         }
     }
@@ -85,36 +90,45 @@ internal fun Metronome(s: VoLumState) {
     val m = s.metronome
     val tele = st.tele
     val beat by remember { derivedStateOf { tele.value.beat } }
-    Panel(ScreenId.METRONOME, "Metronome", arrayOf("metronome.close"), subtitle = "click on the output; the tempo also drives synced delay and tremolo") {
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth().height(72.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextPad("−", { st.go(Action.SetBpm(m.bpm - 1)) }, Modifier.width(72.dp).fillMaxHeight(), style = Type.display(30.sp))
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        FitText("${m.bpm.roundToInt()}", Type.display(48.sp, Ink.hot), Modifier.fillMaxWidth().height(52.dp), fitHeight = true)
-                        FitText("BPM", Type.label(11.sp), Modifier.fillMaxWidth().height(16.dp))
+    Panel(s, ScreenId.METRONOME, "Metronome", arrayOf("metronome.close"), subtitle = "a click on the output; the tempo also drives synced delay and tremolo") {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().height(72.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TextPad("−", { st.go(Action.SetBpm(m.bpm - 1)) }, Modifier.width(72.dp).fillMaxHeight(), arrayOf("metronome.bpm"), size = 26.sp)
+                    Column(Modifier.weight(1f).fillMaxHeight().insetWell(3.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        FitText("${m.bpm.roundToInt()}", VoLumType.value(34.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(44.dp), fitHeight = true)
+                        FitText("BPM", VoLumType.label(10.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(14.dp))
                     }
-                    TextPad("+", { st.go(Action.SetBpm(m.bpm + 1)) }, Modifier.width(72.dp).fillMaxHeight(), style = Type.display(30.sp))
+                    TextPad("+", { st.go(Action.SetBpm(m.bpm + 1)) }, Modifier.width(72.dp).fillMaxHeight(), arrayOf("metronome.bpm"), size = 26.sp)
                 }
                 Fader("TEMPO", m.bpm, 30.0, 300.0, { "${it.roundToInt()} BPM" }, { st.go(Action.SetBpm(it.roundToInt().toDouble())) },
-                    Modifier.fillMaxWidth().height(56.dp), arrayOf("metronome.bpm"))
-                Choice(TimeSig.entries.map { it.label }, m.sig.ordinal, { st.go(Action.SetTimeSig(TimeSig.entries[it])) }, Modifier.fillMaxWidth().height(56.dp),
-                    { i -> arrayOf("metronome.sig.${sigIds.getValue(TimeSig.entries[i])}") })
-                Fader("VOLUME", m.volume, 0.0, 1.0, { "${(it * 100).roundToInt()}%" }, { st.go(Action.SetMetronomeVolume(it)) },
-                    Modifier.fillMaxWidth().height(56.dp), arrayOf("metronome.volume"))
-            }
-            Column(Modifier.width(260.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Pad({ st.go(Action.SetMetronomeOn(!m.on)) }, Modifier.fillMaxWidth().weight(1f), arrayOf("metronome.on"), selected = m.on, sel = Sel.BRASS, haptic = true,
-                    description = if (m.on) "Stop the click" else "Start the click") {
-                    FitText(if (m.on) "STOP" else "START", Type.display(36.sp, if (m.on) Ink.hot else Ink.text), Modifier.fillMaxWidth())
+                    Modifier.fillMaxWidth().height(52.dp), arrayOf("metronome.bpm"))
+                Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FitText("TIME", VoLumType.label(12.sp, VoLumColors.TextBright), Modifier.width(84.dp), align = TextAlign.Start)
+                    TimeSig.entries.forEach { sig ->
+                        VoLumBrassButton(sig.label, m.sig == sig, { st.go(Action.SetTimeSig(sig)) },
+                            Modifier.weight(1f).height(48.dp).featureId("metronome.sig.${sigIds.getValue(sig)}"), minWidth = 48.dp)
+                    }
                 }
-                Row(Modifier.fillMaxWidth().height(56.dp).featureId("metronome.beat"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Fader("VOLUME", m.volume, 0.0, 1.0, { "${(it * 100).roundToInt()}%" }, { st.go(Action.SetMetronomeVolume(it)) },
+                    Modifier.fillMaxWidth().height(52.dp), arrayOf("metronome.volume"))
+            }
+            Column(Modifier.width(250.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Pad({ st.go(Action.SetMetronomeOn(!m.on)) }, Modifier.fillMaxWidth().weight(1f), arrayOf("metronome.on"), selected = m.on, style = Sel.Brass,
+                    role = Role.Switch, haptic = true, description = if (m.on) "Stop the click" else "Start the click") { ink ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        FitText(if (m.on) "STOP" else "START", VoLumType.display(38.sp, if (m.on) ink else VoLumColors.Gold), Modifier.width(200.dp).height(48.dp))
+                        FitText(if (m.on) "clicking" else "the click is off", VoLumType.label(10.sp, VoLumColors.CreamDim), Modifier.width(200.dp).height(14.dp))
+                    }
+                }
+                Row(Modifier.fillMaxWidth().height(52.dp).featureId("metronome.beat"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     repeat(m.sig.beats) { i ->
-                        Canvas(Modifier.weight(1f).fillMaxHeight()) {
+                        Spacer(Modifier.weight(1f).fillMaxHeight().drawBehind {
                             val lit = m.on && beat == i
-                            drawRoundRect(if (lit) Ink.hot else if (i == 0) Ink.line else Ink.raised, size = Size(size.width, size.height),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()))
-                        }
+                            val cr = CornerRadius(3.dp.toPx())
+                            drawRoundRect(VoLumColors.WellDark, cornerRadius = cr)
+                            drawRoundRect(if (lit) (if (i == 0) VoLumColors.Gold else VoLumColors.GoldDim) else (if (i == 0) VoLumColors.Gold.withOpacity(0.18f) else VoLumColors.Frame), cornerRadius = cr)
+                        })
                     }
                 }
             }

@@ -13,24 +13,33 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volum.design.components.volumScrollbar
+import com.volum.design.theme.VoLumColors
+import com.volum.design.theme.VoLumType
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
+/** The texts of a grid that should all read at one size, the style they start from and the room a cell leaves them. */
+internal data class SharedText(val texts: List<String>, val style: TextStyle, val inset: Dp)
+
+/** The one size [FitGrid] picked for its [SharedText], or null outside a grid. */
+internal val LocalGridText = compositionLocalOf<TextStyle?> { null }
+
 /**
  * Scrolling catalog whose row height divides the viewport exactly: the rows on
  * screen are always whole, so no list control is ever half clipped at the edge
- * (a clipped row would be a sub-48 dp touch target).
+ * (a clipped row would be a sub-48 dp touch target). Draws the `:design` scrollbar.
  */
 @Composable
 internal fun <T> FitGrid(
@@ -38,15 +47,16 @@ internal fun <T> FitGrid(
     columns: Int,
     minRow: Dp,
     modifier: Modifier = Modifier,
-    gap: Dp = 8.dp,
+    gap: Dp = 6.dp,
     maxRow: Dp = minRow * 1.4f,
     empty: String? = null,
+    shared: SharedText? = null,
     cell: @Composable (T) -> Unit,
 ) {
     BoxWithConstraints(modifier) {
         if (items.isEmpty() && empty != null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                FitText(empty, Type.value(14.sp, Ink.dim), Modifier.fillMaxWidth().padding(16.dp))
+                FitText(empty, VoLumType.body(13.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().padding(16.dp))
             }
             return@BoxWithConstraints
         }
@@ -57,32 +67,29 @@ internal fun <T> FitGrid(
         val rowH = if (rows <= visible) min(exact.value, maxRow.value).dp else exact
         val scroll = rememberScrollState()
         val scrolls = rows > visible
-        Column(
-            Modifier.fillMaxSize()
-                .verticalScroll(scroll)
-                .padding(end = if (scrolls) 8.dp else 0.dp),
-            verticalArrangement = Arrangement.spacedBy(gap),
-        ) {
-            items.chunked(columns).forEach { row ->
-                Row(Modifier.fillMaxWidth().height(rowH), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    row.forEach { Box(Modifier.weight(1f).fillMaxHeight()) { cell(it) } }
-                    repeat(columns - row.size) { Box(Modifier.weight(1f)) }
+        val bar = if (scrolls) 10.dp else 0.dp
+        val cellW = (maxWidth - bar - gap * (columns - 1)) / columns
+        val gridText = shared?.let { rememberSharedStyle(it.texts, it.style, cellW - it.inset) }
+        CompositionLocalProvider(LocalGridText provides gridText) {
+            Column(
+                Modifier.fillMaxSize()
+                    .then(if (scrolls) Modifier.volumScrollbar(scroll) else Modifier)
+                    .verticalScroll(scroll)
+                    .padding(end = bar),
+                verticalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                items.chunked(columns).forEach { row ->
+                    Row(Modifier.fillMaxWidth().height(rowH), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        row.forEach { Box(Modifier.weight(1f).fillMaxHeight()) { cell(it) } }
+                        repeat(columns - row.size) { Box(Modifier.weight(1f)) }
+                    }
                 }
             }
-        }
-        if (scrolls) {
-            Box(Modifier.fillMaxSize().drawWithContent {
-                val total = scroll.maxValue + size.height
-                val thumb = size.height * size.height / total
-                val top = (size.height - thumb) * scroll.value / scroll.maxValue.coerceAtLeast(1)
-                drawRect(Ink.line, Offset(size.width - 3.dp.toPx(), 0f), Size(3.dp.toPx(), size.height))
-                drawRect(Ink.text, Offset(size.width - 3.dp.toPx(), top), Size(3.dp.toPx(), thumb))
-            })
         }
     }
 }
 
 @Composable
 internal fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    FitText(text, Type.label(12.sp, Ink.text), modifier.height(24.dp), align = TextAlign.Start)
+    FitText(text, VoLumType.SectionHeader, modifier.height(18.dp), align = TextAlign.Start)
 }

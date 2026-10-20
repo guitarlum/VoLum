@@ -1,10 +1,12 @@
 package com.volum.ui.b
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +29,14 @@ import com.volum.core.PreBlock
 import com.volum.core.Reducer
 import com.volum.core.Section
 import com.volum.core.VoLumState
+import com.volum.design.art.Motif
+import com.volum.design.components.MotifArt
+import com.volum.design.components.VoLumBlockHeader
+import com.volum.design.components.VoLumGlyph
+import com.volum.design.components.VoLumIcon
+import com.volum.design.components.VoLumSubModePill
+import com.volum.design.theme.VoLumColors
+import com.volum.design.theme.VoLumType
 
 @Composable
 internal fun PreEditor(s: VoLumState, block: PreBlock) {
@@ -39,15 +49,16 @@ internal fun PreEditor(s: VoLumState, block: PreBlock) {
 @Composable
 private fun CaptureColumn(s: VoLumState) {
     val st = LocalStage.current
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Caption("CAPTURES", Modifier.fillMaxWidth())
-        listOf(1 to Param.NAM1_CAPTURE, 2 to Param.NAM2_CAPTURE).forEach { (slot, p) ->
-            Pad({ st.go(Action.Open(Overlay.CaptureMenu(slot))) }, Modifier.fillMaxWidth().height(50.dp), arrayOf("pre.nam$slot.capture"),
-                selected = s.ui.preFocus.ordinal == slot + 1, sel = Sel.LIST_TEAL, description = "NAM $slot capture") {
-                Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FitText("NAM $slot", Type.label(11.sp), Modifier.width(48.dp), align = TextAlign.Start)
-                    FitText(captureName(s, p) ?: "EMPTY", Type.display(17.sp), Modifier.weight(1f), align = TextAlign.Start)
-                    FitText("▾", Type.label(13.sp, Ink.text), Modifier.width(16.dp))
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+        FitText("CAPTURES · the pedals NAM 1 and NAM 2 play", VoLumType.SectionHeader, Modifier.fillMaxWidth().height(14.dp), align = TextAlign.Start)
+        listOf(Triple(1, Param.NAM1_CAPTURE, Motif.NAM1), Triple(2, Param.NAM2_CAPTURE, Motif.NAM2)).forEach { (slot, p, motif) ->
+            Pad({ st.go(Action.Open(Overlay.CaptureMenu(slot))) }, Modifier.fillMaxWidth().height(48.dp), arrayOf("pre.nam$slot.capture"),
+                selected = s.ui.preFocus.ordinal == slot + 1, style = Sel.ListTeal, description = "NAM $slot capture") { _ ->
+                Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MotifArt(motif, captureName(s, p) != null, Modifier.width(22.dp).height(26.dp))
+                    FitText("NAM $slot", VoLumType.label(10.sp, VoLumColors.GoldDim), Modifier.width(40.dp), align = TextAlign.Start)
+                    FitText(captureName(s, p) ?: "Empty", VoLumType.label(13.sp, VoLumColors.TextBright), Modifier.weight(1f), align = TextAlign.Start)
+                    VoLumIcon(VoLumGlyph.ChevronDown, color = VoLumColors.Gold)
                 }
             }
         }
@@ -69,7 +80,11 @@ internal fun PostEditor(s: VoLumState, block: PostBlock) {
     }
 }
 
-/** Title, the section's LOCK / STORE, the block's mode controls; knob row below with an optional switch column. */
+/**
+ * The focused block: its name, the section's padlock (and store arrow) from `:design`,
+ * the block's mode groups; a line explaining STORE when the lock differs; then the
+ * knob row with an optional side column.
+ */
 @Composable
 private fun EditorFrame(
     s: VoLumState,
@@ -79,57 +94,64 @@ private fun EditorFrame(
     side: (@Composable () -> Unit)?,
     knobs: @Composable RowScope.() -> Unit,
 ) {
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth().height(56.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            FitText(title, Type.display(24.sp, Ink.hot), Modifier.width(110.dp), align = TextAlign.Start)
-            LockStore(s, section)
-            header()
-        }
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.weight(1f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)) { knobs() }
-            if (side != null) Box(Modifier.width(220.dp).fillMaxHeight()) { side() }
-        }
-    }
-}
-
-@Composable
-private fun RowScope.LockStore(s: VoLumState, section: Section) {
     val st = LocalStage.current
     val locked = (if (section == Section.PRE) s.locks.pre else s.locks.post) != null
+    val differs = Reducer.lockDiffers(s, section)
     val key = if (section == Section.PRE) "pre" else "post"
-    Switch("LOCK ${section.name}", locked, { st.go(Action.SetLock(section, !locked)) }, Modifier.width(118.dp).fillMaxHeight(), arrayOf("$key.lock"))
-    if (Reducer.lockDiffers(s, section)) {
-        TextPad("STORE", { st.go(Action.StoreLock(section)) }, Modifier.width(84.dp).fillMaxHeight(), arrayOf("$key.store"), style = Type.label(13.sp, Ink.hot))
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            FitText(title, VoLumType.display(22.sp, VoLumColors.TextBright), Modifier.width(112.dp), align = TextAlign.Start)
+            VoLumBlockHeader(
+                if (locked) "${section.name} LOCKED" else "LOCK ${section.name}", locked, { st.go(Action.SetLock(section, !locked)) },
+                Modifier.width(if (differs) 196.dp else 150.dp), dirty = differs, onStore = { st.go(Action.StoreLock(section)) }, storeFirst = section == Section.POST,
+                lockModifier = Modifier.ids(arrayOf("$key.lock")), storeModifier = Modifier.ids(arrayOf("$key.store")),
+            )
+            header()
+        }
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (differs) {
+                    FitText("The locked ${section.name} differs from what this amp has saved. The teal arrow stores it into the amp.",
+                        VoLumType.body(11.sp, VoLumColors.Teal), Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
+                }
+                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) { knobs() }
+            }
+            if (side != null) Box(Modifier.width(236.dp).fillMaxHeight()) { side() }
+        }
     }
 }
 
 @Composable
-private fun RowScope.ParamKnob(s: VoLumState, p: Param, ids: Array<String>, label: String = p.label) {
+private fun ParamKnob(s: VoLumState, p: Param, ids: Array<String>, label: String = p.label) {
     val st = LocalStage.current
-    Knob(label, s.param(p), p.min, p.max, p.default, p.unit, { st.go(Action.SetParam(p, it)) }, { st.go(Action.ResetParam(p)) },
-        Modifier.width(100.dp).fillMaxHeight(), ids)
+    Knob(p, s.param(p), { st.go(Action.SetParam(p, it)) }, Modifier.width(96.dp).fillMaxHeight(), ids, label)
 }
 
+/** One exclusive group: its name, then the AmberPicker pill. Groups sit apart behind a hairline so it is clear which choices exclude each other. */
 @Composable
-private fun RowScope.ModeChoice(s: VoLumState, p: Param, ids: (Int) -> Array<out String>, weight: Float, sel: Sel = Sel.AMBER_PICKER) {
+private fun RowScope.ModeGroup(s: VoLumState, caption: String, p: Param, ids: (Int) -> Array<out String>, weight: Float, divider: Boolean = false) {
     val st = LocalStage.current
-    Choice(p.options, s.param(p).toInt(), { st.go(Action.SetParam(p, it.toDouble())) }, Modifier.weight(weight).fillMaxHeight(), ids, sel = sel)
+    if (divider) Spacer(Modifier.width(1.dp).height(36.dp).background(VoLumColors.Frame))
+    Row(Modifier.weight(weight).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FitText(caption, VoLumType.label(9.sp, VoLumColors.GoldDim), Modifier.width(62.dp), align = TextAlign.End)
+        VoLumSubModePill(p.options, s.param(p).toInt(), { st.go(Action.SetParam(p, it.toDouble())) }, Modifier.weight(1f).height(48.dp),
+            itemModifier = { i -> Modifier.ids(ids(i)) })
+    }
 }
 
 @Composable
 private fun RowScope.PreHeader(s: VoLumState, block: PreBlock) {
-    val st = LocalStage.current
     when (block) {
         PreBlock.PITCH -> {
-            ModeChoice(s, Param.PITCH_MODE, { i -> arrayOf(if (i == 0) "pre.pitch.mode.transpose" else "pre.pitch.mode.octaver") }, 1f)
+            ModeGroup(s, "MODE", Param.PITCH_MODE, { i -> arrayOf(if (i == 0) "pre.pitch.mode.transpose" else "pre.pitch.mode.octaver") }, 1f)
             if (s.param(Param.PITCH_MODE) == 0.0) {
-                ModeChoice(s, Param.PITCH_CHAR, { i -> when (i) { 1 -> arrayOf("pre.pitch.char.instant"); 2 -> arrayOf("pre.pitch.char.poly"); else -> emptyArray() } }, 1.3f, Sel.BRASS)
+                ModeGroup(s, "CHARACTER", Param.PITCH_CHAR, { i -> when (i) { 1 -> arrayOf("pre.pitch.char.instant"); 2 -> arrayOf("pre.pitch.char.poly"); else -> emptyArray() } }, 1.25f, divider = true)
             } else {
-                ModeChoice(s, Param.PITCH_VOICING, { i -> arrayOf(if (i == 0) "pre.pitch.voicing.vintage" else "pre.pitch.voicing.modern") }, 1f, Sel.BRASS)
+                ModeGroup(s, "VOICING", Param.PITCH_VOICING, { i -> arrayOf(if (i == 0) "pre.pitch.voicing.vintage" else "pre.pitch.voicing.modern") }, 1f, divider = true)
             }
         }
-        PreBlock.COMP -> FitText("evens out your picking before the amp", Type.value(12.sp, Ink.dim), Modifier.weight(1f), align = TextAlign.Start)
-        PreBlock.NAM1, PreBlock.NAM2 -> FitText("a captured pedal in front of the amp · swap it under CAPTURES", Type.value(12.sp, Ink.dim),
+        PreBlock.COMP -> FitText("Evens out your picking before the amp.", VoLumType.body(12.sp, VoLumColors.CreamDim), Modifier.weight(1f), align = TextAlign.Start)
+        PreBlock.NAM1, PreBlock.NAM2 -> FitText("A captured pedal in front of the amp. Swap it under CAPTURES.", VoLumType.body(12.sp, VoLumColors.CreamDim),
             Modifier.weight(1f), align = TextAlign.Start)
     }
 }
@@ -137,15 +159,15 @@ private fun RowScope.PreHeader(s: VoLumState, block: PreBlock) {
 @Composable
 private fun RowScope.PostHeader(s: VoLumState, block: PostBlock) {
     when (block) {
-        PostBlock.CHORUS -> ModeChoice(s, Param.CHORUS_MODE, { i -> arrayOf("post.chorus.mode.${Param.CHORUS_MODE.options[i].lowercase()}") }, 1f)
-        PostBlock.DELAY -> ModeChoice(s, Param.DELAY_MODE, { i -> arrayOf("post.delay.mode.${Param.DELAY_MODE.options[i].lowercase()}") }, 1f)
+        PostBlock.CHORUS -> ModeGroup(s, "MODE", Param.CHORUS_MODE, { i -> arrayOf("post.chorus.mode.${Param.CHORUS_MODE.options[i].lowercase()}") }, 1f)
+        PostBlock.DELAY -> ModeGroup(s, "MODE", Param.DELAY_MODE, { i -> arrayOf("post.delay.mode.${Param.DELAY_MODE.options[i].lowercase()}") }, 1f)
         PostBlock.REVERB -> {
-            ModeChoice(s, Param.REVERB_MODE, { i -> arrayOf("post.reverb.mode.${Param.REVERB_MODE.options[i].lowercase()}") }, 1f)
+            ModeGroup(s, "MODE", Param.REVERB_MODE, { i -> arrayOf("post.reverb.mode.${Param.REVERB_MODE.options[i].lowercase()}") }, 1f)
             if (s.param(Param.REVERB_MODE) == 2.0) {
-                ModeChoice(s, Param.REVERB_SUB, { i -> arrayOf("post.reverb.sub.${Param.REVERB_SUB.options[i].lowercase()}") }, 1f, Sel.BRASS)
+                ModeGroup(s, "VOICE", Param.REVERB_SUB, { i -> arrayOf("post.reverb.sub.${Param.REVERB_SUB.options[i].lowercase()}") }, 1f, divider = true)
             }
         }
-        PostBlock.TREM -> ModeChoice(s, Param.TREM_MODE, { i -> arrayOf("post.trem.mode.${Param.TREM_MODE.options[i].lowercase()}") }, 1f)
+        PostBlock.TREM -> ModeGroup(s, "MODE", Param.TREM_MODE, { i -> arrayOf("post.trem.mode.${Param.TREM_MODE.options[i].lowercase()}") }, 1f)
     }
 }
 
@@ -155,21 +177,21 @@ private fun SyncColumn(s: VoLumState, sync: Param, division: Param, key: String,
     val st = LocalStage.current
     val synced = s.on(sync)
     val div = s.param(division).toInt()
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+        Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (pingPong) Switch("PING-PONG", s.on(Param.DELAY_PING_PONG), { st.go(Action.ToggleParam(Param.DELAY_PING_PONG)) }, Modifier.weight(1f).fillMaxHeight(),
                 arrayOf("post.delay.pingpong"))
-            Switch("SYNC", synced, { st.go(Action.ToggleParam(sync)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("$key.sync"))
+            Switch("TEMPO SYNC", synced, { st.go(Action.ToggleParam(sync)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("$key.sync"))
         }
         if (synced) {
-            Column(Modifier.fillMaxWidth()) {
-                Caption("DIVISION", Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                FitText("DIVISION", VoLumType.label(9.sp, VoLumColors.GoldDim), Modifier.width(62.dp), align = TextAlign.Start)
                 Stepper(DIVISIONS[div.coerceIn(0, DIVISIONS.lastIndex)], { st.go(Action.SetParam(division, ((div - 1 + DIVISIONS.size) % DIVISIONS.size).toDouble())) },
-                    { st.go(Action.SetParam(division, ((div + 1) % DIVISIONS.size).toDouble())) }, Modifier.fillMaxWidth().height(48.dp),
+                    { st.go(Action.SetParam(division, ((div + 1) % DIVISIONS.size).toDouble())) }, Modifier.weight(1f).fillMaxHeight(),
                     arrayOf("$key.division"), arrayOf("$key.division"), description = "division")
             }
         } else {
-            FitText("follows TIME / RATE", Type.value(11.sp, Ink.faint), Modifier.fillMaxWidth().height(20.dp))
+            FitText("TIME / RATE set the speed; sync locks it to the metronome tempo", VoLumType.body(10.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(16.dp))
         }
     }
 }

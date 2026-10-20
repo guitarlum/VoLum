@@ -1,12 +1,9 @@
 package com.volum.ui.b
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -19,20 +16,18 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -40,25 +35,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
-import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -67,14 +63,30 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
+import com.volum.core.Param
+import com.volum.design.components.VoLumKnob
+import com.volum.design.components.VoLumSelectionStyle
+import com.volum.design.components.VoLumSwitchTrack
+import com.volum.design.components.VoLumTextField
+import com.volum.design.components.cornerBrackets
+import com.volum.design.components.hairlineFrame
+import com.volum.design.components.panelDepth
+import com.volum.design.components.selectionInk
+import com.volum.design.components.volumSelection
+import com.volum.design.theme.VoLumColors
+import com.volum.design.theme.VoLumMotion
+import com.volum.design.theme.VoLumType
+import com.volum.design.theme.withOpacity
 import com.volum.harness.featureId
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+/** The three selection dialects of `:design`, by their desktop names. */
+internal typealias Sel = VoLumSelectionStyle
 
 internal fun Modifier.ids(ids: Array<out String>): Modifier = if (ids.isEmpty()) this else featureId(*ids)
 
@@ -83,7 +95,7 @@ internal fun Modifier.swallowTouches(): Modifier = pointerInput(Unit) {
     awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
 }
 
-/** One line of text that shrinks until it fits its width, so labels never wrap or clip at large font scales. */
+/** One line that shrinks until it fits its box, so no label wraps, clips or ellipsises at font scale 1.3. */
 @Composable
 internal fun FitText(text: String, style: TextStyle, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Center, fitHeight: Boolean = false) {
     val measurer = rememberTextMeasurer()
@@ -97,9 +109,9 @@ internal fun FitText(text: String, style: TextStyle, modifier: Modifier = Modifi
         val fitted = remember(text, style, maxW, maxH) {
             var s = style
             var tries = 0
-            while (tries < 14 && measurer.measure(text, s, maxLines = 1, softWrap = false).size.let { it.width > maxW || it.height > maxH }) {
+            while (tries < 16 && measurer.measure(text, s, maxLines = 1, softWrap = false).size.let { it.width > maxW || it.height > maxH }) {
                 s = s.copy(
-                    fontSize = if (s.fontSize.isSpecified) s.fontSize * 0.9f else 12.sp,
+                    fontSize = if (s.fontSize.isSpecified) s.fontSize * 0.92f else 12.sp,
                     letterSpacing = if (s.letterSpacing.isSpecified) s.letterSpacing * 0.8f else s.letterSpacing,
                 )
                 tries++
@@ -110,7 +122,34 @@ internal fun FitText(text: String, style: TextStyle, modifier: Modifier = Modifi
     }
 }
 
-/** The pressable surface every tap control is built on: press scale, selection ink, haptic, featureId on the clickable node. */
+/**
+ * One type size for a whole grid: the largest at which every one of [texts] fits [width].
+ * Neighbouring cells then read at the same size instead of each shrinking on its own.
+ */
+@Composable
+internal fun rememberSharedStyle(texts: List<String>, style: TextStyle, width: Dp, floor: Float = 0.55f): TextStyle {
+    val measurer = rememberTextMeasurer()
+    val avail = with(LocalDensity.current) { width.toPx() }
+    return remember(texts, style, avail) {
+        val widest = texts.maxOfOrNull { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width } ?: 0
+        if (widest <= avail || widest == 0 || avail <= 0f) style
+        else style.copy(fontSize = style.fontSize * (avail / widest * 0.98f).coerceAtLeast(floor))
+    }
+}
+
+@Composable
+internal fun Caption(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.CreamDim) {
+    FitText(text, VoLumType.label(10.sp, color), modifier.height(18.dp), align = TextAlign.Start)
+}
+
+/** How a [Pad] reads at rest: a quiet brass-framed button, a destructive one, or a frameless surface. */
+internal enum class Tone { FRAMED, DANGER, PRIMARY, BARE }
+
+/**
+ * The pressable surface every tap control of B is built on. Active and pressed looks
+ * come from `:design`'s [volumSelection] in the dialect [style]; [content] gets the ink
+ * that goes with the state. One `featureId` call on the clickable node.
+ */
 @Composable
 internal fun Pad(
     onClick: () -> Unit,
@@ -119,36 +158,57 @@ internal fun Pad(
     selected: Boolean? = null,
     enabled: Boolean = true,
     role: Role = Role.Button,
-    sel: Sel = Sel.BRASS,
-    fill: Color = Ink.raised,
+    style: Sel = Sel.Brass,
+    tone: Tone = Tone.FRAMED,
     description: String? = null,
     haptic: Boolean = false,
-    content: @Composable BoxScope.() -> Unit,
+    content: @Composable BoxScope.(ink: Color) -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, tween(if (pressed) 60 else 140), label = "press")
+    val scale by animateFloatAsState(if (pressed && haptic) 0.97f else 1f, tween(if (pressed) VoLumMotion.PressMs else VoLumMotion.PressMs * 2), label = "press")
     val haptics = LocalHapticFeedback.current
+    val active = selected == true
+    val ink = when {
+        !enabled -> VoLumColors.CreamDim
+        active -> selectionInk(style, true)
+        tone == Tone.DANGER -> VoLumColors.Danger
+        tone == Tone.PRIMARY -> VoLumColors.Gold
+        pressed -> VoLumColors.TextBright
+        else -> VoLumColors.BtnOffText
+    }
     Box(
         modifier
             .defaultMinSize(48.dp, 48.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (pressed) Ink.pressed else fill)
-            .selectionInk(selected == true, sel)
-            .alpha(if (enabled) 1f else 0.38f)
+            .alpha(if (enabled) 1f else 0.45f)
             .clickable(source, null, enabled = enabled, role = role) {
                 if (haptic) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()
             }
+            .drawWithCache {
+                val cr = CornerRadius(3.dp.toPx())
+                val px = 1.dp.toPx()
+                val stroke = Stroke(if (pressed) 1.35f * px else px)
+                val border = when (tone) {
+                    Tone.DANGER -> VoLumColors.Danger.withOpacity(if (pressed) 0.9f else 0.5f)
+                    Tone.PRIMARY -> if (pressed) VoLumColors.Gold else VoLumColors.GoldDim.withOpacity(0.8f)
+                    else -> if (pressed) VoLumColors.GoldDim else VoLumColors.BtnOffBorder
+                }
+                onDrawBehind {
+                    if (active || tone == Tone.BARE) return@onDrawBehind
+                    drawRoundRect(if (tone == Tone.DANGER) VoLumColors.DangerFill.withOpacity(0.12f) else VoLumColors.BtnOffBg, cornerRadius = cr)
+                    drawRoundRect(border, Offset(px / 2, px / 2), Size(size.width - px, size.height - px), cr, style = stroke)
+                }
+            }
+            .volumSelection(active, pressed && enabled, style, radius = 3.dp, inset = 0.dp)
             .semantics {
                 if (selected != null) this.selected = selected
                 if (description != null) contentDescription = description
             }
             .ids(ids),
         contentAlignment = Alignment.Center,
-        content = content,
-    )
+    ) { content(ink) }
 }
 
 @Composable
@@ -159,22 +219,17 @@ internal fun TextPad(
     ids: Array<out String> = emptyArray(),
     selected: Boolean? = null,
     enabled: Boolean = true,
-    sel: Sel = Sel.BRASS,
-    style: TextStyle = Type.label(13.sp, Ink.text),
+    style: Sel = Sel.Brass,
+    tone: Tone = Tone.FRAMED,
+    size: TextUnit = 12.sp,
     role: Role = Role.Button,
-    fill: Color = Ink.raised,
 ) {
-    Pad(onClick, modifier, ids, selected, enabled, role, sel, fill) {
-        FitText(label, style, Modifier.fillMaxWidth().padding(horizontal = 8.dp))
+    Pad(onClick, modifier, ids, selected, enabled, role, style, tone) { ink ->
+        FitText(label, VoLumType.label(size, ink), Modifier.fillMaxWidth().padding(horizontal = 10.dp))
     }
 }
 
-@Composable
-internal fun Caption(text: String, modifier: Modifier = Modifier, color: Color = Ink.dim) {
-    FitText(text, Type.label(11.sp, color), modifier.height(18.dp), align = TextAlign.Start)
-}
-
-/** Mutually exclusive options drawn with one of the shared selection styles. */
+/** Mutually exclusive options in one of the shared selection dialects. */
 @Composable
 internal fun Choice(
     options: List<String>,
@@ -183,17 +238,17 @@ internal fun Choice(
     modifier: Modifier = Modifier,
     ids: (Int) -> Array<out String> = { emptyArray() },
     enabled: (Int) -> Boolean = { true },
-    sel: Sel = Sel.AMBER_PICKER,
-    weights: List<Float>? = null,
+    style: Sel = Sel.AmberPicker,
+    size: TextUnit = 12.sp,
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         options.forEachIndexed { i, o ->
-            TextPad(o, { onSelect(i) }, Modifier.weight(weights?.get(i) ?: 1f).fillMaxSize(), ids(i), i == selected, enabled(i), sel, role = Role.Tab)
+            TextPad(o, { onSelect(i) }, Modifier.weight(1f).fillMaxSize(), ids(i), i == selected, enabled(i), style, size = size, role = Role.RadioButton)
         }
     }
 }
 
-/** ‹ value › stepper; both arrows carry their own ids. */
+/** `<  value  >` stepper with the desktop's gold Josefin arrows; each arrow is its own target with its own ids. */
 @Composable
 internal fun Stepper(
     value: String,
@@ -204,28 +259,38 @@ internal fun Stepper(
     nextIds: Array<out String> = emptyArray(),
     prevEnabled: Boolean = true,
     nextEnabled: Boolean = true,
-    valueStyle: TextStyle = Type.tech(16.sp),
+    valueStyle: TextStyle = VoLumType.Stepper,
     description: String = "",
+    arrow: Dp = 48.dp,
 ) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Pad(onPrev, Modifier.width(48.dp).fillMaxSize(), prevIds, enabled = prevEnabled, description = "previous $description") {
-            BasicText("‹", style = Type.display(26.sp))
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Pad(onPrev, Modifier.width(arrow).fillMaxHeight(), prevIds, enabled = prevEnabled, tone = Tone.BARE, description = "previous $description") { ink ->
+            BasicText("<", style = VoLumType.label(17.sp, if (ink == VoLumColors.CreamDim) ink else VoLumColors.Gold))
         }
-        FitText(value, valueStyle, Modifier.weight(1f))
-        Pad(onNext, Modifier.width(48.dp).fillMaxSize(), nextIds, enabled = nextEnabled, description = "next $description") {
-            BasicText("›", style = Type.display(26.sp))
+        FitText(value, valueStyle, Modifier.weight(1f).padding(horizontal = 4.dp))
+        Pad(onNext, Modifier.width(arrow).fillMaxHeight(), nextIds, enabled = nextEnabled, tone = Tone.BARE, description = "next $description") { ink ->
+            BasicText(">", style = VoLumType.label(17.sp, if (ink == VoLumColors.CreamDim) ink else VoLumColors.Gold))
         }
     }
 }
 
-/** On / off switch with an LED. */
+/** On / off row: the `:design` slide track and a label that fits; the whole row is one toggle target. */
 @Composable
 internal fun Switch(label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, ids: Array<out String> = emptyArray(), enabled: Boolean = true) {
-    Pad(onClick, modifier, ids, selected = on, enabled = enabled, sel = Sel.BRASS, role = Role.Switch, haptic = true) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Canvas(Modifier.size(12.dp)) { led(on, Offset(size.width / 2, size.height / 2), size.minDimension / 3) }
-            FitText(label, Type.label(12.sp, if (on) Ink.text else Ink.dim), Modifier.weight(1f).padding(start = 8.dp), align = TextAlign.Start)
-        }
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    Row(
+        modifier
+            .defaultMinSize(minHeight = 48.dp)
+            .alpha(if (enabled) 1f else 0.4f)
+            .toggleable(on, source, indication = null, enabled = enabled, role = Role.Switch) { onClick() }
+            .ids(ids)
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        VoLumSwitchTrack(on, pressed = pressed)
+        FitText(label, VoLumType.label(12.sp, if (on) VoLumColors.TextBright else VoLumColors.Cream), Modifier.weight(1f), align = TextAlign.Start)
     }
 }
 
@@ -245,95 +310,39 @@ internal fun formatValue(v: Double, min: Double, max: Double, unit: String): Str
     else -> String.format("%.1f", v)
 }
 
-private fun parseNumber(text: String): Double? = Regex("-?\\d+(?:[.,]\\d+)?").find(text)?.value?.replace(',', '.')?.toDoubleOrNull()
+internal fun parseNumber(text: String): Double? = Regex("-?\\d+(?:[.,]\\d+)?").find(text)?.value?.replace(',', '.')?.toDoubleOrNull()
 
 /**
- * Fingertip knob: vertical drag over the whole cell (slide sideways for fine adjust),
- * double tap resets, long press opens exact entry. Exposes SetProgress, SetText and a
- * Reset action for the harness and accessibility.
+ * A rig parameter on the shared `:design` dial: drag anywhere on the cell, hold
+ * still for fine adjust, double tap resets; SetProgress / SetText / Reset for the
+ * harness and accessibility land on the same node as [ids].
  */
 @Composable
 internal fun Knob(
-    label: String,
+    p: Param,
     value: Double,
-    min: Double,
-    max: Double,
-    default: Double,
-    unit: String,
     onSet: (Double) -> Unit,
-    onReset: () -> Unit,
     modifier: Modifier = Modifier,
     ids: Array<out String> = emptyArray(),
-    dial: Dp = 60.dp,
+    label: String = p.label,
+    support: Boolean = false,
+    dial: Dp = 46.dp,
 ) {
-    val norm = if (max > min) ((value - min) / (max - min)).toFloat().coerceIn(0f, 1f) else 0f
-    var dragging by remember { mutableStateOf(false) }
-    var exact by remember { mutableStateOf(false) }
-    val shown by animateFloatAsState(norm, if (dragging) snap() else tween(140), label = "knob")
-    val set by rememberUpdatedState(onSet)
-    val reset by rememberUpdatedState(onReset)
-    val current by rememberUpdatedState(norm)
-    var accum by remember { mutableFloatStateOf(0f) }
-    var sideways by remember { mutableFloatStateOf(0f) }
-    var start by remember { mutableFloatStateOf(0f) }
-    val text = formatValue(value, min, max, unit)
-    Column(
-        modifier
-            .defaultMinSize(64.dp, 64.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (dragging) Ink.raised else Color.Transparent)
-            .pointerInput(min, max) {
-                detectTapGestures(onDoubleTap = { reset() }, onLongPress = { exact = true })
-            }
-            .pointerInput(min, max) {
-                detectDragGestures(
-                    onDragStart = { dragging = true; accum = 0f; sideways = 0f; start = current },
-                    onDragEnd = { dragging = false },
-                    onDragCancel = { dragging = false },
-                ) { change, drag ->
-                    change.consume()
-                    sideways += drag.x
-                    val fine = if (abs(sideways) > 56.dp.toPx()) 0.15f else 1f
-                    accum += -drag.y / 200.dp.toPx() * fine
-                    val n = (start + accum).coerceIn(0f, 1f)
-                    set(min + n * (max - min))
-                }
-            }
-            .semantics(mergeDescendants = true) {
-                contentDescription = label
-                stateDescription = text
-                progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), min.toFloat()..max.toFloat())
-                setProgress { t -> set(t.toDouble().coerceIn(min, max)); true }
-                setText { t -> parseNumber(t.text)?.let { set(it.coerceIn(min, max)); true } ?: false }
-                customActions = listOf(CustomAccessibilityAction("Reset") { reset(); true })
-            }
-            .ids(ids)
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        FitText(label, Type.label(11.sp, if (dragging) Ink.text else Ink.dim), Modifier.fillMaxWidth().height(18.dp).padding(horizontal = 2.dp))
-        Canvas(Modifier.size(dial)) { knobFace(shown, dragging || value != default) }
-        FitText(text, Type.value(13.sp, if (dragging) Ink.hot else Ink.text), Modifier.fillMaxWidth().height(20.dp).padding(horizontal = 2.dp))
-    }
-    if (exact) ExactEntry(label, text, unit, onDone = { v -> v?.let { set(it.coerceIn(min, max)) }; exact = false })
+    VoLumKnob(
+        value = value,
+        onValueChange = onSet,
+        range = p.min..p.max,
+        default = p.default,
+        label = label,
+        valueText = formatValue(value, p.min, p.max, p.unit),
+        modifier = modifier.ids(ids),
+        support = support,
+        dialSize = dial,
+        parseEntry = { t -> parseNumber(t) },
+    )
 }
 
-@Composable
-private fun ExactEntry(label: String, current: String, unit: String, onDone: (Double?) -> Unit) {
-    var text by remember { mutableStateOf(parseNumber(current)?.let { if (it == it.roundToInt().toDouble()) it.roundToInt().toString() else it.toString() } ?: "") }
-    Popup(alignment = Alignment.Center, onDismissRequest = { onDone(null) }, properties = PopupProperties(focusable = true)) {
-        Column(Modifier.width(280.dp).clip(RoundedCornerShape(10.dp)).background(Ink.panel).brackets().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Caption("$label ${if (unit.isNotEmpty()) "($unit)" else ""}")
-            Field(text, { text = it }, Modifier.fillMaxWidth().height(56.dp), number = true, onDone = { onDone(parseNumber(text)) })
-            Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextPad("CANCEL", { onDone(null) }, Modifier.weight(1f).fillMaxSize())
-                TextPad("SET", { onDone(parseNumber(text)) }, Modifier.weight(1f).fillMaxSize(), selected = true)
-            }
-        }
-    }
-}
-
-/** Horizontal fader: drag or tap along the track. */
+/** Horizontal slider in the desktop's metronome-volume look: drag or tap along the track. */
 @Composable
 internal fun Fader(
     label: String,
@@ -352,8 +361,6 @@ internal fun Fader(
     Row(
         modifier
             .defaultMinSize(minHeight = 56.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Ink.raised)
             .semantics(mergeDescendants = true) {
                 contentDescription = label
                 stateDescription = text
@@ -361,56 +368,37 @@ internal fun Fader(
                 setProgress { t -> set(t.toDouble().coerceIn(min, max)); true }
             }
             .ids(ids)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        FitText(label, Type.label(12.sp), Modifier.width(96.dp), align = TextAlign.Start)
-        Canvas(
-            Modifier.weight(1f).fillMaxSize()
+        FitText(label, VoLumType.label(12.sp, VoLumColors.TextBright), Modifier.width(84.dp), align = TextAlign.Start)
+        Box(
+            Modifier.weight(1f).fillMaxHeight()
                 .pointerInput(min, max) {
-                    detectTapGestures { p -> set(min + (p.x / size.width).coerceIn(0f, 1f) * (max - min)) }
+                    detectTapGestures { pos -> set(min + (pos.x / size.width).coerceIn(0f, 1f) * (max - min)) }
                 }
                 .pointerInput(min, max) {
-                    detectDragGestures(onDragStart = { dragging = true }, onDragEnd = { dragging = false }, onDragCancel = { dragging = false }) { change, _ ->
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragging = true }, onDragEnd = { dragging = false }, onDragCancel = { dragging = false },
+                    ) { change, _ ->
                         change.consume()
                         set(min + (change.position.x / size.width).coerceIn(0f, 1f) * (max - min))
                     }
+                }
+                .drawBehind {
+                    val y = size.height / 2
+                    val r = (if (dragging) 9 else 7).dp.toPx()
+                    drawLine(VoLumColors.Frame, Offset(0f, y), Offset(size.width, y), 4.dp.toPx(), StrokeCap.Round)
+                    drawLine(VoLumColors.KnobGold, Offset(0f, y), Offset(size.width * norm, y), 4.dp.toPx(), StrokeCap.Round)
+                    drawCircle(if (dragging) VoLumColors.Gold else VoLumColors.Cream, r, Offset(size.width * norm, y))
                 },
-        ) {
-            val y = size.height / 2
-            drawLine(Ink.line, Offset(0f, y), Offset(size.width, y), 4.dp.toPx())
-            drawLine(Ink.text, Offset(0f, y), Offset(size.width * norm, y), 4.dp.toPx())
-            drawCircle(if (dragging) Ink.hot else Ink.text, if (dragging) 13.dp.toPx() else 10.dp.toPx(), Offset(size.width * norm, y))
-        }
-        FitText(text, Type.value(14.sp), Modifier.width(88.dp), align = TextAlign.End)
+        )
+        FitText(text, VoLumType.label(12.sp, VoLumColors.TextBright), Modifier.width(80.dp), align = TextAlign.End)
     }
 }
 
-/** IN / OUT ladder; reads telemetry in the draw phase only. */
-@Composable
-internal fun Meter(input: Boolean, modifier: Modifier = Modifier) {
-    val tele = LocalStage.current.tele
-    Canvas(modifier) {
-        val t = tele.value
-        val level = t.meter(if (input) t.inDb else t.outDb).toFloat()
-        drawRect(Ink.panel)
-        val segments = 14
-        val gap = 2.dp.toPx()
-        val h = (size.height - gap * (segments - 1)) / segments
-        for (i in 0 until segments) {
-            val lit = (i + 1f) / segments <= level + 0.001f
-            val top = size.height - (i + 1) * h - i * gap
-            val c = when {
-                !lit -> Ink.raised
-                i >= segments - 2 -> Ink.alert
-                else -> Ink.dim
-            }
-            drawRect(c, Offset(0f, top), Size(size.width, h))
-        }
-    }
-}
-
-/** Single-line text entry; [number] opens the numeric keyboard. */
+/** Single-line entry on the `:design` name field; [number] opens the numeric keyboard. */
 @Composable
 internal fun Field(
     value: String,
@@ -421,31 +409,33 @@ internal fun Field(
     placeholder: String = "",
     onDone: () -> Unit = {},
 ) {
-    BasicTextField(
-        value = value,
-        onValueChange = onChange,
-        modifier = modifier.defaultMinSize(minHeight = 48.dp).clip(RoundedCornerShape(6.dp)).background(Ink.raised).ids(ids),
-        singleLine = true,
-        textStyle = Type.value(16.sp),
-        cursorBrush = SolidColor(Ink.hot),
-        keyboardOptions = KeyboardOptions(keyboardType = if (number) KeyboardType.Decimal else KeyboardType.Text, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onDone() }),
-        decorationBox = { inner ->
-            Box(Modifier.fillMaxSize().padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) BasicText(placeholder, style = Type.value(16.sp, Ink.faint))
-                inner()
-            }
-        },
+    VoLumTextField(
+        value, onChange, modifier.ids(ids), placeholder,
+        KeyboardOptions(keyboardType = if (number) KeyboardType.Decimal else KeyboardType.Text, imeAction = ImeAction.Done),
+        KeyboardActions(onDone = { onDone() }),
     )
 }
 
 @Composable
 internal fun RowScope.Gap(w: Dp = 8.dp) = Box(Modifier.width(w))
 
+/** A framed group inside a panel: panel depth, brass hairline, 8 dp card brackets, a section caption. */
 @Composable
-internal fun Card(modifier: Modifier = Modifier, caption: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(8.dp)).background(Ink.panel).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (caption != null) Caption(caption, Modifier.fillMaxWidth())
+internal fun Card(modifier: Modifier = Modifier, caption: String? = null, accent: Color = VoLumColors.Corner, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier.panelDepth(4.dp).hairlineFrame(VoLumColors.Frame, radius = 4.dp).cornerBrackets(accent.withOpacity(0.8f), 8.dp, 4.dp).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (caption != null) FitText(caption, VoLumType.SectionHeader, Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
         content()
+    }
+}
+
+/** A status line that is not a control: a lamp and the words, no pad behind it. */
+@Composable
+internal fun Status(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.Amber) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        com.volum.design.components.VoLumLed(true, color = color)
+        FitText(text, VoLumType.label(12.sp, color), Modifier.weight(1f), align = TextAlign.Start)
     }
 }
