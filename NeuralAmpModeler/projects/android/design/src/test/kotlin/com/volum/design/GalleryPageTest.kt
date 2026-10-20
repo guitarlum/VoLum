@@ -19,6 +19,8 @@ class GalleryPageTest {
             "gallery_dialogs" to GalleryPage.DIALOGS,
             "gallery_arts" to GalleryPage.ARTS,
             "gallery_motifs" to GalleryPage.MOTIFS,
+            "gallery_header" to GalleryPage.HEADER,
+            "gallery_blocks" to GalleryPage.BLOCKS,
         )
         assertEquals(expected, expected.mapValues { (f, _) -> galleryPageOf(Fixtures.build(f)) })
         val captured = ScreenRegistry.spec(ScreenId.DESIGN_GALLERY).captures

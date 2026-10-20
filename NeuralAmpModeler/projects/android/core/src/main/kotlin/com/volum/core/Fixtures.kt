@@ -228,7 +228,9 @@ object Fixtures {
             seed().ui { it.copy(confirm = Confirm(ConfirmKind.DELETE_PRESET, "u:1", "Delete \"Sunset Crunch\"?"), banner = Banner(BannerKind.ERROR, "File is not a WAV file: renamed-junk.wav")) }
         },
         f("gallery_arts", "design gallery: every factory hero art") { seed().ui { it.copy(view = View.BUILD, section = Section.AMP) } },
-        f("gallery_motifs", "design gallery: effect motifs, quiet slots, custom arts, thumbnails") { seed().ui { it.copy(view = View.BUILD, section = Section.POST) } },
+        f("gallery_motifs", "design gallery: effect motifs, custom arts, thumbnails") { seed().ui { it.copy(view = View.BUILD, section = Section.POST) } },
+        f("gallery_header", "design gallery: header bars, preset bar states, glyph set, pressed header faces") { seed().ui { it.copy(buildTipSeen = false) } },
+        f("gallery_blocks", "design gallery: PRE / POST blocks with lock and chevron, Custom IR cab, name field, lamps") { seed().ui { it.copy(lane = Lane.SUPPORT) } },
         f("energy_0", "PLAY art at energy 0", energy = 0.0) { seed() },
         f("energy_half", "PLAY art at energy 0.5", energy = 0.5) { seed() },
         f("energy_full", "PLAY art at energy 1", energy = 1.0) { seed() },

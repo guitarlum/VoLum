@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volum.core.Lane
 import com.volum.core.Section
 import com.volum.core.View
 import com.volum.core.VoLumState
@@ -29,8 +30,10 @@ import com.volum.design.components.VoLumSubModePill
 import com.volum.design.components.volumCanvas
 import com.volum.design.components.windowFrame
 import com.volum.design.gallery.ArtsPage
+import com.volum.design.gallery.BlocksPage
 import com.volum.design.gallery.ControlsPage
 import com.volum.design.gallery.DialogsPage
+import com.volum.design.gallery.HeaderPage
 import com.volum.design.gallery.MotifsPage
 import com.volum.design.gallery.StagePage
 import com.volum.design.gallery.TokensPage
@@ -39,17 +42,22 @@ import com.volum.design.theme.VoLumTheme
 import com.volum.design.theme.VoLumType
 
 /** The gallery's pages, in tab order. */
-enum class GalleryPage(val title: String) { STAGE("Stage"), TOKENS("Tokens"), CONTROLS("Controls"), DIALOGS("Dialogs"), ARTS("Amp art"), MOTIFS("Motifs") }
+enum class GalleryPage(val title: String) {
+    STAGE("Stage"), TOKENS("Tokens"), CONTROLS("Controls"), DIALOGS("Dialogs"), ARTS("Amp art"), MOTIFS("Motifs"), HEADER("Header"), BLOCKS("Blocks"),
+}
 
 /**
  * Which page a fixture opens on. The gallery has no state of its own in
  * `:core`, so the `gallery_*` fixtures pick a page through the UI state they
- * already carry: a pending confirm is the dialogs page; otherwise (view,
- * section). `default` (PLAY / AMP) and `pre_nam1` (BUILD / PRE) both land on
- * the stage page, which the three design motion scripts record.
+ * already carry: a pending confirm is the dialogs page, a pending "Tweak your
+ * sound" note the header page, a focused SUPPORT lane on PLAY the blocks page;
+ * otherwise (view, section). `default` (PLAY / AMP) and `pre_nam1` (BUILD /
+ * PRE) both land on the stage page, which the three design motion scripts record.
  */
 fun galleryPageOf(s: VoLumState): GalleryPage = when {
     s.ui.confirm != null -> GalleryPage.DIALOGS
+    !s.ui.buildTipSeen -> GalleryPage.HEADER
+    s.ui.view == View.PLAY && s.ui.lane == Lane.SUPPORT -> GalleryPage.BLOCKS
     s.ui.view == View.PLAY && s.ui.section == Section.PRE -> GalleryPage.TOKENS
     s.ui.view == View.PLAY && s.ui.section == Section.POST -> GalleryPage.CONTROLS
     s.ui.view == View.BUILD && s.ui.section == Section.AMP -> GalleryPage.ARTS
@@ -82,6 +90,8 @@ fun DesignGallery(store: VoLumStore, modifier: Modifier = Modifier) {
                     GalleryPage.DIALOGS -> DialogsPage(store, state)
                     GalleryPage.ARTS -> ArtsPage(store)
                     GalleryPage.MOTIFS -> MotifsPage(store)
+                    GalleryPage.HEADER -> HeaderPage()
+                    GalleryPage.BLOCKS -> BlocksPage(store)
                 }
             }
         }

@@ -55,8 +55,8 @@ object MotionRegistry {
             MotionStep(5300, Action.Open(Overlay.Settings(SettingsTab.SIGNAL))),
             MotionStep(6200, Action.SetSettingsTab(SettingsTab.MIDI)),
         ), description = "preset menu, tuner and settings opening and closing"),
-        MotionScript("design_hero", ScreenId.DESIGN_GALLERY, "default", 6000, listOf(MotionStep(0, energy = 0.0)),
-            scope = Scope.DESIGN, description = "design gallery hero art idle"),
+        MotionScript("design_hero", ScreenId.DESIGN_GALLERY, "default", 6000, listOf(MotionStep(0, energy = 1.0)),
+            scope = Scope.DESIGN, description = "design gallery: BUILD hero idle beside the PLAY art held at energy 1 (grid and corona timing)"),
         MotionScript("design_play_energy", ScreenId.DESIGN_GALLERY, "default", 7500, energyRamp(),
             scope = Scope.DESIGN, description = "design gallery PLAY art at energy 0, 0.5 and 1"),
         MotionScript("design_pedal_toggle", ScreenId.DESIGN_GALLERY, "pre_nam1", 6000, listOf(

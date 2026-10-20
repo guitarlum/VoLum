@@ -29,8 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.core.Action
@@ -51,12 +49,10 @@ import com.volum.design.art.MovingArt
 import com.volum.design.art.amps.FactoryArt
 import com.volum.design.art.rememberArtFrames
 import com.volum.design.components.AmpTitle
-import com.volum.design.components.Corners
 import com.volum.design.components.HeroAmp
 import com.volum.design.components.PedalCard
 import com.volum.design.components.PlayBanner
 import com.volum.design.components.PlayStagePanel
-import com.volum.design.components.QuietSlot
 import com.volum.design.components.VoLumBanner
 import com.volum.design.components.VoLumBannerKind
 import com.volum.design.components.VoLumBrassButton
@@ -64,6 +60,7 @@ import com.volum.design.components.VoLumButton
 import com.volum.design.components.VoLumChannelStepper
 import com.volum.design.components.VoLumConfirmDialog
 import com.volum.design.components.VoLumHero
+import com.volum.design.components.VoLumIrCabButton
 import com.volum.design.components.VoLumKnob
 import com.volum.design.components.VoLumListRow
 import com.volum.design.components.VoLumMeter
@@ -83,6 +80,7 @@ import com.volum.design.components.preCrosshatch
 import com.volum.design.components.selectionInk
 import com.volum.design.components.volumScrollbar
 import com.volum.design.components.volumSelection
+import com.volum.design.theme.VFitText
 import com.volum.design.theme.VText
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
@@ -91,14 +89,26 @@ import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
 
 @Composable
-private fun Caption(text: String, modifier: Modifier = Modifier) = VText(text, modifier, style = VoLumType.label(9.sp, VoLumColors.CreamDim))
+internal fun Caption(text: String, modifier: Modifier = Modifier) = VFitText(text, modifier, style = VoLumType.label(9.sp, VoLumColors.CreamDim), minSize = 6.5.sp)
 
 @Composable
-private fun Section(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun Section(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        VText(title, style = VoLumType.SectionHeader)
+        VFitText(title, style = VoLumType.SectionHeader, minSize = 7.sp)
         content()
     }
+}
+
+/**
+ * The engine clock in Michroma, for motion sheets: time since the first drawn
+ * frame, so every tile of a contact sheet carries its own time. 18 sp so it
+ * still reads in a 480 px tile. Recomposes this one text per frame; nothing
+ * else on the page does.
+ */
+@Composable
+private fun MotionClock(store: VoLumStore) {
+    val cs by remember(store) { store.telemetry.map { it.timeMs / 10 }.distinctUntilChanged() }.collectAsState(store.telemetry.value.timeMs / 10)
+    VText("T %d.%02d".format(cs / 100, cs % 100), style = VoLumType.value(18.sp, VoLumColors.Gold))
 }
 
 private fun storeInput(store: VoLumStore) = ArtInput { store.telemetry.value }
@@ -118,9 +128,10 @@ internal fun StagePage(store: VoLumStore, s: VoLumState) {
     Row(Modifier.fillMaxSize(), horizontalArrangement = GalleryGap) {
         VoLumMeter({ store.telemetry.value.meter(store.telemetry.value.inDb).toFloat() }, "IN", Modifier.fillMaxHeight().padding(vertical = 6.dp), frame = { frames.longValue })
         Column(Modifier.weight(1.55f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Caption("PLAY  ·  ${amp.name}  ·  moving art", Modifier.weight(1f))
-                VText("ENERGY " + "%d.%02d".format(energy / 100, energy % 100), style = VoLumType.value(10.sp, VoLumColors.Gold))
+                VText("E %d.%02d".format(energy / 100, energy % 100), style = VoLumType.value(18.sp, VoLumColors.Gold))
+                MotionClock(store)
             }
             PlayStagePanel(art, input, Modifier.fillMaxWidth().weight(1f).padding(3.dp), picks = false, animate = s.signal.animateArt)
             PlayBanner(s.presetName ?: amp.name, Modifier.fillMaxWidth().height(50.dp), program = s.library.live, secondary = amp.name, dirty = s.rig.dirty)
@@ -243,9 +254,10 @@ internal fun ControlsPage(store: VoLumStore) {
                 VoLumToggle(eq, { eq = it }, label = "EQ")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                listOf("No Cab", "G12", "G65", "V30", "Custom IR").forEachIndexed { i, label ->
-                    VoLumBrassButton(label, cab == i, { cab = i }, enabled = i != 4, minWidth = if (i == 0) 64.dp else 52.dp)
+                listOf("No Cab", "G12", "G65", "V30").forEachIndexed { i, label ->
+                    VoLumBrassButton(label, cab == i, { cab = i }, minWidth = if (i == 0) 64.dp else 52.dp)
                 }
+                VoLumIrCabButton(cab == 4, { cab = 4 }, irName = "Marshall 4x12 _ Royer")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 VoLumSubModePill(listOf("DARK", "SHIMMER", "BLOOM"), sub, { sub = it }, Modifier.width(220.dp))
@@ -325,7 +337,7 @@ internal fun ArtsPage(store: VoLumStore) {
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             AmpThumbnail(ArtRef.factory(spec.case), Modifier.size(14.dp))
-                            VText("${spec.amp}  ·  ${spec.motif}", style = VoLumType.label(8.5.sp, VoLumColors.CreamDim))
+                            VFitText("${spec.amp}  ·  ${spec.motif}", Modifier.weight(1f), style = VoLumType.label(8.5.sp, VoLumColors.CreamDim), minSize = 5.5.sp)
                         }
                     }
                 }
@@ -346,38 +358,20 @@ internal fun MotifsPage(store: VoLumStore) {
                 PedalCard(m, labels.getValue(m), on = i % 3 != 1, onClick = {}, onToggle = {}, modifier = Modifier.weight(1f).fillMaxHeight(), focused = i == 2)
             }
         }
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuietBlock("PRE", listOf(Motif.PITCH to "PITCH", Motif.COMP to "COMP", Motif.NAM1 to "KLON", Motif.NAM2 to "TS"), Modifier.width(128.dp))
-            QuietBlock("POST", listOf(Motif.CHORUS to "CHORUS", Motif.DELAY to "DELAY", Motif.REVERB to "REVRB", Motif.TREM to "TREM"), Modifier.width(128.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Caption("CUSTOM AMP ART  ·  six styles")
-                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    (0 until 6).forEach { st ->
-                        Box(Modifier.weight(1f).fillMaxHeight().background(VoLumColors.HeroBg).hairlineFrame(VoLumColors.HeroBorder)) {
-                            MovingArt(ArtRef.custom(st), input, Modifier.fillMaxSize().padding(4.dp))
-                        }
+        Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Caption("CUSTOM AMP ART  ·  six styles   (PRE / POST quiet blocks: Blocks page)")
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                (0 until 6).forEach { st ->
+                    Box(Modifier.weight(1f).fillMaxHeight().background(VoLumColors.HeroBg).hairlineFrame(VoLumColors.HeroBorder)) {
+                        MovingArt(ArtRef.custom(st), input, Modifier.fillMaxSize().padding(4.dp))
                     }
                 }
-                Caption("AMP LIST THUMBNAILS")
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FactoryArt.specs.forEach { AmpThumbnail(ArtRef.factory(it.case), Modifier.size(22.dp)) }
-                    (0 until 6).forEach { AmpThumbnail(ArtRef.custom(it), Modifier.size(22.dp)) }
-                }
+            }
+            Caption("AMP LIST THUMBNAILS")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FactoryArt.specs.forEach { AmpThumbnail(ArtRef.factory(it.case), Modifier.size(22.dp)) }
+                (0 until 6).forEach { AmpThumbnail(ArtRef.custom(it), Modifier.size(22.dp)) }
             }
         }
     }
 }
-
-@Composable
-private fun QuietBlock(title: String, slots: List<Pair<Motif, String>>, modifier: Modifier) {
-    var on by remember { mutableStateOf(setOf(1, 2)) }
-    Column(modifier.fillMaxHeight().panelDepth().hairlineFrame(VoLumColors.Frame).cornerBrackets(VoLumColors.TealDim, 6.dp, 3.dp, Corners.ALL).padding(2.dp)) {
-        VText(title, Modifier.padding(start = 6.dp, top = 3.dp), style = VoLumType.SectionHeader)
-        slots.forEachIndexed { i, (m, label) ->
-            QuietSlot(m, label, i in on, {}, { v -> on = if (v) on + i else on - i }, Modifier.fillMaxWidth().weight(1f))
-        }
-    }
-}
-
-@Suppress("unused")
-private val unusedStyle = TextStyle(color = Color.Unspecified)
