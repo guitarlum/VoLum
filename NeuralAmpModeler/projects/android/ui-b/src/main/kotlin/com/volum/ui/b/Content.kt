@@ -193,7 +193,7 @@ internal fun PedalManage(s: VoLumState) {
     val st = LocalStage.current
     val custom = s.library.pedals.filter { it.custom }
     Panel(s, ScreenId.CUSTOM_PEDAL_MANAGE, "Custom pedals", arrayOf("pedal.manage.close"), subtitle = "your .nam pedal captures for NAM 1 and NAM 2 · ${custom.size} of 64 slots used",
-        bodyHeight = (((custom.size + 1) / 2).coerceIn(2, 5) * 62 + 8).dp,
+        bodyHeight = (((custom.size + 1) / 2).coerceIn(1, 5) * 62 + 8).dp,
         actions = {
             Pad({ st.go(Action.PickFiles(PickKind.PEDAL_FILES)) }, Modifier.width(150.dp).height(48.dp), arrayOf("pedal.import"), tone = Tone.PRIMARY) { ink ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

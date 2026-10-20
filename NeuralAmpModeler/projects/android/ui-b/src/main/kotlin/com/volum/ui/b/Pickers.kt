@@ -67,7 +67,7 @@ internal fun AmpPicker(s: VoLumState) {
                     AmpRow(amp, s.ampId == amp.id, arrayOf("amp.list.select")) { st.go(Action.SelectAmp(amp.id)) }
                 }
             }
-            Column(Modifier.width(320.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.width(390.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 SectionTitle("CUSTOM · built from your own .nam captures", Modifier.fillMaxWidth())
                 Pad({ st.go(Action.OpenBuilder(null)) }, Modifier.fillMaxWidth().height(48.dp), arrayOf("custom.amp.add"), tone = Tone.PRIMARY) { ink ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -82,8 +82,8 @@ internal fun AmpPicker(s: VoLumState) {
                         Box(Modifier.weight(1f).fillMaxHeight()) {
                             AmpRow(amp, s.ampId == amp.id, arrayOf("amp.list.select_custom", "amp.list.custom")) { st.go(Action.SelectAmp(amp.id)) }
                         }
-                        GlyphPad(VoLumGlyph.Edit, "EDIT", { st.go(Action.OpenBuilder(amp.id)) }, arrayOf("custom.amp.edit"), group = tools)
-                        GlyphPad(VoLumGlyph.Delete, "DELETE", { st.go(Action.RequestDeleteAmp(amp.id)) }, arrayOf("custom.amp.delete"), danger = true, group = tools)
+                        GlyphPad(VoLumGlyph.Edit, "EDIT", { st.go(Action.OpenBuilder(amp.id)) }, arrayOf("custom.amp.edit"), width = 58.dp, group = tools)
+                        GlyphPad(VoLumGlyph.Delete, "DELETE", { st.go(Action.RequestDeleteAmp(amp.id)) }, arrayOf("custom.amp.delete"), danger = true, width = 58.dp, group = tools)
                     }
                 }
             }

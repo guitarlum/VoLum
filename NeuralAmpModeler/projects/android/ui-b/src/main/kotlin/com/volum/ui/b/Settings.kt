@@ -86,7 +86,7 @@ private fun SignalTab(s: VoLumState) {
             Switch("CALIBRATE INPUT", sig.calibrate, { st.go(Action.SetCalibrate(!sig.calibrate)) }, Modifier.fillMaxWidth().height(48.dp), arrayOf("signal.calibration.on"))
             if (s.amp?.inputLevelDbu == null) {
                 Box(Modifier.fillMaxWidth().featureId("signal.calibration.unavailable")) {
-                    Status("${s.amp?.name ?: "This amp"} stores no input level: no effect", Modifier.fillMaxWidth().height(20.dp), VoLumColors.CreamDim)
+                    Status("${s.amp?.name ?: "This amp"} stores no input level: no effect", Modifier.fillMaxWidth().height(20.dp), VoLumColors.TextDim)
                 }
             }
         }
@@ -170,7 +170,7 @@ private fun MidiSlot(s: VoLumState, program: Int, names: FitGroup, modifier: Mod
         }
         if (sound != null) {
             CrossButton({ st.go(Action.ClearSound(program)) }, Modifier.align(Alignment.TopEnd).featureId("midi.slot.clear")
-                .semantics { contentDescription = "Clear program $program" }, VoLumColors.CreamDim)
+                .semantics { contentDescription = "Clear program $program" }, VoLumColors.TextDim)
         }
     }
 }
@@ -181,6 +181,8 @@ private fun moveActions(st: Stage, program: Int): Modifier = Modifier.semantics 
         CustomAccessibilityAction("Move up") { st.go(Action.MoveSound(program, -1)); true },
     )
 }
+
+private fun count(n: Int, noun: String) = "$n $noun${if (n == 1) "" else "s"}"
 
 @Composable
 private fun SystemTab(s: VoLumState) {
@@ -223,7 +225,7 @@ private fun SystemTab(s: VoLumState) {
             val lines = rememberFitGroup()
             FitText("Move custom amps, presets, IRs and pedals", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
             FitText("to another phone, or share part of it.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
-            FitText("${lib.amps.count { it.custom }} custom amps · ${lib.presets.count { !it.factory }} User presets · ${lib.irs.size} IRs",
+            FitText("${count(lib.amps.count { it.custom }, "custom amp")} · ${count(lib.presets.count { !it.factory }, "User preset")} · ${count(lib.irs.size, "IR")}",
                 VoLumType.label(11.sp, VoLumColors.Teal), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
             TextPad("EXPORT A PACK…", { st.go(Action.Open(Overlay.PackExport)) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("pack.export.open"), group = buttons)
             TextPad("IMPORT A PACK…", { st.go(Action.PickFiles(PickKind.PACK_OPEN)) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("pack.import.open"), group = buttons)
@@ -274,7 +276,7 @@ internal fun AudioDevices(s: VoLumState) {
                     val on = a.midiDeviceId == d.id && !a.midiLost
                     Box(Modifier.fillMaxWidth().height(52.dp).alpha(if (lost) 0.6f else 1f)) {
                         ListRow(d.name, on, { st.go(Action.SelectMidiDevice(d.id)) }, arrayOf("midi.device.select"),
-                            subtitle = "${if (d.ble) "Bluetooth MIDI" else "USB MIDI"} · ${if (lost) "disconnected" else if (on) "in use" else "available"}",
+                            subtitle = if (lost) (if (d.ble) "Bluetooth MIDI" else "USB MIDI") else "${if (d.ble) "Bluetooth MIDI" else "USB MIDI"} · ${if (on) "in use" else "available"}",
                             trailing = if (lost) { { FitText("DISCONNECTED", VoLumType.label(10.sp, VoLumColors.Danger), Modifier.width(92.dp).height(16.dp)) } } else null)
                     }
                 }

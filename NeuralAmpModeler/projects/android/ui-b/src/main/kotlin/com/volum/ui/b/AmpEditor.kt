@@ -50,7 +50,7 @@ internal fun AmpEditor(s: VoLumState) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (s.dual) LaneChoice(s, Modifier.width(176.dp).fillMaxHeight())
-            Pad({ st.go(Action.Open(if (support) Overlay.SupportAmpMenu else Overlay.AmpPicker)) }, Modifier.width(164.dp).fillMaxHeight(),
+            Pad({ st.go(Action.Open(if (support) Overlay.SupportAmpMenu else Overlay.AmpPicker)) }, Modifier.width(if (s.dual) 164.dp else 200.dp).fillMaxHeight(),
                 if (support) arrayOf("dual.support.choose") else emptyArray(), description = "Choose the ${if (support) "SUPPORT" else ""} amp") { _ ->
                 Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -134,7 +134,12 @@ private fun CabRow(s: VoLumState, support: Boolean, modifier: Modifier) {
             Modifier.then(if (irAllowed) Modifier.weight(1f) else Modifier).height(48.dp).featureId(if (irAllowed) irKey else "${irKey}_disabled"),
             irName = s.library.ir(irId)?.name, enabled = irAllowed, minWidth = 112.dp)
         if (!irAllowed && laneAmp != null) {
-            FitText("Custom IR needs a No Cab capture on this channel", hint(size = 11.sp), Modifier.weight(1f).height(32.dp), align = TextAlign.Start)
+            val lines = rememberFitGroup()
+            val noCab = if (laneAmp.custom) laneAmp.cabNames.firstOrNull() ?: "No Cab" else "No Cab"
+            Column(Modifier.weight(1f)) {
+                FitText("Custom IR needs a $noCab", hint(size = 12.sp), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
+                FitText("capture on this channel.", hint(size = 12.sp), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
+            }
         }
     }
 }
@@ -169,8 +174,8 @@ private fun AmpSwitches(s: VoLumState, support: Boolean, modifier: Modifier) {
             } else {
                 gateSwitch("NOISE GATE", Modifier.fillMaxWidth().height(48.dp))
                 Row(Modifier.fillMaxWidth().height(48.dp)) {
-                    eqSwitch(Modifier.weight(1f).fillMaxHeight())
-                    if (s.dual) phaseSwitch("Ø PHASE", Modifier.weight(1.2f).fillMaxHeight())
+                    eqSwitch(Modifier.weight(0.8f).fillMaxHeight())
+                    if (s.dual) phaseSwitch("PHASE", Modifier.weight(1.2f).fillMaxHeight())
                 }
             }
             if (s.outputSafety) {

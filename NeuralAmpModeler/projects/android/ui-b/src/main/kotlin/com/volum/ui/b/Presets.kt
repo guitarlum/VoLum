@@ -42,7 +42,8 @@ internal fun PresetMenu(s: VoLumState) {
     val presets = s.library.presetsFor(s.ampId)
     val factory = presets.filter { it.factory }
     val users = presets.filter { !it.factory }
-    Panel(s, ScreenId.PRESETS_MENU, "Presets", arrayOf("presets.menu.close"), subtitle = "on ${s.amp?.name ?: "this amp"}") {
+    Panel(s, ScreenId.PRESETS_MENU, "Presets", arrayOf("presets.menu.close"), subtitle = "on ${s.amp?.name ?: "this amp"}",
+        bodyHeight = maxOf(232, 100 + factory.size * 56, 26 + users.size * 56).dp) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(Modifier.width(236.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SectionTitle("PLAYING", Modifier.fillMaxWidth())
@@ -80,7 +81,7 @@ internal fun PresetManage(s: VoLumState) {
     val st = LocalStage.current
     val users = s.library.presetsFor(s.ampId).filter { !it.factory }
     Panel(s, ScreenId.PRESETS_MANAGE, "Manage presets", arrayOf("presets.manage.close"), subtitle = "User presets on ${s.amp?.name ?: "this amp"}",
-        bodyHeight = (users.size.coerceIn(2, 5) * 64 + 8).dp) {
+        bodyHeight = (users.size.coerceIn(1, 5) * 64 + 8).dp) {
         FitGrid(users, 1, 58.dp, Modifier.fillMaxSize(), empty = "No User presets on this amp yet. SAVE PRESET in the header keeps one.") { p ->
             val group = LocalGridGroup.current
             val tools = rememberFitGroup()

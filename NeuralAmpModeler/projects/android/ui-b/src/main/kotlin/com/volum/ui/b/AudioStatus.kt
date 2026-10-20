@@ -48,7 +48,9 @@ internal fun AudioStatus(s: VoLumState) {
             if (a.permission != Permission.GRANTED) {
                 Problem(Modifier.weight(1f).fillMaxHeight(), "audio.permission.denied", "Microphone access is off",
                     if (a.permission == Permission.DENIED) listOf("VoLum needs it to hear your guitar,", "through the interface or the phone mic.")
-                    else listOf("Android will not ask again.", "Turn on Microphone for VoLum in the app settings.")) {
+                    else listOf("Android will not ask again.", "Turn on Microphone for VoLum in the app settings."),
+                    if (a.permission == Permission.DENIED) listOf("Android asks once more when you tap below.", "Choose Allow, then play a note.")
+                    else listOf("App settings > Permissions > Microphone.", "Choose Allow, then come back here.")) {
                     if (a.permission == Permission.DENIED) {
                         TextPad("ALLOW MICROPHONE", { st.go(Action.RequestMicPermission) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("audio.permission.grant"), tone = Tone.PRIMARY, size = 14.sp, group = actions)
                     } else {
@@ -58,12 +60,14 @@ internal fun AudioStatus(s: VoLumState) {
             }
             when (a.status) {
                 InterfaceStatus.NO_INTERFACE -> Problem(Modifier.weight(1f).fillMaxHeight(), "audio.no_interface", "No USB interface",
-                    listOf("Connect a USB audio interface and rescan,", "or play through the phone mic for now.")) {
+                    listOf("Connect a USB audio interface and rescan,", "or play through the phone mic for now."),
+                    listOf("Is the interface powered on?", "Use a USB-C OTG cable or adapter.", "Allow USB access when Android asks.")) {
                     TextPad("RESCAN USB", { st.go(Action.RescanAudio) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("audio.no_interface.rescan"), tone = Tone.PRIMARY, size = 14.sp, group = actions)
                     TextPad("USE PHONE MIC", { st.go(Action.UseBuiltinInput) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("audio.no_interface.builtin"), size = 14.sp, group = actions)
                 }
                 InterfaceStatus.UNPLUGGED -> Problem(Modifier.weight(1f).fillMaxHeight(), "audio.unplugged", "Interface unplugged",
-                    listOf("The output is muted so nothing pops.", "Plug it back in and reconnect.")) {
+                    listOf("The output is muted so nothing pops.", "Plug it back in and reconnect."),
+                    listOf("Check the cable at both ends.", "Give the interface a moment to power up.")) {
                     TextPad("RECONNECT", { st.go(Action.ReconnectInterface) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("audio.unplugged.reconnect"), tone = Tone.PRIMARY, size = 14.sp, group = actions)
                     TextPad("USE PHONE MIC", { st.go(Action.UseBuiltinInput) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("audio.no_interface.builtin"), size = 14.sp, group = actions)
                 }
@@ -116,7 +120,7 @@ private fun PathCard(s: VoLumState, modifier: Modifier) {
 @Composable
 private fun ColumnScope.PathLine(caption: String, value: String, ink: Color, values: FitGroup) {
     Column(Modifier.fillMaxWidth()) {
-        FitText(caption, VoLumType.SectionHeader, Modifier.fillMaxWidth().height(15.dp), align = TextAlign.Start)
+        FitText(caption, VoLumType.label(9.sp, VoLumColors.TextDim), Modifier.fillMaxWidth().height(15.dp), align = TextAlign.Start)
         Row(Modifier.fillMaxWidth().height(22.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             VoLumLed(true, color = ink, animate = false)
             FitText(value, VoLumType.label(12.sp, if (ink == VoLumColors.TextDim) VoLumColors.Cream else ink), Modifier.weight(1f).height(20.dp), align = TextAlign.Start, group = values)
@@ -124,8 +128,9 @@ private fun ColumnScope.PathLine(caption: String, value: String, ink: Color, val
     }
 }
 
+/** A problem, what to [check] before the recovery tap, and the [actions] side by side at the foot. */
 @Composable
-private fun Problem(modifier: Modifier, id: String, title: String, body: List<String>, actions: @Composable RowScope.() -> Unit) {
+private fun Problem(modifier: Modifier, id: String, title: String, body: List<String>, check: List<String>, actions: @Composable RowScope.() -> Unit) {
     Column(
         modifier.panelDepth(4.dp).hairlineFrame(VoLumColors.Danger.withOpacity(0.55f), radius = 4.dp).cornerBrackets(VoLumColors.Danger.withOpacity(0.8f), 8.dp, 4.dp)
             .padding(16.dp),
@@ -138,6 +143,18 @@ private fun Problem(modifier: Modifier, id: String, title: String, body: List<St
             }
             val lines = rememberFitGroup()
             body.forEach { FitText(it, hint(VoLumColors.Cream, 13.sp), Modifier.fillMaxWidth().height(20.dp), align = TextAlign.Start, group = lines) }
+        }
+        if (check.isNotEmpty()) {
+            val lines = rememberFitGroup()
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                FitText("CHECK", VoLumType.label(9.sp, VoLumColors.TextDim), Modifier.fillMaxWidth().height(15.dp), align = TextAlign.Start)
+                check.forEach { line ->
+                    Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        VoLumLed(false, animate = false)
+                        FitText(line, VoLumType.label(12.sp, VoLumColors.Cream), Modifier.weight(1f).height(18.dp), align = TextAlign.Start, group = lines)
+                    }
+                }
+            }
         }
         Box(Modifier.weight(1f))
         Row(Modifier.fillMaxWidth().height(64.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { actions() }

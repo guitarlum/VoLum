@@ -269,7 +269,7 @@ private fun AmpBlock(s: VoLumState, modifier: Modifier, switches: FitGroup) {
                     FitText(amp?.name ?: "", VoLumType.label(12.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(17.dp))
                 }
                 FitText(if (s.dual) "+ ${support?.name ?: "no SUPPORT yet"}" else "CH ${s.rig.channel + 1} · ${s.rig.cab.label}",
-                    VoLumType.label(9.sp, if (s.dual) VoLumColors.Teal else VoLumColors.CreamDim), Modifier.fillMaxWidth().height(13.dp))
+                    VoLumType.label(10.sp, if (s.dual) VoLumColors.Teal else VoLumColors.TextDim), Modifier.fillMaxWidth().height(14.dp))
             }
         }
         Footswitch(s.dual, { st.go(Action.ToggleParam(Param.DUAL_ON)) }, Modifier.fillMaxWidth().height(64.dp), arrayOf("dual.toggle"),

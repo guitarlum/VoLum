@@ -121,7 +121,7 @@ private fun EditorFrame(
                 }
                 Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) { knobs(labels) }
             }
-            if (side != null) Box(Modifier.width(236.dp).fillMaxHeight()) { side() }
+            if (side != null) Box(Modifier.width(if (section == Section.POST) 280.dp else 236.dp).fillMaxHeight()) { side() }
         }
     }
 }
