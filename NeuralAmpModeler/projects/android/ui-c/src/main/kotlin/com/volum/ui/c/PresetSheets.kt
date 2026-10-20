@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -27,6 +28,7 @@ import com.volum.core.NamePurpose
 import com.volum.core.Overlay
 import com.volum.core.Preset
 import com.volum.core.ScreenId
+import com.volum.core.View
 import com.volum.design.components.VoLumConfirmDialog
 import com.volum.design.components.cornerBrackets
 import com.volum.design.components.hairlineFrame
@@ -58,7 +60,7 @@ internal fun PresetMenu(ui: Ui, modifier: Modifier) {
                         if (overwrite) Btn("Overwrite", listOf("presets.menu.overwrite"), { ui.d(Action.RequestOverwritePreset(current!!.id)) }, Modifier.weight(1f), primary = true)
                         else Box(Modifier.weight(1f))
                     }
-                    if (overwrite) VFitText("Overwrite stores what you hear in \u201C${current!!.name}\u201D", style = VoLumType.body(11.sp, VoLumColors.Cream), minSize = 8.sp)
+                    if (overwrite) VFitText("Overwrite stores what you hear in \u201C${current!!.name}\u201D", style = helper(11.sp), minSize = 8.sp)
                 }
                 SharedFitRows(presets.map { it.name to room }) {
                     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -89,7 +91,7 @@ private fun PresetList(ui: Ui, title: String, list: List<Preset>, id: String, mo
 internal fun PresetManage(ui: Ui, modifier: Modifier) {
     val s = ui.s
     val user = s.library.presets.filter { !it.factory }.sortedWith(compareBy({ it.ampId != s.ampId }, { it.name.lowercase() }))
-    PanelFrame(ui, "Manage presets", "presets.manage.close", { ui.back() }, modifier, crumb = "Presets") {
+    PanelFrame(ui, "Manage presets", "presets.manage.close", { ui.back() }, modifier) {
         if (user.isEmpty()) Note("No User presets yet. Factory presets cannot be changed.")
         SnapList(user.size, Modifier.fillMaxWidth()) {
             user.forEach { p ->
@@ -108,7 +110,12 @@ internal fun PresetManage(ui: Ui, modifier: Modifier) {
     }
 }
 
-/** Name box: high on the screen so the keyboard leaves it readable; the commit button names what it will do. */
+/**
+ * Name box: one row docked under the header, so the header's Save stays lit above
+ * it and the keyboard (about the lower 60 % of a landscape phone) leaves the name
+ * readable. In PLAY it stops short of the Sound rail, whose + This opens it too.
+ * The commit button names what it will do.
+ */
 @Composable
 internal fun NameDialog(ui: Ui, o: Overlay.NameDialog) {
     val s = ui.s
@@ -127,34 +134,38 @@ internal fun NameDialog(ui: Ui, o: Overlay.NameDialog) {
         else -> "Save" to "name.save"
     }
     val src = remember { MutableInteractionSource() }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Box(Modifier.fillMaxSize().background(VoLumColors.Scrim).clickable(src, null) { ui.back() })
+    val play = s.ui.view == View.PLAY
+    Box(Modifier.fillMaxSize().clickable(src, null) { ui.back() }) {
+        Box(Modifier.fillMaxSize().padding(top = Metrics.top).background(VoLumColors.Scrim))
         Column(
             Modifier
-                .padding(top = 14.dp)
-                .width(720.dp)
+                .padding(top = Metrics.top + 4.dp, start = 8.dp, end = if (play) Metrics.rail + 14.dp else 8.dp)
+                .widthIn(max = 898.dp)
+                .fillMaxWidth()
+                .align(if (play) Alignment.TopStart else Alignment.TopCenter)
                 .pointerInput(Unit) { detectTapGestures { } }
                 .screen(ScreenId.DIALOG_NAME)
                 .panelDepth(6.dp)
                 .hairlineFrame(VoLumColors.Amber, 1.4.dp, 6.dp)
                 .cornerBrackets(VoLumColors.Corner, 10.dp, 5.dp)
-                .padding(start = 22.dp, end = 22.dp, top = 12.dp, bottom = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(start = 18.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            VText(title, style = VoLumType.display(22.sp, VoLumColors.Gold))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Field(o.text, listOf("name.field"), { ui.d(Action.SetNameText(it)) }, Modifier.weight(1f), onDone = { ui.d(Action.CommitName) }, hint = "Name", autofocus = true)
+                VFitText(title, Modifier.widthIn(max = 150.dp), style = VoLumType.display(20.sp, VoLumColors.Gold), minSize = 13.sp)
+                NameField(o.text, listOf("name.field"), { ui.d(Action.SetNameText(it)) }, Modifier.weight(1f), onDone = { ui.d(Action.CommitName) }, hint = "Name")
                 Btn("Cancel", listOf("name.cancel"), { ui.back() })
                 Btn(commit, listOf(commitId), { ui.d(Action.CommitName) }, primary = true, enabled = o.text.isNotBlank())
             }
-            Note(
+            VFitText(
                 when {
                     updates -> "Same name as the loaded preset: Update overwrites it."
                     o.purpose == NamePurpose.SAVE_PRESET && current?.factory == true -> "Factory presets stay untouched; this saves a new User preset."
                     o.purpose == NamePurpose.ADD_SOUND -> "Saves a User preset and adds it as the next free Sound."
                     else -> "Names are kept short so they fit everywhere."
                 },
-                maxLines = 2,
+                style = helper(11.sp),
+                minSize = 8.sp,
             )
         }
     }

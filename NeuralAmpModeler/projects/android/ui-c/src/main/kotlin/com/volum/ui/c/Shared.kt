@@ -73,6 +73,12 @@ internal object Captures {
     fun fullName(index: Int, fallback: String) = if (index == 0) "Empty" else names[index] ?: fallback
 }
 
+/** The `:design` PITCH motif variant: the Transpose helix (0) or the Octaver chevrons (1), as the desktop card. */
+internal fun pitchArt(s: VoLumState): Int = if (s.param(Param.PITCH_MODE) == 0.0) 0 else 1
+
+/** The motif variant [param]'s pedal draws now; only PITCH has more than one. */
+internal fun motifVariant(s: VoLumState, param: Param): Int = if (param == Param.PITCH_ON) pitchArt(s) else 0
+
 internal fun artOf(amp: Amp?): ArtRef = amp?.let { ArtRef.of(it) } ?: ArtRef.factory(13)
 
 /** C's glass over the art, one name per role, all from the `:design` palette. */
@@ -245,12 +251,12 @@ internal val RowGap = 4.dp
 @Composable
 internal fun rowPitchPx(): Int = with(LocalDensity.current) { Metrics.target.roundToPx() + RowGap.roundToPx() }
 
-/** Rows of [columns] equal cells. */
+/** Rows of [columns] equal cells, [gutter] apart. */
 @Composable
-internal fun <T> Grid(items: List<T>, columns: Int, modifier: Modifier = Modifier, cell: @Composable (T, Modifier) -> Unit) {
+internal fun <T> Grid(items: List<T>, columns: Int, modifier: Modifier = Modifier, gutter: Dp = 6.dp, cell: @Composable (T, Modifier) -> Unit) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(RowGap)) {
         items.chunked(columns.coerceAtLeast(1)).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gutter)) {
                 row.forEach { cell(it, Modifier.weight(1f)) }
                 repeat(columns - row.size) { Box(Modifier.weight(1f)) }
             }

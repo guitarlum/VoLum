@@ -55,7 +55,7 @@ internal fun PackExport(ui: Ui, modifier: Modifier) {
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Caption("Also including", color = VoLumColors.Teal)
-                        Note(also.joinToString("  ·  "), Modifier.weight(1f), VoLumColors.Cream, maxLines = 2)
+                        Note(also.joinToString("  ·  "), Modifier.weight(1f), maxLines = 2)
                     }
                 }
                 when (e.scope) {
@@ -125,24 +125,23 @@ private fun outcome(r: PackRow, merge: MergeMode): Pair<String, Color> = when {
 internal fun PackImport(ui: Ui, modifier: Modifier) {
     val pi = ui.s.packImport
     PanelFrame(ui, "Import pack", "pack.import.close", { ui.back() }, modifier, crumb = pi?.name ?: "Pack", actions = {
-        if (pi != null && !pi.damaged && !pi.refused) Btn(if (pi.imported) "Imported" else "Import", listOf("pack.import.confirm"), { ui.d(Action.ConfirmImport) }, primary = true, enabled = !pi.imported)
+        when {
+            pi == null -> Unit
+            pi.damaged -> Btn("Choose another file", listOf("pack.import.open"), { ui.d(Action.PickFiles(PickKind.PACK_OPEN)) }, primary = true)
+            pi.refused -> {
+                Btn("Manage pedals", listOf("pre.capture.manage"), { ui.d(Action.Open(Overlay.PedalManage)) }, primary = true)
+                Btn("Choose another file", listOf("pack.import.open"), { ui.d(Action.PickFiles(PickKind.PACK_OPEN)) })
+            }
+            else -> Btn(if (pi.imported) "Imported" else "Import", listOf("pack.import.confirm"), { ui.d(Action.ConfirmImport) }, primary = true, enabled = !pi.imported)
+        }
     }) {
         when {
             pi == null -> Note("No Pack open.")
-            pi.damaged -> {
-                Alert("This Pack is damaged", "It could not be read and nothing was changed. Ask for a fresh copy, or open another file.", "pack.import.damaged")
-                Spaced(gap = 8) { Btn("Choose another file", listOf("pack.import.open"), { ui.d(Action.PickFiles(PickKind.PACK_OPEN)) }, primary = true) }
-            }
-            pi.refused -> {
-                Alert("Not enough custom pedal slots", "This Pack needs more custom pedal slots than you have left. Delete some custom pedals, then open it again.", "pack.import.refused")
-                Spaced(gap = 8) {
-                    Btn("Manage pedals", listOf("pre.capture.manage"), { ui.d(Action.Open(Overlay.PedalManage)) }, primary = true)
-                    Btn("Choose another file", listOf("pack.import.open"), { ui.d(Action.PickFiles(PickKind.PACK_OPEN)) })
-                }
-            }
+            pi.damaged -> Alert("This Pack is damaged", "It could not be read and nothing was changed. Ask for a fresh copy, or open another file.", "pack.import.damaged")
+            pi.refused -> Alert("Not enough custom pedal slots", "This Pack needs more custom pedal slots than you have left. Delete some custom pedals, then open it again.", "pack.import.refused")
             else -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SnapList(gridRows(pi.rows.size, 2), Modifier.weight(1f), inner = Modifier.ids("pack.import.rows")) {
-                    Grid(pi.rows, 2) { r, m ->
+                    Grid(pi.rows, 2, gutter = 24.dp) { r, m ->
                         TickRow(r.name, r.kind.uppercase(), r.ticked, listOf("pack.import.tick"), { ui.d(Action.ToggleImportRow(r.id)) }, m, enabled = importable(r, pi.merge), outcome = outcome(r, pi.merge))
                     }
                 }

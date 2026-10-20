@@ -32,6 +32,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -122,9 +123,16 @@ internal fun Caption(text: String, modifier: Modifier = Modifier, color: Color =
     VFitText(text.uppercase(), modifier, style = VoLumType.label(10.sp, color), minSize = 7.sp)
 }
 
+/**
+ * Helper and hint copy: the `:design` body face in its SemiBold cut, one step
+ * brighter than the body default. Josefin Regular at 11-12 sp anti-aliases to grey
+ * on raisin-black and is lost at arm's length.
+ */
+internal fun helper(size: TextUnit = 12.sp, color: Color = VoLumColors.TextMed) = VoLumType.body(size, color).copy(fontWeight = FontWeight.SemiBold)
+
 @Composable
-internal fun Note(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.TextDim, maxLines: Int = 3, size: TextUnit = 12.sp) {
-    VText(text, modifier, style = VoLumType.body(size, color), maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+internal fun Note(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.TextMed, maxLines: Int = 3, size: TextUnit = 12.sp) {
+    VText(text, modifier, style = helper(size, color), maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 }
 
 /** A single line that shrinks to fit instead of ellipsising (names, dense labels). */

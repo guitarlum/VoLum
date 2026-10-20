@@ -37,7 +37,11 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** The tuner sits on the art: the instrument steps back, leaving a big note, a cents arc in the VoLum inks, and CLOSE. */
+/**
+ * The tuner sits on the art: the instrument steps back, leaving a big note, a cents
+ * arc in the VoLum inks, and CLOSE. The dial sits right of the art's centre so its arc
+ * clears the sun's corona.
+ */
 @Composable
 internal fun Tuner(ui: Ui, modifier: Modifier) {
     val t by ui.tel.collectAsState()
@@ -60,9 +64,10 @@ internal fun Tuner(ui: Ui, modifier: Modifier) {
                     VoLumLed(true, color = VoLumColors.Danger)
                     VText("OUTPUT MUTED", style = VoLumType.label(12.sp, VoLumColors.Danger))
                 }
-                Note("Muted while the tuner is open, so you can tune on stage in silence.", maxLines = 3, color = VoLumColors.Cream)
+                Note("Muted while the tuner is open, so you can tune on stage in silence.", maxLines = 3)
                 Btn("Close tuner", listOf("tuner.close"), { ui.back() }, Modifier.fillMaxWidth().height(60.dp), primary = true)
             }
+            Spacer(Modifier.weight(0.35f))
             Box(
                 Modifier.weight(1f).fillMaxHeight().drawBehind {
                     val r = minOf(size.height * 0.62f, size.width * 0.42f)
@@ -124,6 +129,7 @@ internal fun Metronome(ui: Ui, modifier: Modifier) {
     }
 }
 
+/** One cue each: an amber fill is the beat sounding now, a heavy gold ring is the accented downbeat. */
 @Composable
 private fun Beats(ui: Ui, beats: Int) {
     val frames = rememberArtFrames()
@@ -134,11 +140,12 @@ private fun Beats(ui: Ui, beats: Int) {
                     frames.longValue
                     val t = ui.tel.value
                     val on = t.beat == i
-                    val k = if (on) (1f - t.beatPhase.toFloat()).coerceIn(0.35f, 1f) else 0f
-                    val accent = if (i == 0) VoLumColors.Amber else VoLumColors.Gold
-                    drawCircle(VoLumColors.WellDark, size.minDimension / 2)
-                    if (on) drawCircle(accent.withOpacity(k), size.minDimension / 2)
-                    drawCircle(if (i == 0) VoLumColors.GoldDim else VoLumColors.Frame, size.minDimension / 2, style = Stroke(1.dp.toPx()))
+                    val k = if (on) (1f - t.beatPhase.toFloat()).coerceIn(0.65f, 1f) else 0f
+                    val r = size.minDimension / 2
+                    drawCircle(VoLumColors.WellDark, r)
+                    if (on) drawCircle(VoLumColors.Amber.withOpacity(k), r - 3.dp.toPx())
+                    if (i == 0) drawCircle(VoLumColors.Gold, r - 1.25.dp.toPx(), style = Stroke(2.5.dp.toPx()))
+                    else drawCircle(VoLumColors.Frame, r - 0.5.dp.toPx(), style = Stroke(1.dp.toPx()))
                 },
             )
         }

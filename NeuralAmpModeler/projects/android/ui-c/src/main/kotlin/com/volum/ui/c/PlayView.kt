@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.LongState
 import androidx.compose.runtime.getValue
@@ -41,16 +43,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.core.Action
 import com.volum.core.InterfaceStatus
+import com.volum.core.NamePurpose
 import com.volum.core.Overlay
 import com.volum.core.Param
 import com.volum.core.Permission
@@ -222,7 +227,7 @@ private fun SoundRail(ui: Ui, modifier: Modifier) {
                 Caption("Sounds")
                 VText("${programs.size}/128", style = VoLumType.label(9.sp, VoLumColors.CreamDim))
             }
-            Btn("+ This", listOf("play.add_this", "play.add_this.unnamed", "play.add_this.full"), { ui.d(Action.AddThisSound) })
+            Btn("+ This", listOf("play.add_this", "play.add_this.unnamed", "play.add_this.full"), { ui.d(Action.AddThisSound) }, primary = (ui.s.ui.top as? Overlay.NameDialog)?.purpose == NamePurpose.ADD_SOUND)
             Btn("+ Pick", listOf("play.add_sound"), { ui.d(Action.Open(Overlay.SoundPicker(lib.firstFreeProgram() ?: 0, replace = false))) })
         }
         SnapList(
@@ -323,35 +328,51 @@ private val postStomps = listOf(
     Stomp(Param.TREM_ON, "Trem", "play.stomp.trem", Motif.TREM),
 )
 
-/** IN meter, PRE stomps, the amp, POST stomps, OUT meter: the desktop PLAY floor, each stomp a full-card bypass with EDIT under it. */
+/**
+ * IN meter, PRE stomps, the amp, POST stomps, OUT meter: the desktop PLAY floor, each
+ * stomp a full-card bypass with EDIT under it. Every stomp name shares the size at
+ * which the longest one fits its card.
+ */
 @Composable
 private fun Chain(ui: Ui, frames: LongState) {
-    Row(
-        Modifier.fillMaxWidth().height(PlayChainH).padding(start = 6.dp, end = 6.dp, bottom = 6.dp, top = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Column(Modifier.fillMaxHeight().width(26.dp).ids("play.meters"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            InMeter(ui, frames, Modifier.weight(1f))
-            Lamp(ui.tel, VoLumColors.Teal) { it.pickAgeMs in 0..90 }
-        }
-        preStomps.forEach { StompCard(ui, it, frames, Modifier.weight(1f)) }
-        AmpTile(ui, Modifier.width(112.dp).fillMaxHeight())
-        postStomps.forEach { StompCard(ui, it, frames, Modifier.weight(1f)) }
-        Column(Modifier.fillMaxHeight().width(26.dp).ids("play.meters"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            OutMeter(ui, frames, Modifier.weight(1f))
-            Lamp(ui.tel, VoLumColors.Danger) { it.outDb > -1.0 }
+    BoxWithConstraints(Modifier.fillMaxWidth().height(PlayChainH).padding(start = 6.dp, end = 6.dp, bottom = 6.dp, top = 2.dp)) {
+        val stomp = (maxWidth - ChainMeterW * 2 - ChainAmpW - ChainGap * 10) / 8
+        val k = sharedFit((preStomps + postStomps).map { stompTitle(ui, it) to (stomp - 34.dp) }, VoLumType.label(11.5.sp))
+        val d = LocalDensity.current
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(ChainGap)) {
+            Column(Modifier.fillMaxHeight().width(ChainMeterW).ids("play.meters"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                InMeter(ui, frames, Modifier.weight(1f))
+                Lamp(ui.tel, VoLumColors.Teal) { it.pickAgeMs in 0..90 }
+            }
+            CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * k)) {
+                preStomps.forEach { StompCard(ui, it, frames, Modifier.weight(1f)) }
+            }
+            AmpTile(ui, Modifier.width(ChainAmpW).fillMaxHeight())
+            CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * k)) {
+                postStomps.forEach { StompCard(ui, it, frames, Modifier.weight(1f)) }
+            }
+            Column(Modifier.fillMaxHeight().width(ChainMeterW).ids("play.meters"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                OutMeter(ui, frames, Modifier.weight(1f))
+                Lamp(ui.tel, VoLumColors.Danger) { it.outDb > -1.0 }
+            }
         }
     }
+}
+
+private val ChainMeterW = 26.dp
+private val ChainAmpW = 112.dp
+private val ChainGap = 5.dp
+
+private fun stompTitle(ui: Ui, st: Stomp): String = when (st.param) {
+    Param.NAM1_ON -> captureName(ui, Param.NAM1_CAPTURE)
+    Param.NAM2_ON -> captureName(ui, Param.NAM2_CAPTURE)
+    else -> st.label
 }
 
 @Composable
 private fun StompCard(ui: Ui, st: Stomp, frames: LongState, modifier: Modifier) {
     val on = ui.s.on(st.param)
-    val title = when (st.param) {
-        Param.NAM1_ON -> captureName(ui, Param.NAM1_CAPTURE)
-        Param.NAM2_ON -> captureName(ui, Param.NAM2_CAPTURE)
-        else -> st.label
-    }
+    val title = stompTitle(ui, st)
     Column(modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         PedalCard(
             st.motif,
@@ -360,6 +381,7 @@ private fun StompCard(ui: Ui, st: Stomp, frames: LongState, modifier: Modifier) 
             onClick = { ui.d(Action.ToggleParam(st.param)) },
             onToggle = { ui.d(Action.ToggleParam(st.param)) },
             modifier = Modifier.fillMaxWidth().weight(1f).signalGlow(ui.tel, frames, on).semantics { stateDescription = if (on) "On" else "Bypassed" }.ids(st.id),
+            variant = motifVariant(ui.s, st.param),
             ledModifier = Modifier.ids(st.id),
         )
         Tappable({ ui.d(Action.EditStomp(st.param)) }, Modifier.fillMaxWidth().height(Metrics.target).semantics { contentDescription = "Edit ${st.label}" }, listOf("play.stomp.edit")) { pressed ->

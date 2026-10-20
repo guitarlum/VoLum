@@ -143,7 +143,7 @@ internal fun IrMenu(ui: Ui, modifier: Modifier) {
         Btn("Manage IRs", listOf("ir.menu.manage"), { ui.d(Action.Open(Overlay.IrManage)) })
     }) {
         if (s.library.irs.isEmpty()) Note("No IRs yet. Manage IRs imports WAV files from your phone.")
-        else if (!cabIsIr) Note("The cab row plays ${cabLabel(if (support) s.rig.support.cab else s.rig.cab, if (support) s.library.amp(s.rig.support.ampId) else s.amp)} now. Pick an IR to play it instead.", color = VoLumColors.Cream, maxLines = 1, size = 11.sp)
+        else if (!cabIsIr) Note("The cab row plays ${cabLabel(if (support) s.rig.support.cab else s.rig.cab, if (support) s.library.amp(s.rig.support.ampId) else s.amp)} now. Pick an IR to play it instead.", maxLines = 1, size = 11.sp)
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val cell = rowTitleRoom(cellWidth(maxWidth, 3), art = false)
             SharedFitRows(s.library.irs.map { it.name to cell }) {

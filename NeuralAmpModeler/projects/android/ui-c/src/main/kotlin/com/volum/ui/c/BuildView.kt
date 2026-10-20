@@ -3,6 +3,9 @@ package com.volum.ui.c
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -41,6 +44,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -186,7 +190,7 @@ private fun EmptyLane(ui: Ui) {
     Box(Modifier.fillMaxSize().panelDepth().hairlineFrame(VoLumColors.TealDim.withOpacity(0.6f)).cornerBrackets(VoLumColors.Teal, 12.dp, 6.dp)) {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             VText("SUPPORT LANE IS EMPTY", style = VoLumType.label(10.sp, VoLumColors.Teal))
-            if (s.supportFocused) VText("Choose its amp in the sheet below", style = VoLumType.body(11.sp, VoLumColors.Cream))
+            if (s.supportFocused) VText("Choose its amp in the sheet below", style = helper(11.sp))
         }
         if (!s.supportFocused) {
             val open = s.ui.overlays.contains(Overlay.SupportAmpMenu)
@@ -277,6 +281,7 @@ private fun SectionBlock(ui: Ui, section: Section, title: String, pads: List<Pad
     val selected = s.ui.section == section
     val locked = (if (section == Section.PRE) s.locks.pre else s.locks.post) != null
     val engaged = pads.any { s.on(it.param) }
+    val lit by animateFloatAsState(if (selected) 1f else 0f, tween(SectionSwitch.TravelMs, easing = FastOutSlowInEasing), label = "lit")
     Tappable(
         { ui.d(Action.SetSection(section)) },
         modifier.signalGlow(ui.tel, frames, engaged, selected),
@@ -286,7 +291,13 @@ private fun SectionBlock(ui: Ui, section: Section, title: String, pads: List<Pad
         Column(
             Modifier.volumSectionFrame(locked, expanded = selected)
                 .then(if (section == Section.PRE) Modifier.preCrosshatch(fill = false) else Modifier)
-                .then(if (selected || pressed) Modifier.hairlineFrame(if (selected) VoLumColors.Amber else VoLumColors.GoldDim, 1.4.dp) else Modifier)
+                .then(
+                    when {
+                        pressed && !selected -> Modifier.hairlineFrame(VoLumColors.GoldDim, 1.4.dp)
+                        lit > 0.01f -> Modifier.hairlineFrame(VoLumColors.Amber.withOpacity(lit), 1.4.dp)
+                        else -> Modifier
+                    },
+                )
                 .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 6.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -301,7 +312,7 @@ private fun SectionBlock(ui: Ui, section: Section, title: String, pads: List<Pad
                     val focused = selected && p.focused(s)
                     Tappable({ ui.d(p.focus) }, Modifier.size(Metrics.target).semantics { contentDescription = p.label + if (on) " on" else " bypassed" }, listOf(p.id), role = Role.Tab) { padPressed ->
                         Box(Modifier.fillMaxSize().volumSelection(focused, padPressed, VoLumSelectionStyle.ListTeal, radius = 3.dp, inset = 0.dp), contentAlignment = Alignment.Center) {
-                            MotifArt(p.motif, on, Modifier.size(34.dp))
+                            MotifArt(p.motif, on, Modifier.size(34.dp), motifVariant(s, p.param))
                         }
                     }
                 }
@@ -317,10 +328,11 @@ private fun AmpBlock(ui: Ui, frames: LongState, modifier: Modifier) {
     val selected = s.ui.section == Section.AMP
     val support = s.supportFocused
     val name = if (support) s.library.amp(s.rig.support.ampId)?.name ?: "Support empty" else s.amp?.name ?: "No amp"
+    val lit by animateFloatAsState(if (selected) 1f else 0f, tween(SectionSwitch.TravelMs, easing = FastOutSlowInEasing), label = "lit")
     Tappable({ ui.d(Action.SetSection(Section.AMP)) }, modifier.widthIn(min = 220.dp, max = 330.dp).signalGlow(ui.tel, frames, true, selected), listOf("nav.section.amp"), role = Role.Tab) { pressed ->
         Column(
             Modifier.fillMaxWidth().background(Glass.Float, RoundedCornerShape(4.dp)).ampCircuitBoard(fill = false)
-                .hairlineFrame(if (selected) VoLumColors.Amber else if (pressed) VoLumColors.GoldDim else VoLumColors.Frame, if (selected) 1.4.dp else 1.dp, 4.dp)
+                .hairlineFrame(if (pressed && !selected) VoLumColors.GoldDim else lerp(VoLumColors.Frame, VoLumColors.Amber, lit), if (lit > 0.5f) 1.4.dp else 1.dp, 4.dp)
                 .cornerBrackets(VoLumColors.HeroCorner, 8.dp, 4.dp)
                 .padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -369,6 +381,19 @@ private val Param.continuous: Boolean
     get() = options.isEmpty() && !name.endsWith("_ON") && !name.endsWith("_SYNC") && !name.contains("CAPTURE") && !name.contains("PING") && !name.contains("POLARITY") && !name.contains("DIVISION")
 
 /**
+ * A section switch: the old sheet slides toward the block it belonged to and fades
+ * while the new one, surface and all, slides in from the side of its block; the notch
+ * and the blocks' amber frame travel across in the same time. Long enough to read as
+ * a move from one block to the next, not a swap.
+ */
+internal object SectionSwitch {
+    const val OutMs = 420
+    const val InDelayMs = 180
+    const val InMs = 570
+    const val TravelMs = InDelayMs + InMs
+}
+
+/**
  * The section sheet: capped under half the screen, surfaced like its block (PRE
  * crosshatch, AMP circuit board), with an amber notch pointing up at the block it
  * belongs to. While a picker is open it folds to the row the picker came from.
@@ -376,7 +401,11 @@ private val Param.continuous: Boolean
 @Composable
 private fun Sheet(ui: Ui, modifier: Modifier) {
     val s = ui.s
-    val notch by animateFloatAsState(when (s.ui.section) { Section.PRE -> 0.16f; Section.AMP -> 0.5f; Section.POST -> 0.84f }, tween(260), label = "notch")
+    val notch by animateFloatAsState(
+        when (s.ui.section) { Section.PRE -> 0.16f; Section.AMP -> 0.5f; Section.POST -> 0.84f },
+        tween(SectionSwitch.TravelMs, easing = FastOutSlowInEasing),
+        label = "notch",
+    )
     Box(
         modifier
             .drawBehind {
@@ -387,13 +416,6 @@ private fun Sheet(ui: Ui, modifier: Modifier) {
             }
             .clipToBounds()
             .panelDepth()
-            .then(
-                when (s.ui.section) {
-                    Section.PRE -> Modifier.preCrosshatch(fill = false)
-                    Section.AMP -> Modifier.ampCircuitBoard(fill = false)
-                    Section.POST -> Modifier
-                },
-            )
             .drawBehind { drawLine(VoLumColors.GoldDim.withOpacity(0.7f), Offset(0f, 0.5f), Offset(size.width, 0.5f), 1.dp.toPx()) }
             .cornerBrackets(VoLumColors.Corner, 10.dp, 5.dp),
     ) {
@@ -401,12 +423,27 @@ private fun Sheet(ui: Ui, modifier: Modifier) {
             s.ui.section,
             transitionSpec = {
                 val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                (slideInHorizontally(tween(260)) { it / 5 * dir } + fadeIn(tween(240))) togetherWith (slideOutHorizontally(tween(200)) { -it / 5 * dir } + fadeOut(tween(160)))
+                val enter = slideInHorizontally(tween(SectionSwitch.InMs, SectionSwitch.InDelayMs, LinearOutSlowInEasing)) { it / 3 * dir } +
+                    fadeIn(tween(SectionSwitch.InMs, SectionSwitch.InDelayMs, LinearOutSlowInEasing))
+                val exit = slideOutHorizontally(tween(SectionSwitch.OutMs, easing = LinearEasing)) { -it / 3 * dir } +
+                    fadeOut(tween(SectionSwitch.OutMs, easing = LinearEasing))
+                enter togetherWith exit
             },
             label = "section",
             modifier = Modifier.fillMaxWidth().height(Metrics.sheet),
         ) { section ->
-            Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                Modifier.fillMaxSize()
+                    .then(
+                        when (section) {
+                            Section.PRE -> Modifier.preCrosshatch(fill = false)
+                            Section.AMP -> Modifier.ampCircuitBoard(fill = false)
+                            Section.POST -> Modifier
+                        },
+                    )
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 when (section) {
                     Section.PRE -> PreSheet(ui)
                     Section.AMP -> AmpSheet(ui)

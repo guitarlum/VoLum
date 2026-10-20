@@ -66,9 +66,10 @@ internal fun TopBar(ui: Ui) {
             }
         }
         InputIndicator(ui)
+        val saving = (s.ui.top as? Overlay.NameDialog)?.purpose == NamePurpose.SAVE_PRESET && Overlay.PresetMenu !in s.ui.overlays
         Btn("Save", listOf(if (build) "presets.save.open" else "play.save"), {
             ui.d(Action.Open(Overlay.NameDialog(NamePurpose.SAVE_PRESET, Reducer.nameSuggestion(s))))
-        })
+        }, primary = saving)
         val update = s.update.available
         if (update != null) {
             Tappable({ ui.d(Action.Open(Overlay.Settings(SettingsTab.SYSTEM))) }, Modifier.height(Metrics.target).widthIn(min = 72.dp), listOf("system.update.badge")) { pressed ->

@@ -179,8 +179,12 @@ private fun Body(ui: Ui, o: Overlay, m: Modifier) {
     }
 }
 
-/** A parent folded to its head: its title and, lit, the control that opened what is on top of it. */
-private class Head(val title: String, val label: String, val id: String)
+/**
+ * A parent folded to its head: its title and, lit, the control that opened what is
+ * on top of it. [restore] puts the parent back when the panel was opened without it
+ * underneath (a deep link), so the lit control always lands where it says.
+ */
+private class Head(val title: String, val label: String, val id: String, val restore: Overlay? = null)
 
 private fun pickerHead(s: VoLumState, root: Overlay): Head? = when (root) {
     is Overlay.AmpPicker -> Head("Choose amp", if (s.builder.editAmpId != null) "Editing " + (s.library.amp(s.builder.editAmpId)?.name ?: "amp") else "+ Add your amp", "custom.amp.add")
@@ -192,15 +196,16 @@ private fun pickerHead(s: VoLumState, root: Overlay): Head? = when (root) {
 /** A top-bar panel opened from another one: the parent folds to a head above it instead of vanishing. */
 private fun parentHead(s: VoLumState, top: Overlay): Head? {
     val stack = s.ui.overlays.filter { it !is Overlay.NameDialog }
+    if (top != stack.lastOrNull()) return null
+    if (top is Overlay.PresetManage) return Head("Presets", "Manage", "presets.menu.manage", Overlay.PresetMenu.takeIf { it !in stack })
     val parent = stack.getOrNull(stack.size - 2) ?: return null
-    if (parent.fromSheet || top != stack.last()) return null
+    if (parent.fromSheet) return null
     return when {
         parent is Overlay.Settings && top is Overlay.AudioDevices -> Head("Settings  ·  Signal", "Audio & MIDI devices", "signal.audio_devices")
         parent is Overlay.AudioStatus && top is Overlay.AudioDevices -> Head("Audio input", "Audio & MIDI devices", "signal.audio_devices")
         parent is Overlay.Settings && top is Overlay.PackExport -> Head("Settings  ·  System", "Export pack", "pack.export.open")
         parent is Overlay.Settings && top is Overlay.PackImport -> Head("Settings  ·  System", "Import pack", "pack.import.open")
         parent is Overlay.Settings && top is Overlay.SoundPicker -> Head("Settings  ·  MIDI", "Program %03d".format(top.program), "midi.slot.assign")
-        parent is Overlay.PresetMenu && top is Overlay.PresetManage -> Head("Presets", "Manage", "presets.menu.manage")
         parent is Overlay.PackImport && top is Overlay.PedalManage -> Head("Import pack", "Manage pedals", "pre.capture.manage")
         else -> null
     }
@@ -223,7 +228,10 @@ private fun FoldedHead(ui: Ui, head: Head, top: Overlay, modifier: Modifier = Mo
         VFitText(head.title, Modifier.weight(1f, fill = false), style = VoLumType.display(20.sp, VoLumColors.Gold), minSize = 13.sp)
         Fill()
         VText("OPEN", style = VoLumType.label(9.sp, VoLumColors.Amber))
-        Btn(head.label, listOf(head.id), { ui.d(Action.CloseOverlay(top)) }, primary = true)
+        Btn(head.label, listOf(head.id), {
+            ui.d(Action.CloseOverlay(top))
+            head.restore?.let { ui.d(Action.Open(it)) }
+        }, primary = true)
     }
 }
 

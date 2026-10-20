@@ -20,8 +20,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,7 @@ import com.volum.core.PreBlock
 import com.volum.core.Reducer
 import com.volum.core.Section
 import com.volum.design.art.Motif
+import com.volum.design.components.LockFace
 import com.volum.design.components.PedalCard
 import com.volum.design.components.VoLumBlockHeader
 import com.volum.design.components.VoLumGlyph
@@ -54,7 +57,7 @@ private val ChipW = 140.dp
 private val PostSlotW = 150.dp
 
 /** One pedal of a sheet: the `:design` card focuses it, its LED is its power. */
-private class Card(val motif: Motif, val title: String, val power: Param, val focusId: String, val powerId: String, val focused: Boolean, val focus: Action)
+private class Card(val motif: Motif, val title: String, val power: Param, val focusId: String, val powerId: String, val focused: Boolean, val focus: Action, val variant: Int = 0)
 
 /**
  * The sheet's first row: four pedal cards of one width, then [fixed] dp of other
@@ -79,6 +82,7 @@ private fun OriginCards(ui: Ui, cards: List<Card>, fixed: Dp, others: Int, trail
                         onToggle = { ui.d(Action.ToggleParam(c.power)) },
                         modifier = Modifier.width(card).fillMaxHeight().ids(c.focusId),
                         focused = c.focused,
+                        variant = c.variant,
                         ledModifier = Modifier.semantics { contentDescription = c.title + " power" }.ids(c.powerId),
                     )
                 }
@@ -89,36 +93,41 @@ private fun OriginCards(ui: Ui, cards: List<Card>, fixed: Dp, others: Int, trail
 }
 
 private val CardGap = 6.dp
-private val HeaderW = 96.dp
-private val StoreW = 96.dp
-
-private fun headerWidth(ui: Ui, section: Section): Dp {
-    val locked = (if (section == Section.PRE) ui.s.locks.pre else ui.s.locks.post) != null
-    return HeaderW + if (locked && Reducer.lockDiffers(ui.s, section)) StoreW else 0.dp
-}
+/** The block header's slot, the same in every lock state so the pedal cards keep their width. */
+private val HeaderW = 120.dp
+private val LockW = Metrics.target
 
 /**
- * The block header of the sheet: title and padlock, then, while the locked block
- * differs from what this amp stores, a labelled STORE TO AMP in full teal.
+ * The block header of the sheet: title and padlock or, while the locked block
+ * differs from what this amp stores, the padlock and a labelled STORE TO AMP in
+ * full teal in the title's place.
  */
 @Composable
 private fun LockHeader(ui: Ui, section: Section) {
     val locked = (if (section == Section.PRE) ui.s.locks.pre else ui.s.locks.post) != null
     val pre = section == Section.PRE
     val title = if (pre) "PRE" else "POST"
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        VoLumBlockHeader(title, locked, { ui.d(Action.SetLock(section, !locked)) }, Modifier.width(HeaderW), lockModifier = Modifier.ids(if (pre) "pre.lock" else "post.lock"))
-        if (locked && Reducer.lockDiffers(ui.s, section)) {
+    val store = locked && Reducer.lockDiffers(ui.s, section)
+    Row(Modifier.width(HeaderW), verticalAlignment = Alignment.CenterVertically) {
+        if (!store) {
+            VoLumBlockHeader(title, locked, { ui.d(Action.SetLock(section, !locked)) }, Modifier.width(HeaderW), lockModifier = Modifier.ids(if (pre) "pre.lock" else "post.lock"))
+        } else {
+            Tappable(
+                { ui.d(Action.SetLock(section, false)) },
+                Modifier.size(LockW).semantics { contentDescription = "Unlock $title"; stateDescription = "Locked" },
+                listOf(if (pre) "pre.lock" else "post.lock"),
+                role = Role.Switch,
+            ) { pressed -> LockFace(true, pressed, Modifier.fillMaxSize()) }
             Tappable(
                 { ui.d(Action.StoreLock(section)) },
-                Modifier.size(StoreW, Metrics.target).semantics { contentDescription = "Store $title to this amp" },
+                Modifier.size(HeaderW - LockW, Metrics.target).semantics { contentDescription = "Store $title to this amp" },
                 listOf(if (pre) "pre.store" else "post.store"),
             ) { pressed ->
                 Row(
-                    Modifier.fillMaxSize().padding(start = 6.dp, top = 8.dp, bottom = 8.dp).volumSelection(false, pressed, VoLumSelectionStyle.Brass, radius = 3.dp, inset = 0.dp)
-                        .hairlineFrame(if (pressed) VoLumColors.Teal else VoLumColors.TealDim, radius = 3.dp).padding(horizontal = 6.dp),
+                    Modifier.fillMaxSize().padding(top = 8.dp, bottom = 8.dp).volumSelection(false, pressed, VoLumSelectionStyle.Brass, radius = 3.dp, inset = 0.dp)
+                        .hairlineFrame(if (pressed) VoLumColors.Teal else VoLumColors.TealDim, radius = 3.dp).padding(horizontal = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                 ) {
                     VoLumIcon(VoLumGlyph.Store, color = VoLumColors.Teal)
                     Column(Modifier.weight(1f, fill = false)) {
@@ -167,14 +176,19 @@ private fun Mode(ui: Ui, title: String, p: Param, ids: List<String?>, width: Dp 
     }
 }
 
+/** A row of knobs whose labels share the size at which the longest one fits the knob's width. */
 @Composable
 private fun RowScope.Knobs(ui: Ui, params: List<Param>, ids: (Param) -> List<String>, label: (Param) -> String = { it.label }, width: Dp = 84.dp) {
-    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-        params.forEach { p ->
-            Knob(
-                label(p), ui.s.param(p), p.min, p.max, ids(p), { Fmt.of(p, it) }, { Fmt.parse(p, it) },
-                { ui.d(Action.SetParam(p, it)) }, { ui.d(Action.ResetParam(p)) }, width = width,
-            )
+    val k = sharedFit(params.map { label(it) to width }, VoLumType.KnobLabel)
+    val d = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * k)) {
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            params.forEach { p ->
+                Knob(
+                    label(p), ui.s.param(p), p.min, p.max, ids(p), { Fmt.of(p, it) }, { Fmt.parse(p, it) },
+                    { ui.d(Action.SetParam(p, it)) }, { ui.d(Action.ResetParam(p)) }, width = width,
+                )
+            }
         }
     }
 }
@@ -218,12 +232,12 @@ internal fun PreSheet(ui: Ui) {
     OriginCards(
         ui,
         listOf(
-            Card(Motif.PITCH, if (transpose) "%+d st".format(s.param(Param.PITCH_SEMI).toInt()) else "Octaver", Param.PITCH_ON, "pre.card.pitch", "pre.pitch.on", focus == PreBlock.PITCH, Action.FocusPre(PreBlock.PITCH)),
+            Card(Motif.PITCH, if (transpose) "%+d st".format(s.param(Param.PITCH_SEMI).toInt()) else "Octaver", Param.PITCH_ON, "pre.card.pitch", "pre.pitch.on", focus == PreBlock.PITCH, Action.FocusPre(PreBlock.PITCH), pitchArt(s)),
             Card(Motif.COMP, "Compressor", Param.COMP_ON, "pre.card.comp", "pre.comp.on", focus == PreBlock.COMP, Action.FocusPre(PreBlock.COMP)),
             Card(Motif.NAM1, captureName(ui, Param.NAM1_CAPTURE), Param.NAM1_ON, "pre.card.nam1", "pre.nam1.on", focus == PreBlock.NAM1, Action.FocusPre(PreBlock.NAM1)),
             Card(Motif.NAM2, captureName(ui, Param.NAM2_CAPTURE), Param.NAM2_ON, "pre.card.nam2", "pre.nam2.on", focus == PreBlock.NAM2, Action.FocusPre(PreBlock.NAM2)),
         ),
-        fixed = ChipW * 2 + headerWidth(ui, Section.PRE),
+        fixed = ChipW * 2 + HeaderW,
         others = 3,
     ) {
         CaptureChip(ui, 1)
@@ -271,7 +285,7 @@ internal fun PostSheet(ui: Ui) {
             Card(Motif.REVERB, title("Reverb", Param.REVERB_MODE), Param.REVERB_ON, "post.card.reverb", "post.reverb.on", focus == PostBlock.REVERB, Action.FocusPost(PostBlock.REVERB)),
             Card(Motif.TREM, title("Trem", Param.TREM_MODE), Param.TREM_ON, "post.card.trem", "post.trem.on", focus == PostBlock.TREM, Action.FocusPost(PostBlock.TREM)),
         ),
-        fixed = PostSlotW + headerWidth(ui, Section.POST),
+        fixed = PostSlotW + HeaderW,
         others = 2,
     ) {
         Row(Modifier.width(PostSlotW), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {

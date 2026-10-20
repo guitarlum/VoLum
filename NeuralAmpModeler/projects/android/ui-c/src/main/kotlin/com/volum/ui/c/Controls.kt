@@ -4,6 +4,8 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -41,8 +43,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -53,6 +57,7 @@ import com.volum.design.components.VoLumTextField
 import com.volum.design.components.volumFieldFrame
 import com.volum.design.components.volumKnobFace
 import com.volum.design.theme.VFitText
+import com.volum.design.theme.VText
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
 import kotlin.math.abs
@@ -224,6 +229,37 @@ private fun ExactEntry(value: Double, format: (Double) -> String, parse: (String
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone(parse(text)) }),
         modifier = Modifier.width(76.dp).height(24.dp).volumFieldFrame(true).focusRequester(focus),
+    )
+}
+
+/**
+ * The name dialog's entry: the `:design` field frame and type, focused on open with
+ * the caret after the name, so typing extends it and the name stays readable.
+ * `VoLumTextField` takes a String and starts its caret at 0 (see Requests).
+ */
+@Composable
+internal fun NameField(value: String, ids: List<String>, onChange: (String) -> Unit, modifier: Modifier = Modifier, onDone: () -> Unit = {}, hint: String? = null) {
+    var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    val focus = remember { FocusRequester() }
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    BasicTextField(
+        field,
+        { next -> val changed = next.text != field.text; field = next; if (changed) onChange(next.text) },
+        modifier.heightIn(min = Metrics.target).focusRequester(focus).ids(ids),
+        textStyle = VoLumType.label(13.sp, VoLumColors.TextBright),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        singleLine = true,
+        interactionSource = source,
+        cursorBrush = SolidColor(VoLumColors.TextBright),
+        decorationBox = { inner ->
+            Box(Modifier.fillMaxWidth().heightIn(min = Metrics.target).volumFieldFrame(focused).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
+                if (field.text.isEmpty() && hint != null) VText(hint, style = VoLumType.body(13.sp, VoLumColors.TextDim))
+                inner()
+            }
+        },
     )
 }
 

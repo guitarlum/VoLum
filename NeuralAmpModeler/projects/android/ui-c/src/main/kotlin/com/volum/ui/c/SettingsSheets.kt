@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.core.Action
@@ -43,16 +44,16 @@ import com.volum.design.theme.VoLumType
 import com.volum.design.theme.withOpacity
 
 @Composable
-private fun Columns(left: @Composable ColumnScope.() -> Unit, right: @Composable ColumnScope.() -> Unit) {
+private fun Columns(left: @Composable ColumnScope.() -> Unit, right: @Composable ColumnScope.() -> Unit, gap: Dp = 8.dp) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), content = left)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), content = right)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap), content = left)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap), content = right)
     }
 }
 
 @Composable
-private fun Labeled(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun Labeled(title: String, modifier: Modifier = Modifier, gap: Dp = 4.dp, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
         Caption(title)
         content()
     }
@@ -220,15 +221,19 @@ private fun SystemTab(ui: Ui) {
     val u = s.update
     Columns(
         left = {
-            Labeled("About") {
-                VText("VoLum 0.1-shootout  ·  Android", Modifier.ids("system.about.version"), style = VoLumType.label(14.sp, VoLumColors.TextBright))
-                VFitText(
-                    "Model: " + (s.amp?.let { "${it.name}  ·  CH ${s.rig.channel + 1}  ·  ${if (it.custom) "custom capture" else "A2 capture"}" } ?: "none"),
-                    Modifier.ids("system.model_info"), style = VoLumType.body(12.sp, VoLumColors.TextDim), minSize = 9.sp,
-                )
-                Btn("User guide", listOf("system.about.manual"), { ui.d(Action.OpenLink("https://github.com/guitarlum/VoLum/blob/main/docs/user-guide.en.md")) })
+            Labeled("About", gap = 2.dp) {
+                Spaced(gap = 10) {
+                    Column(Modifier.weight(1f)) {
+                        VFitText("VoLum 0.1-shootout  ·  Android", Modifier.ids("system.about.version"), style = VoLumType.label(14.sp, VoLumColors.TextBright), minSize = 10.sp)
+                        VFitText(
+                            "Model: " + (s.amp?.let { "${it.name}  ·  CH ${s.rig.channel + 1}  ·  ${if (it.custom) "custom capture" else "A2 capture"}" } ?: "none"),
+                            Modifier.ids("system.model_info"), style = helper(12.sp), minSize = 9.sp,
+                        )
+                    }
+                    Btn("User guide", listOf("system.about.manual"), { ui.d(Action.OpenLink("https://github.com/guitarlum/VoLum/blob/main/docs/user-guide.en.md")) })
+                }
             }
-            Labeled("Updates") {
+            Labeled("Updates", gap = 2.dp) {
                 Spaced(gap = 8) {
                     Toggle("Check automatically", u.auto, listOf("system.update.auto"), { ui.d(Action.SetAutoUpdate(!u.auto)) })
                     Btn("Check now", listOf("system.update.check_now"), { ui.d(Action.CheckUpdatesNow) })
@@ -238,20 +243,21 @@ private fun SystemTab(ui: Ui) {
             }
         },
         right = {
-            Labeled("Packs") {
+            Labeled("Packs", gap = 2.dp) {
                 Spaced(gap = 8) {
                     Btn("Export pack", listOf("pack.export.open"), { ui.d(Action.Open(Overlay.PackExport)) })
                     Btn("Import pack", listOf("pack.import.open"), { ui.d(Action.PickFiles(PickKind.PACK_OPEN)) })
                 }
-                Note("A Pack carries presets, custom amps, IRs and pedals in one file, to back up or share.", maxLines = 2)
+                Note("A Pack carries presets, custom amps, IRs and pedals in one file, to back up or share.", maxLines = 2, size = 11.sp)
             }
-            Labeled("Support") {
+            Labeled("Support", gap = 2.dp) {
                 Spaced(gap = 8) {
                     Btn("Share log", listOf("system.share_log"), { ui.d(Action.ShareLog) })
                     Note("Sends volum.log to whoever helps you.", maxLines = 1)
                 }
             }
         },
+        gap = 6.dp,
     )
 }
 
@@ -280,7 +286,7 @@ internal fun AudioDevices(ui: Ui, modifier: Modifier) {
                 Spaced(gap = 4) { a.sampleRates.forEach { r -> Brass(if (r % 1000 == 0) "${r / 1000}" else "%.1f".format(r / 1000.0), a.sampleRate == r, listOf("audio.sample_rate"), { ui.d(Action.SetSampleRate(r)) }, minWidth = 48.dp) } }
                 Caption("Buffer")
                 Spaced(gap = 4) { a.buffers.forEach { b -> Brass("$b", a.bufferFrames == b, listOf("audio.buffer"), { ui.d(Action.SetBuffer(b)) }, minWidth = 48.dp) } }
-                Note("About %.1f ms. Smaller answers faster; raise it if you hear crackles.".format(a.bufferFrames * 1000.0 / a.sampleRate), maxLines = 3, size = 11.sp, color = VoLumColors.Cream)
+                Note("About %.1f ms. Smaller answers faster; raise it if you hear crackles.".format(a.bufferFrames * 1000.0 / a.sampleRate), maxLines = 3, size = 11.sp)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Caption("MIDI controllers")
@@ -349,7 +355,7 @@ internal fun Alert(title: String, body: String, id: String?, ok: Boolean = false
         if (!ok) WarnGlyph(accent) else Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { com.volum.design.components.VoLumLed(true, color = accent) }
         Column(Modifier.weight(1f)) {
             VFitText(title, style = VoLumType.label(15.sp, VoLumColors.TextBright), minSize = 10.sp)
-            Note(body, color = VoLumColors.Cream, maxLines = 3)
+            Note(body, maxLines = 3)
         }
     }
 }
