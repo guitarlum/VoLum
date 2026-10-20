@@ -1,128 +1,129 @@
 package com.volum.ui.c
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.volum.core.Action
 import com.volum.core.Amp
 import com.volum.core.BannerKind
 import com.volum.core.Cab
 import com.volum.core.Param
-import com.volum.core.Telemetry
 import com.volum.core.VoLumState
-import kotlinx.coroutines.flow.StateFlow
-
-/** A surface whose rim breathes with the signal while [on]; telemetry is read in the draw phase only. */
-@Composable
-internal fun Glowing(tel: StateFlow<Telemetry>, on: Boolean, modifier: Modifier = Modifier, selected: Boolean = false, shape: Shape = Corner, content: @Composable BoxScope.() -> Unit) {
-    val t by tel.collectAsState()
-    Box(
-        modifier
-            .clip(shape)
-            .background(if (selected) Look.glassHi else Look.glass)
-            .drawBehind {
-                val e = if (on) t.energy.toFloat() else 0f
-                val r = CornerRadius(10.dp.toPx())
-                val w = 1.dp.toPx()
-                drawRoundRect(if (selected) Look.pick else Look.line, cornerRadius = r, style = Stroke(w))
-                if (e > 0f) drawRoundRect(Look.glow.copy(alpha = 0.15f + 0.6f * e), cornerRadius = r, style = Stroke(w + 2.dp.toPx() * e))
-            },
-        content = content,
-    )
-}
+import com.volum.design.art.ArtRef
+import com.volum.design.components.CrossButton
+import com.volum.design.components.VoLumBanner
+import com.volum.design.components.VoLumBannerKind
+import com.volum.design.components.VoLumListRow
+import com.volum.design.components.VoLumSelectionStyle
+import com.volum.design.components.cornerBrackets
+import com.volum.design.components.hairlineFrame
+import com.volum.design.components.panelDepth
+import com.volum.design.components.volumScrollbar
+import com.volum.design.theme.VText
+import com.volum.design.theme.VoLumColors
+import com.volum.design.theme.VoLumType
 
 internal fun captureName(ui: Ui, p: Param): String {
     val idx = ui.s.param(p).toInt()
-    return ui.s.library.pedals.firstOrNull { it.index == idx }?.name ?: "EMPTY"
+    val pedal = ui.s.library.pedals.firstOrNull { it.index == idx } ?: return "Empty"
+    return if (pedal.custom) pedal.name else Captures.fullName(pedal.index, pedal.name)
 }
 
-internal fun cabLabel(s: VoLumState, cab: Cab, amp: Amp?): String = when {
-    cab == Cab.CUSTOM_IR -> "CUSTOM IR"
+internal fun cabLabel(cab: Cab, amp: Amp?): String = when {
+    cab == Cab.CUSTOM_IR -> "Custom IR"
     amp?.custom == true -> amp.cabNames.getOrNull(cab.ordinal) ?: cab.label
-    else -> cab.label.uppercase()
+    else -> cab.label
 }
+
+/** The bundled PRE captures as the desktop capture menu groups and names them. */
+internal object Captures {
+    val groups = listOf("Klon" to listOf(6, 3), "TS / Boost" to listOf(7, 8, 4), "Distortion" to listOf(5), "Fuzz" to listOf(9, 1, 2))
+    private val names = mapOf(1 to "PettyJohn Nuke", 2 to "JHS Bender", 3 to "PettyJohn Myth", 4 to "PettyJohn Mash", 5 to "Revival Drive", 6 to "Klon", 7 to "Halcyon TS", 8 to "Halcyon TS +Gain", 9 to "Fatbee")
+    fun fullName(index: Int, fallback: String) = if (index == 0) "Empty" else names[index] ?: fallback
+}
+
+internal fun artOf(amp: Amp?): ArtRef = amp?.let { ArtRef.of(it) } ?: ArtRef.factory(13)
 
 /**
- * Every panel rises to the same line under the top bar and the block row. Its header
- * echoes the control it was opened from ([trigger]), so that control is never hidden.
+ * The chrome of every panel: panel depth, a gold hairline and gold corner brackets
+ * set inside the padding, so they never touch text. The title is Poiret One as the
+ * desktop's overlay titles are. A banner, when there is one, gets its own row
+ * under the header instead of landing on top of the content.
  */
 @Composable
 internal fun PanelFrame(
+    ui: Ui,
     title: String,
-    trigger: String?,
     closeId: String?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    crumb: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
     lead: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
     Column(
         modifier
-            .clip(shape)
-            .background(Look.panel)
-            .border(1.dp, Look.lineHi, shape)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .panelDepth(6.dp)
+            .hairlineFrame(VoLumColors.Frame, radius = 6.dp)
+            .cornerBrackets(VoLumColors.Corner, 10.dp, 5.dp)
+            .padding(start = 18.dp, end = 12.dp, top = 6.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(Modifier.fillMaxWidth().height(Metrics.target), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (trigger != null) {
-                Box(Modifier.widthIn(max = 240.dp).clip(Pill).background(Look.pick).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    BasicText(trigger, style = labelStyle(10f, Look.pickInk), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                BasicText("›", style = labelStyle(14f))
-            }
+        Row(Modifier.fillMaxWidth().height(Metrics.target), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (crumb != null) VText(crumb.uppercase() + "  >", style = VoLumType.label(10.sp, VoLumColors.TealDim))
             lead()
-            BasicText(title.uppercase(), style = labelStyle(13f, Look.text), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (title.isNotEmpty()) VText(title, Modifier.weight(1f, fill = false), style = VoLumType.display(22.sp, VoLumColors.Gold))
+            Fill()
             actions()
-            if (closeId != null) Btn("CLOSE", listOfNotNull(closeId.takeIf { it.isNotEmpty() }), onClose)
+            if (closeId != null) CrossButton(onClose, Modifier.ids(closeId.ifEmpty { "nav.back" }), VoLumColors.TextDim)
         }
-        Column(Modifier.fillMaxWidth().weight(1f), content = content)
+        PanelBanner(ui)
+        content()
     }
 }
 
-/** A 48 dp list row in the list-selection style. */
+/** Errors and notices in a reserved row, never over a control. */
+@Composable
+internal fun PanelBanner(ui: Ui, modifier: Modifier = Modifier) {
+    val b = ui.s.ui.banner
+    val error = b?.kind == BannerKind.ERROR
+    VoLumBanner(
+        b?.message,
+        if (error || b == null) VoLumBannerKind.ERROR else VoLumBannerKind.INFO,
+        { ui.d(Action.DismissBanner) },
+        modifier.fillMaxWidth().then(if (error) Modifier.ids("banner.error") else Modifier),
+        dismissModifier = Modifier.ids("banner.dismiss"),
+    )
+}
+
+/** The floating banner of the bare views: it sits on the art, where no control is. */
+@Composable
+internal fun FloatingBanner(ui: Ui, modifier: Modifier) {
+    Box(modifier.widthIn(max = 780.dp)) { PanelBanner(ui) }
+}
+
+/** A 48 dp list row in the ListTeal style (or AmberPicker for preset rows). */
 @Composable
 internal fun ListRow(
     label: String,
@@ -132,41 +133,35 @@ internal fun ListRow(
     sub: String? = null,
     selected: Boolean = false,
     enabled: Boolean = true,
+    art: ArtRef? = null,
+    style: VoLumSelectionStyle = VoLumSelectionStyle.ListTeal,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    val src = remember { MutableInteractionSource() }
-    val scale = pressScale(src)
-    Box(
-        modifier
-            .height(Metrics.target)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(Corner)
-            .background(if (selected) Look.listInk.copy(alpha = 0.22f) else Look.raised)
-            .border(1.dp, if (selected) Look.listInk else Look.line, Corner)
-            .clickable(src, null, enabled = enabled, role = Role.Button, onClick = onClick)
-            .ids(ids)
-            .padding(horizontal = 10.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Column {
-            BasicText(label, style = bodyStyle(13f, if (enabled) Look.text else Look.faint, cap = 1.2f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (sub != null) BasicText(sub, style = labelStyle(8f, Look.dim, bold = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
+    VoLumListRow(label, selected, onClick, modifier.ids(ids), art = art, subtitle = sub, style = style, enabled = enabled, trailing = trailing)
 }
 
 /**
- * A scrolling list of 48 dp rows whose viewport is cut to a whole number of rows, so
- * at rest no row is sliced by the edge into something too small to hit.
+ * A scrolling list of 48 dp rows sized to its [rows], but never taller than the room
+ * it is given, cut to whole rows so no row is sliced into a sub-48 dp target. The
+ * gold `:design` scrollbar shows when it scrolls.
  */
 @Composable
-internal fun SnapList(modifier: Modifier, state: ScrollState = rememberScrollState(), inner: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun SnapList(rows: Int, modifier: Modifier, state: ScrollState = rememberScrollState(), inner: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     BoxWithConstraints(modifier) {
         val density = LocalDensity.current
-        val gap = with(density) { RowGap.roundToPx() }
         val pitch = rowPitchPx()
-        val rows = ((constraints.maxHeight + gap) / pitch).coerceAtLeast(1)
-        val height = with(density) { (rows * pitch - gap + 2).toDp() }
-        Column(Modifier.fillMaxWidth().height(height).verticalScroll(state).then(inner), verticalArrangement = Arrangement.spacedBy(RowGap), content = content)
+        val gap = with(density) { RowGap.roundToPx() }
+        val fit = if (constraints.hasBoundedHeight) ((constraints.maxHeight + gap) / pitch).coerceAtLeast(1) else rows
+        if (rows <= fit) {
+            Column(Modifier.fillMaxWidth().then(inner), verticalArrangement = Arrangement.spacedBy(RowGap), content = content)
+        } else {
+            val height = with(density) { (fit * pitch - gap + 2).toDp() }
+            Column(
+                Modifier.fillMaxWidth().height(height).volumScrollbar(state).verticalScroll(state).then(inner).padding(end = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(RowGap),
+                content = content,
+            )
+        }
     }
 }
 
@@ -179,9 +174,9 @@ internal fun rowPitchPx(): Int = with(LocalDensity.current) { Metrics.target.rou
 /** Rows of [columns] equal cells. */
 @Composable
 internal fun <T> Grid(items: List<T>, columns: Int, modifier: Modifier = Modifier, cell: @Composable (T, Modifier) -> Unit) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(RowGap)) {
         items.chunked(columns.coerceAtLeast(1)).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { cell(it, Modifier.weight(1f)) }
                 repeat(columns - row.size) { Box(Modifier.weight(1f)) }
             }
@@ -189,36 +184,38 @@ internal fun <T> Grid(items: List<T>, columns: Int, modifier: Modifier = Modifie
     }
 }
 
-/** Load / import errors and info notices, under the top bar, until dismissed. */
+internal fun gridRows(n: Int, columns: Int) = (n + columns - 1) / columns
+
+/** A row-high group label with a gold rule, so a list keeps its row rhythm. */
 @Composable
-internal fun BannerStrip(ui: Ui) {
-    val banner = ui.s.ui.banner
-    Box(Modifier.fillMaxSize().padding(top = Metrics.top + 6.dp), contentAlignment = Alignment.TopCenter) {
-        AnimatedVisibility(banner != null, enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut()) {
-            val b = banner ?: return@AnimatedVisibility
-            val error = b.kind == BannerKind.ERROR
-            Row(
-                Modifier
-                    .clip(Corner)
-                    .background(if (error) Look.danger else Look.glassHi)
-                    .border(1.dp, if (error) Look.danger else Look.lineHi, Corner)
-                    .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
-                    .then(if (error) Modifier.ids("banner.error") else Modifier),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                BasicText(if (error) "!" else "✓", style = labelStyle(14f, Look.text))
-                BasicText(b.message, style = bodyStyle(13f, Look.text, cap = 1.15f), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                Btn("DISMISS", listOf("banner.dismiss"), { ui.d(Action.DismissBanner) })
-            }
-        }
+internal fun GroupHeader(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth().height(Metrics.target).drawBehind {
+            drawLine(VoLumColors.Divider, Offset(0f, size.height - 1f), Offset(size.width, size.height - 1f), 1f)
+        }.padding(horizontal = 6.dp),
+        contentAlignment = Alignment.BottomStart,
+    ) {
+        VText(text.uppercase(), Modifier.padding(bottom = 8.dp), style = VoLumType.label(10.sp, VoLumColors.GoldDim))
     }
 }
 
-/** A tappable plain container used by blocks that navigate. */
+/** The state-of-the-rig sentence the views share: channel and cab. */
+internal fun chCab(s: VoLumState): String = "CH ${s.rig.channel + 1}  ·  " + if (s.rig.cab == Cab.CUSTOM_IR) (s.library.ir(s.rig.irId)?.name ?: "Custom IR") else cabLabel(s.rig.cab, s.amp)
+
 @Composable
-internal fun Tappable(onClick: () -> Unit, modifier: Modifier = Modifier, ids: List<String> = emptyList(), role: Role = Role.Button, content: @Composable BoxScope.() -> Unit) {
-    val src = remember { MutableInteractionSource() }
-    val scale = pressScale(src)
-    Box(modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clickable(src, null, role = role, onClick = onClick).ids(ids), content = content)
+internal fun Scroll(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val st = rememberScrollState()
+    Column(modifier.volumScrollbar(st).verticalScroll(st), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
 }
+
+@Composable
+internal fun Spaced(modifier: Modifier = Modifier, gap: Int = 8, content: @Composable RowScope.() -> Unit) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(gap.dp), content = content)
+}
+
+@Composable
+internal fun Stack(modifier: Modifier = Modifier, gap: Int = 6, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp), content = content)
+}
+
+internal fun Modifier.capped(max: androidx.compose.ui.unit.Dp) = heightIn(max = max)

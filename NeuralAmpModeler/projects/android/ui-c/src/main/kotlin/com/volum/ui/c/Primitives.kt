@@ -1,52 +1,55 @@
 package com.volum.ui.c
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LongState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.volum.core.Action
 import com.volum.core.Telemetry
 import com.volum.core.VoLumState
+import com.volum.design.components.VoLumBrassButton
+import com.volum.design.components.VoLumButton
+import com.volum.design.components.VoLumGlyph
+import com.volum.design.components.VoLumLed
+import com.volum.design.components.VoLumMeter
+import com.volum.design.components.VoLumSelectionStyle
+import com.volum.design.components.VoLumSubModePill
+import com.volum.design.components.VoLumToggle
+import com.volum.design.components.volumGlyph
+import com.volum.design.components.volumSelection
+import com.volum.design.theme.VFitText
+import com.volum.design.theme.VText
+import com.volum.design.theme.VoLumColors
+import com.volum.design.theme.VoLumType
+import com.volum.design.theme.withOpacity
 import com.volum.harness.featureId
 import kotlinx.coroutines.flow.StateFlow
 
@@ -56,261 +59,57 @@ internal class Ui(val s: VoLumState, val d: (Action) -> Unit, val tel: StateFlow
 internal fun Modifier.ids(ids: List<String>): Modifier = if (ids.isEmpty()) this else featureId(*ids.toTypedArray())
 internal fun Modifier.ids(vararg ids: String): Modifier = if (ids.isEmpty()) this else featureId(*ids)
 
-internal val Corner = RoundedCornerShape(10.dp)
-internal val Pill = RoundedCornerShape(24.dp)
-
-/** Press feedback shared by every tappable surface: a slight sink and a lift of the fill. */
-@Composable
-internal fun pressScale(source: MutableInteractionSource): Float {
-    val pressed by source.collectIsPressedAsState()
-    val s by animateFloatAsState(if (pressed) 0.95f else 1f, tween(if (pressed) 60 else 160), label = "press")
-    return s
+/** Layout of the instrument on a 914 x 411 dp landscape phone. */
+internal object Metrics {
+    val top = 48.dp
+    /** The BUILD sheet: one control row plus the knob row, a little under half the screen. */
+    val sheet = 188.dp
+    /** A sheet folded down to the row a picker was opened from. */
+    val tray = 72.dp
+    /** A picker folded down to its header while a deeper panel is open from it. */
+    val pickerHead = 60.dp
+    val rail = 270.dp
+    val target = 48.dp
 }
 
-/** A button: [label] plus an optional second line. */
+/** A modal or panel action: the `:design` button, one line, never ellipsised by width it was not given. */
 @Composable
-internal fun Btn(
-    label: String,
-    ids: List<String>,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    sub: String? = null,
-    enabled: Boolean = true,
-    strong: Boolean = false,
-    danger: Boolean = false,
-    minWidth: Dp = 48.dp,
-    height: Dp = Metrics.target,
-    pad: Dp = 12.dp,
-    cap: Float = 1.15f,
-) {
-    val src = remember { MutableInteractionSource() }
-    val scale = pressScale(src)
-    val pressed by src.collectIsPressedAsState()
-    val fill = when {
-        !enabled -> Look.ground
-        strong -> if (pressed) Look.glow else Look.pick
-        pressed -> Look.lineHi
-        else -> Look.raised
-    }
-    val ink = when {
-        !enabled -> Look.faint
-        strong -> Look.pickInk
-        danger -> Look.danger
-        else -> Look.text
-    }
-    Box(
-        modifier
-            .heightIn(min = height)
-            .widthIn(min = minWidth)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(Corner)
-            .background(fill)
-            .border(1.dp, if (enabled) Look.line else Look.raised, Corner)
-            .clickable(src, null, enabled = enabled, role = Role.Button, onClick = onClick)
-            .ids(ids)
-            .padding(horizontal = pad),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            BasicText(label, style = labelStyle(12f, ink, cap = cap), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (sub != null) BasicText(sub, style = labelStyle(9f, if (strong) Look.pickInk else Look.dim, bold = false, cap = cap), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
+internal fun Btn(label: String, ids: List<String>, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, primary: Boolean = false, danger: Boolean = false) {
+    VoLumButton(label, onClick, modifier.ids(ids), primary = primary || danger, destructive = danger, enabled = enabled)
 }
 
-/** A 48 dp button drawn as an icon, for chrome whose desktop counterpart is an icon too. */
+/** One option of a Brass group (cab row, time signatures, segmented settings). */
 @Composable
-internal fun IconBtn(description: String, ids: List<String>, onClick: () -> Unit, active: Boolean = false, draw: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit) {
-    val src = remember { MutableInteractionSource() }
-    val scale = pressScale(src)
-    Box(
-        Modifier
-            .size(Metrics.target)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(Corner)
-            .background(if (active) Look.pick else Look.raised)
-            .border(1.dp, Look.line, Corner)
-            .clickable(src, null, role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = description }
-            .ids(ids)
-            .drawBehind { draw(if (active) Look.pickInk else Look.text) },
-    )
+internal fun Brass(label: String, selected: Boolean, ids: List<String>, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, minWidth: Dp = 52.dp) {
+    VoLumBrassButton(label, selected, onClick, modifier.ids(ids), enabled = enabled, minWidth = minWidth)
 }
 
-internal fun androidx.compose.ui.graphics.drawscope.DrawScope.gear(ink: Color) {
-    val c = center
-    val r = 7.dp.toPx()
-    val w = 2.dp.toPx()
-    drawCircle(ink, r, c, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
-    drawCircle(ink, 2.5.dp.toPx(), c)
-    for (i in 0 until 8) {
-        val a = Math.toRadians(i * 45.0)
-        val dx = kotlin.math.cos(a).toFloat()
-        val dy = kotlin.math.sin(a).toFloat()
-        drawLine(ink, c + Offset(dx * r, dy * r), c + Offset(dx * (r + 3.5.dp.toPx()), dy * (r + 3.5.dp.toPx())), 3.dp.toPx())
-    }
-}
-
-/** One option of a mutually exclusive group (`:design` VoLumSelection, AmberPicker style). */
+/** A mode picker in the AmberPicker style, one feature id per option. */
 @Composable
-internal fun Choice(
-    label: String,
-    selected: Boolean,
-    ids: List<String>,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    sub: String? = null,
-    minWidth: Dp = 48.dp,
-) {
-    val src = remember { MutableInteractionSource() }
-    val scale = pressScale(src)
-    val fill = when {
-        selected -> Look.pick
-        !enabled -> Look.ground
-        else -> Look.raised
-    }
-    val ink = when {
-        selected -> Look.pickInk
-        !enabled -> Look.faint
-        else -> Look.text
-    }
-    Box(
-        modifier
-            .height(Metrics.target)
-            .widthIn(min = minWidth)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(Corner)
-            .background(fill)
-            .border(1.dp, if (selected) Look.pick else Look.line, Corner)
-            .selectable(selected, src, null, enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .ids(ids)
-            .padding(horizontal = 10.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            BasicText(label, style = labelStyle(12f, ink), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (sub != null) BasicText(sub, style = labelStyle(9f, if (selected) Look.pickInk else Look.dim, bold = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-/** An on/off switch with an LED, labelled. */
-@Composable
-internal fun Switch(
-    label: String,
-    on: Boolean,
-    ids: List<String>,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    val src = remember { MutableInteractionSource() }
-    val scale = pressScale(src)
-    Row(
-        modifier
-            .height(Metrics.target)
-            .widthIn(min = 48.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(Corner)
-            .background(if (on) Look.glassHi else Look.raised)
-            .border(1.dp, if (on) Look.lineHi else Look.line, Corner)
-            .toggleable(on, src, null, enabled = enabled, role = Role.Switch) { onToggle() }
-            .ids(ids)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Led(on)
-        BasicText(label, style = labelStyle(12f, if (enabled) Look.text else Look.faint), maxLines = 1)
-    }
-}
-
-/** A 48 dp power button: the LED is the state. */
-@Composable
-internal fun Power(on: Boolean, ids: List<String>, onToggle: () -> Unit, description: String, modifier: Modifier = Modifier) {
-    val src = remember { MutableInteractionSource() }
-    val scale = pressScale(src)
-    Box(
-        modifier
-            .size(Metrics.target)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(CircleShape)
-            .background(if (on) Look.glassHi else Look.raised)
-            .border(1.dp, if (on) Look.glow else Look.line, CircleShape)
-            .toggleable(on, src, null, role = Role.Switch) { onToggle() }
-            .semantics { contentDescription = description }
-            .ids(ids),
-        contentAlignment = Alignment.Center,
-    ) { Led(on, 12.dp) }
+internal fun Pills(options: List<String>, selected: Int, idFor: (Int) -> String?, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    VoLumSubModePill(options, selected, onSelect, modifier, itemModifier = { i -> idFor(i)?.let { Modifier.ids(it) } ?: Modifier })
 }
 
 @Composable
-internal fun Led(on: Boolean, size: Dp = 9.dp, color: Color = Look.glow) {
-    Box(
-        Modifier.size(size).drawBehind {
-            if (on) drawCircle(color.copy(alpha = 0.35f), radius = this.size.minDimension)
-            drawCircle(if (on) color else Look.faint, radius = this.size.minDimension / 2)
-        },
-    )
+internal fun Toggle(label: String, on: Boolean, ids: List<String>, onToggle: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    VoLumToggle(on, { onToggle() }, modifier.ids(ids), label = label, enabled = enabled)
 }
 
-/** − value + for small integer settings; both buttons carry [ids]. */
+/** Small caps heading over or beside a group. */
 @Composable
-internal fun Stepper(value: String, ids: List<String>, onStep: (Int) -> Unit, modifier: Modifier = Modifier, label: String? = null, valueWidth: Dp = 64.dp) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (label != null) BasicText(label, style = labelStyle(10f), modifier = Modifier.padding(end = 4.dp))
-        Btn("−", ids, { onStep(-1) })
-        BasicText(value, style = techStyle(14f).copy(textAlign = TextAlign.Center), modifier = Modifier.width(valueWidth), maxLines = 1)
-        Btn("+", ids, { onStep(1) })
-    }
-}
-
-/** Small caps heading over a group. */
-@Composable
-internal fun Caption(text: String, modifier: Modifier = Modifier, color: Color = Look.dim) {
-    BasicText(text.uppercase(), style = labelStyle(10f, color), modifier = modifier, maxLines = 1, overflow = TextOverflow.Ellipsis)
+internal fun Caption(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.GoldDim) {
+    VFitText(text.uppercase(), modifier, style = VoLumType.label(10.sp, color), minSize = 7.sp)
 }
 
 @Composable
-internal fun Note(text: String, modifier: Modifier = Modifier, color: Color = Look.dim, maxLines: Int = 2) {
-    BasicText(text, style = bodyStyle(12f, color, cap = 1.15f), modifier = modifier, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+internal fun Note(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.TextDim, maxLines: Int = 3, size: TextUnit = 12.sp) {
+    VText(text, modifier, style = VoLumType.body(size, color), maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 }
 
-/** A captioned group of controls in one row; the caption sits to the left so a group costs one row of height. */
+/** A single line that shrinks to fit instead of ellipsising (names, dense labels). */
 @Composable
-internal fun Group(title: String, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Caption(title, Modifier.padding(end = 2.dp))
-        content()
-    }
-}
-
-/** A captioned block of controls stacked under its caption, for settings panels. */
-@Composable
-internal fun Labeled(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Caption(title)
-        content()
-    }
-}
-
-/** The glass card the floating blocks and dialogs share. */
-@Composable
-internal fun Glass(modifier: Modifier = Modifier, shape: Shape = Corner, border: Color = Look.line, fill: Color = Look.glass, content: @Composable BoxScope.() -> Unit) {
-    Box(modifier.clip(shape).background(fill).border(1.dp, border, shape), content = content)
-}
-
-/** Gold-bracket stand-in: four corner ticks around a surface (`:design` gold corner brackets). */
-internal fun Modifier.brackets(color: Color = Look.metal, len: Dp = 10.dp): Modifier = drawBehind {
-    val l = len.toPx()
-    val w = 1.5.dp.toPx()
-    val r = size.width
-    val b = size.height
-    drawLine(color, Offset(0f, 0f), Offset(l, 0f), w); drawLine(color, Offset(0f, 0f), Offset(0f, l), w)
-    drawLine(color, Offset(r, 0f), Offset(r - l, 0f), w); drawLine(color, Offset(r, 0f), Offset(r, l), w)
-    drawLine(color, Offset(0f, b), Offset(l, b), w); drawLine(color, Offset(0f, b), Offset(0f, b - l), w)
-    drawLine(color, Offset(r, b), Offset(r - l, b), w); drawLine(color, Offset(r, b), Offset(r, b - l), w)
+internal fun Fit(text: String, modifier: Modifier = Modifier, size: TextUnit = 13.sp, color: Color = VoLumColors.TextBright, min: TextUnit = (size.value * 0.7f).sp) {
+    VFitText(text, modifier, style = VoLumType.label(size, color), minSize = min)
 }
 
 @Composable
@@ -319,4 +118,62 @@ internal fun Gap(w: Dp = 0.dp, h: Dp = 0.dp) = Spacer(Modifier.width(w).height(h
 @Composable
 internal fun RowScope.Fill() = Spacer(Modifier.weight(1f))
 
-internal fun Modifier.fullWidth() = fillMaxWidth()
+/** A 48 dp target drawn as a `:design` glyph with the brass press wash. */
+@Composable
+internal fun GlyphBtn(glyph: VoLumGlyph, description: String, ids: List<String>, onClick: () -> Unit, modifier: Modifier = Modifier, color: Color = VoLumColors.TextBright, glyphSize: Dp = 20.dp) {
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    Box(
+        modifier
+            .size(Metrics.target)
+            .clickable(src, null, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description }
+            .ids(ids)
+            .volumSelection(false, pressed, VoLumSelectionStyle.Brass, radius = 4.dp, inset = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        val ink by rememberUpdatedState(if (pressed) VoLumColors.Gold else color)
+        Spacer(Modifier.size(glyphSize).volumGlyph(glyph, { ink }))
+    }
+}
+
+/** A tappable container whose children draw its face; the press wash is the Brass hover. */
+@Composable
+internal fun Tappable(onClick: () -> Unit, modifier: Modifier = Modifier, ids: List<String> = emptyList(), role: Role = Role.Button, enabled: Boolean = true, content: @Composable BoxScope.(pressed: Boolean) -> Unit) {
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    Box(modifier.clickable(src, null, enabled = enabled, role = role, onClick = onClick).ids(ids)) { content(pressed) }
+}
+
+/**
+ * A soft gold halo that breathes with the signal while [on]: telemetry is read in
+ * the draw phase on the art frame clock, so it never recomposes the surface.
+ */
+internal fun Modifier.signalGlow(tel: StateFlow<Telemetry>, frames: LongState, on: Boolean, selected: Boolean = false, radius: Dp = 6.dp): Modifier = drawBehind {
+    frames.longValue
+    val e = if (on) tel.value.energy.toFloat() else 0f
+    val pad = 3.dp.toPx() + 3.dp.toPx() * e
+    val cr = CornerRadius(radius.toPx() + pad)
+    val base = if (selected) 0.22f else 0f
+    val a = (base + 0.42f * e).coerceAtMost(0.7f)
+    if (a > 0f) drawRoundRect((if (selected) VoLumColors.Amber else VoLumColors.Gold).withOpacity(a * 0.5f), Offset(-pad, -pad), Size(size.width + 2 * pad, size.height + 2 * pad), cr)
+}
+
+/** A `:design` lamp lit by a telemetry predicate; recomposes only when it flips. */
+@Composable
+internal fun Lamp(tel: StateFlow<Telemetry>, color: Color, modifier: Modifier = Modifier, lit: (Telemetry) -> Boolean) {
+    val t = tel.collectAsState()
+    val test by rememberUpdatedState(lit)
+    val on by remember { derivedStateOf { test(t.value) } }
+    VoLumLed(on, modifier, color)
+}
+
+@Composable
+internal fun InMeter(ui: Ui, frames: LongState, modifier: Modifier, horizontal: Boolean = false) {
+    VoLumMeter({ ui.tel.value.meter(ui.tel.value.inDb).toFloat() }, "IN", modifier, frame = { frames.longValue }, horizontal = horizontal)
+}
+
+@Composable
+internal fun OutMeter(ui: Ui, frames: LongState, modifier: Modifier, right: Boolean = false, horizontal: Boolean = false) {
+    VoLumMeter({ ui.tel.value.let { it.meter(if (right) it.outRightDb else it.outDb) }.toFloat() }, if (right) "R" else "OUT", modifier, out = true, frame = { frames.longValue }, horizontal = horizontal)
+}
