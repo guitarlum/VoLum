@@ -38,7 +38,7 @@ private fun AmpRowText(amp: Amp, selected: Boolean) =
 internal fun AmpPicker(c: Ctx) {
     val s = c.s
     val custom = s.library.amps.filter { it.custom }
-    Sheet("Amps", emptyList(), c, width = 760.dp, align = Alignment.CenterStart) {
+    Sheet("Amps", emptyList(), c, width = 840.dp, align = Alignment.CenterStart) {
         TwoColumns(
             left = {
                 SectionLabel("BUNDLED")
@@ -62,6 +62,7 @@ internal fun AmpPicker(c: Ctx) {
                 }
                 Chip("+ BUILD CUSTOM AMP", { c.d(Action.OpenBuilder(null)) }, Modifier.fillMaxWidth(), listOf("custom.amp.add"))
             },
+            rightWidth = 400.dp,
         )
     }
 }

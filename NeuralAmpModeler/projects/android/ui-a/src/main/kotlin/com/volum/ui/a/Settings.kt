@@ -140,7 +140,7 @@ private fun MidiSlot(c: Ctx, p: Int, modifier: Modifier) {
 private fun androidx.compose.foundation.layout.RowScope.SystemTab(c: Ctx) {
     val s = c.s
     Card("ABOUT", Modifier.weight(1f)) {
-        T("VoLum 1.3 for Android (shootout build)", Type.value(13.sp), Modifier.ids("system.about.version"), maxLines = 2)
+        T("VoLum 1.3 · Android preview", Type.value(13.sp), Modifier.ids("system.about.version"))
         T("Playing: ${s.amp?.name ?: "-"}  ·  ${if (s.signal.lite) "A2 Lite" else "A2 Full"}", Type.label(10.sp), Modifier.ids("system.model_info"), maxLines = 2)
         Chip("USER GUIDE", { c.d(Action.OpenLink("https://github.com/guitarlum/VoLum/blob/main/docs/user-guide.en.md")) }, Modifier.fillMaxWidth(), listOf("system.about.manual"))
         Chip("SHARE LOG", { c.d(Action.ShareLog) }, Modifier.fillMaxWidth(), listOf("system.share_log"))
@@ -195,9 +195,15 @@ internal fun AudioDevices(c: Ctx) {
             Card("MIDI CONTROLLER", Modifier.weight(1f)) {
                 if (a.midiLost) Notice("Controller disconnected. Plug it back in or pick another.", alert = true, ids = listOf("midi.device.lost"))
                 a.midiDevices.forEach { d ->
-                    Chip(d.name + if (d.ble) "  · BLE" else "  · USB", { c.d(Action.SelectMidiDevice(d.id)) }, Modifier.fillMaxWidth(), listOf("midi.device.select"), selected = d.id == a.midiDeviceId && !a.midiLost)
+                    val selected = d.id == a.midiDeviceId && !a.midiLost
+                    Tap({ c.d(Action.SelectMidiDevice(d.id)) }, Modifier.fillMaxWidth(), listOf("midi.device.select"), selected = selected) {
+                        Column(Modifier.fillMaxWidth()) {
+                            T(d.name, Type.value(13.sp, if (selected) Ink.selected else Ink.text))
+                            T(if (d.ble) "BLUETOOTH" else "USB", Type.label(9.sp))
+                        }
+                    }
                 }
-                Chip(if (a.bleScanning) "SCANNING…" else "FIND BLUETOOTH MIDI", { c.d(Action.ScanBleMidi) }, Modifier.fillMaxWidth(), listOf("midi.device.ble_scan"))
+                Chip(if (a.bleScanning) "SCANNING" else "SCAN BLE MIDI", { c.d(Action.ScanBleMidi) }, Modifier.fillMaxWidth(), listOf("midi.device.ble_scan"))
             }
         }
     }

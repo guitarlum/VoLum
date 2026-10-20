@@ -101,9 +101,9 @@ private fun Stomps(c: Ctx) {
 private fun Stomp(c: Ctx, label: String, p: Param, id: String, texture: Texture, modifier: Modifier) {
     val on = c.s.on(p)
     Column(modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Tap({ c.d(Action.EditStomp(p)) }, Modifier.fillMaxWidth().height(48.dp).semanticsDesc("Edit $label"), listOf("play.stomp.edit")) {
-            Frame(Modifier.fillMaxSize().padding(vertical = 3.dp), texture) {
-                T(label, Type.label(11.sp, if (on) Ink.selected else Ink.dim), Modifier.align(Alignment.Center))
+        Tap({ c.d(Action.EditStomp(p)) }, Modifier.fillMaxWidth().height(48.dp).semanticsDesc("Edit $label"), listOf("play.stomp.edit"), padding = 0.dp) {
+            Frame(Modifier.fillMaxSize().padding(3.dp), texture) {
+                T(label, Type.label(10.sp, if (on) Ink.selected else Ink.dim, 0.2.sp), Modifier.align(Alignment.Center))
             }
         }
         Tap({ c.d(Action.ToggleParam(p)) }, Modifier.fillMaxWidth().weight(1f).semanticsDesc(label), listOf(id), selected = on, pick = Pick.BRASS) {
@@ -158,7 +158,7 @@ private fun SoundRow(c: Ctx, p: Int) {
             Row(Modifier.fillMaxWidth().height(SoundPitch).padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Chip("REPLACE", { c.d(Action.Open(Overlay.SoundPicker(p, replace = true))) }, Modifier.weight(1f), listOf("play.sound.replace"))
                 Chip("CLEAR", { c.d(Action.ClearSound(p)) }, Modifier.weight(1f), listOf("play.sound.clear"))
-                Chip("MOVE DOWN", { c.d(Action.MoveSound(p, 1)) }, Modifier.weight(1f).then(moveDown), listOf("play.sound.reorder"))
+                Chip("MOVE ↓", { c.d(Action.MoveSound(p, 1)) }, Modifier.weight(1f).then(moveDown).semanticsDesc("Move down"), listOf("play.sound.reorder"))
             }
         }
     }

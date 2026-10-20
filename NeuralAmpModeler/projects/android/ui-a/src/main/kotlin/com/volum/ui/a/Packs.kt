@@ -70,14 +70,6 @@ internal fun PackExport(c: Ctx) {
     }
 }
 
-private fun outcomeNote(o: PackOutcome) = when (o) {
-    PackOutcome.ADD -> "new"
-    PackOutcome.REPLACE -> "replaces yours"
-    PackOutcome.KEEP_MINE -> "yours is kept"
-    PackOutcome.RELOADS -> "reloads"
-    PackOutcome.SKIP -> "skipped"
-}
-
 @Composable
 internal fun PackImport(c: Ctx) {
     val pi = c.s.packImport
@@ -94,9 +86,9 @@ internal fun PackImport(c: Ctx) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Led(r.ticked, Modifier.width(12.dp))
                                     T("   ${r.name}", Type.value(14.sp), Modifier.weight(1f))
-                                    T(r.kind.uppercase(), Type.label(10.sp), Modifier.width(56.dp))
-                                    T("${r.outcome.label} · ${outcomeNote(r.outcome)}", Type.label(10.sp, if (r.outcome == PackOutcome.SKIP) Ink.alert else Ink.text),
-                                        Modifier.width(150.dp).ids("pack.import.outcome"))
+                                    T(r.kind.uppercase(), Type.label(10.sp), Modifier.width(66.dp))
+                                    T(r.outcome.label.uppercase(), Type.label(10.sp, if (r.outcome == PackOutcome.SKIP) Ink.alert else Ink.text),
+                                        Modifier.width(100.dp).ids("pack.import.outcome"))
                                 }
                             }
                         }

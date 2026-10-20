@@ -220,11 +220,12 @@ internal fun Stepper(
     nextIds: List<String> = emptyList(),
     enabled: Boolean = true,
     valueWidth: Dp = 56.dp,
+    valueSize: androidx.compose.ui.unit.TextUnit = 15.sp,
 ) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         if (label != null) T(label, Type.label(11.sp), Modifier.padding(end = 6.dp))
         IconTap(Glyph.PREV, onPrev, ids = prevIds, enabled = enabled, desc = "${label ?: text} down")
-        T(text, Type.value(15.sp, if (enabled) Ink.text else Ink.faint), Modifier.width(valueWidth), align = TextAlign.Center)
+        T(text, Type.value(valueSize, if (enabled) Ink.text else Ink.faint), Modifier.width(valueWidth), align = TextAlign.Center)
         IconTap(Glyph.NEXT, onNext, ids = nextIds, enabled = enabled, desc = "${label ?: text} up")
     }
 }

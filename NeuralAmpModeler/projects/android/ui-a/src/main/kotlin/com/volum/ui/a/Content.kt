@@ -42,10 +42,10 @@ internal fun AmpBuilder(c: Ctx) {
                             val cabIds = listOf("builder.file.cab")
                             Stepper(null, b.cabNames.getOrElse(f.cabSlot) { Cab.entries[f.cabSlot].label },
                                 { c.d(Action.BuilderSetFileCab(i, Math.floorMod(f.cabSlot - 1, 4))) }, { c.d(Action.BuilderSetFileCab(i, (f.cabSlot + 1) % 4)) },
-                                prevIds = cabIds, nextIds = cabIds, valueWidth = 64.dp)
+                                prevIds = cabIds, nextIds = cabIds, valueWidth = 76.dp, valueSize = 12.sp)
                             val chIds = listOf("builder.file.channel")
                             Stepper(null, "CH ${f.channel}", { c.d(Action.BuilderSetFileChannel(i, if (f.channel <= 1) 6 else f.channel - 1)) },
-                                { c.d(Action.BuilderSetFileChannel(i, if (f.channel >= 6) 1 else f.channel + 1)) }, prevIds = chIds, nextIds = chIds, valueWidth = 44.dp)
+                                { c.d(Action.BuilderSetFileChannel(i, if (f.channel >= 6) 1 else f.channel + 1)) }, prevIds = chIds, nextIds = chIds, valueWidth = 48.dp, valueSize = 12.sp)
                             IconTap(Glyph.CLOSE, { c.d(Action.BuilderRemoveFile(i)) }, ids = listOf("builder.file.remove"), desc = "Remove ${f.name}")
                         }
                     }
