@@ -71,7 +71,12 @@ boot_completed() {
 }
 
 ensure_emulator() {
-  if adbx get-state 2>/dev/null | grep -q device && boot_completed; then return; fi
+  if ! { adbx get-state 2>/dev/null | grep -q device && boot_completed; }; then boot_emulator; fi
+  # Without this, Android's "Viewing full screen" confirmation covers the immersive app in every capture.
+  adbx shell settings put secure immersive_mode_confirmations confirmed >/dev/null
+}
+
+boot_emulator() {
   log "booting $AVD"
   setsid nohup emulator -avd "$AVD" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -port 5554 \
     > "$ROOT/logs/emulator.log" 2>&1 < /dev/null 8>&- 9>&- &
@@ -208,20 +213,27 @@ step_capture() {
         bad+=("$name: not ready within 20 s")
         continue
       fi
+      local focus focus_ok=true
+      focus="$(adbx shell dumpsys window 2>/dev/null | grep -m1 mCurrentFocus || true)"
+      if [[ "$focus" != *"$PKG/"* ]]; then
+        bad+=("$name: another window has focus (${focus//[$'\r\n']/})")
+        focus_ok=false
+      fi
       adbx exec-out screencap -p > "$OUT/captures/$name"
       local dims
       dims="$(python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(24); print("%dx%d" % struct.unpack(">II", d[16:24]) if d[:8]==b"\x89PNG\r\n\x1a\n" else "not-png")' "$OUT/captures/$name")"
       if [ "$dims" != "2400x1080" ]; then
         bad+=("$name: $dims, expected 2400x1080")
-      else
+      elif $focus_ok; then
         count=$((count + 1))
       fi
     done < "$list"
   done
   scan_crashes capture
-  printf '%s\n' "${bad[@]:-}" | python3 - "$RES/captures.json" "$count" "$expected" <<'PY'
+  printf '%s\n' "${bad[@]:-}" > "$RES/captures-bad.txt"
+  python3 - "$RES/captures.json" "$count" "$expected" "$RES/captures-bad.txt" <<'PY'
 import json, sys
-bad = [l for l in sys.stdin.read().splitlines() if l.strip()]
+bad = [l for l in open(sys.argv[4]).read().splitlines() if l.strip()]
 count, expected = int(sys.argv[2]), int(sys.argv[3])
 json.dump({"pass": not bad and count == expected and expected > 0, "count": count, "expected": expected, "bad": bad}, open(sys.argv[1], "w"), indent=2)
 PY
@@ -262,8 +274,11 @@ step_motion() {
     skip="$(python3 -c 'import sys; print(max(0.0, float(sys.argv[2]) - float(sys.argv[1]) - 0.2))' "$t0" "$t1")"
     dur="$(python3 -c 'import sys; print(int(sys.argv[1]) / 1000.0)' "$duration_ms")"
     fps="$(python3 -c 'import sys; print(16.0 / float(sys.argv[1]))' "$dur")"
-    if "$FFMPEG" -nostdin -loglevel error -y -ss "$skip" -t "$dur" -i "$OUT/motion/$id.mp4" \
-        -vf "fps=$fps,scale=480:-1,tile=4x4:padding=4:margin=4:color=0x202020" -frames:v 1 "$OUT/motion/$id.png" \
+    # screenrecord only writes a frame when the screen changes: resample to a constant
+    # rate (filling the gaps) and clone the last frame before cutting the script window.
+    if "$FFMPEG" -nostdin -loglevel error -y -i "$OUT/motion/$id.mp4" \
+        -vf "tpad=stop_mode=clone:stop_duration=$limit,fps=30,trim=start=$skip:duration=$dur,setpts=PTS-STARTPTS,fps=$fps,scale=480:-1,tile=4x4:padding=4:margin=4:color=0x202020" \
+        -frames:v 1 "$OUT/motion/$id.png" \
         > "$LOGS/ffmpeg-$id.txt" 2>&1 && [ -s "$OUT/motion/$id.png" ]; then
       sheets+=("$id")
     else
@@ -271,11 +286,12 @@ step_motion() {
     fi
   done < "$list"
   scan_crashes motion
-  printf '%s\n' "${bad[@]:-}" | python3 - "$RES/motion.json" "$expected" "${sheets[@]:-}" <<'PY'
+  printf '%s\n' "${bad[@]:-}" > "$RES/motion-bad.txt"
+  python3 - "$RES/motion.json" "$expected" "$RES/motion-bad.txt" "${sheets[@]:-}" <<'PY'
 import json, sys
-bad = [l for l in sys.stdin.read().splitlines() if l.strip()]
+bad = [l for l in open(sys.argv[3]).read().splitlines() if l.strip()]
 expected = int(sys.argv[2])
-sheets = [s for s in sys.argv[3:] if s]
+sheets = [s for s in sys.argv[4:] if s]
 json.dump({"pass": not bad and len(sheets) == expected and expected > 0, "count": len(sheets), "expected": expected,
            "sheets": ["motion/%s.png" % s for s in sheets], "bad": bad}, open(sys.argv[1], "w"), indent=2)
 PY
