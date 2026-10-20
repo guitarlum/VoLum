@@ -42,7 +42,7 @@ import com.volum.harness.screen
 
 /** Header shared by PLAY and BUILD; [middle] holds the PLAY sound actions or the BUILD preset bar. */
 @Composable
-internal fun TopBar(s: VoLumState, middle: @Composable RowScope.() -> Unit) {
+internal fun TopBar(s: VoLumState, tuner: Boolean = true, middle: @Composable RowScope.() -> Unit) {
     val st = LocalStage.current
     Row(
         Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
@@ -61,7 +61,7 @@ internal fun TopBar(s: VoLumState, middle: @Composable RowScope.() -> Unit) {
         }
         middle()
         InputChip(s, Modifier.width(100.dp).height(48.dp))
-        TextPad("TUNER", { st.go(Action.Open(Overlay.Tuner)) }, Modifier.width(72.dp).height(48.dp), arrayOf("nav.tuner.open"), style = Type.label(13.sp, Ink.hot))
+        if (tuner) TextPad("TUNER", { st.go(Action.Open(Overlay.Tuner)) }, Modifier.width(72.dp).height(48.dp), arrayOf("nav.tuner.open"), style = Type.label(13.sp, Ink.hot))
         Pad({ st.go(Action.Open(Overlay.Metronome)) }, Modifier.width(56.dp).height(48.dp), arrayOf("nav.metronome.open"), description = "Metronome") {
             MetronomeGlyph(Modifier.size(24.dp))
         }

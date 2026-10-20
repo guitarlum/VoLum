@@ -71,7 +71,7 @@ internal fun captureName(s: VoLumState, slot: Param): String? {
 internal fun PlaySurface(s: VoLumState) {
     Box(Modifier.fillMaxSize().background(Ink.ground).screen(ScreenId.PLAY)) {
         Column(Modifier.fillMaxSize()) {
-            TopBar(s) { PlayActions(s) }
+            TopBar(s, tuner = false) { PlayActions(s) }
             Row(Modifier.weight(1f).fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp, top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StompColumn(s, preStomps, meterFirst = true)
                 Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -226,8 +226,14 @@ private fun Transport(s: VoLumState, modifier: Modifier) {
     val amp = s.library.amp(sound?.ampId ?: s.ampId)
     val name = sound?.let { s.library.preset(it.presetId)?.name } ?: s.presetName ?: "Tap a Sound"
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Pad({ st.go(Action.StepSound(-1)) }, Modifier.width(150.dp).fillMaxHeight(), arrayOf("play.sound.prev"), haptic = true, description = "Previous Sound") {
+        Pad({ st.go(Action.StepSound(-1)) }, Modifier.width(136.dp).fillMaxHeight(), arrayOf("play.sound.prev"), haptic = true, description = "Previous Sound") {
             BasicText("◀  PREV", style = Type.label(16.sp, Ink.text))
+        }
+        Pad({ st.go(Action.Open(Overlay.Tuner)) }, Modifier.width(96.dp).fillMaxHeight(), arrayOf("nav.tuner.open"), haptic = true, description = "Tuner") {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                TunerGlyph(Modifier.size(28.dp, 18.dp))
+                BasicText("TUNER", style = Type.label(13.sp, Ink.hot))
+            }
         }
         Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(8.dp)).brackets()) {
             StageArt(amp?.art ?: 0, st.tele, animate = s.signal.animateArt, Modifier.fillMaxSize().featureId("play.art"))
@@ -241,9 +247,18 @@ private fun Transport(s: VoLumState, modifier: Modifier) {
                 if (s.rig.dirty) FitText("(unsaved)", Type.label(11.sp, Ink.text), Modifier.width(72.dp))
             }
         }
-        Pad({ st.go(Action.StepSound(1)) }, Modifier.width(150.dp).fillMaxHeight(), arrayOf("play.sound.next"), haptic = true, description = "Next Sound") {
+        Pad({ st.go(Action.StepSound(1)) }, Modifier.width(136.dp).fillMaxHeight(), arrayOf("play.sound.next"), haptic = true, description = "Next Sound") {
             BasicText("NEXT  ▶", style = Type.label(16.sp, Ink.text))
         }
+    }
+}
+
+@Composable
+private fun TunerGlyph(modifier: Modifier) = Canvas(modifier) {
+    val y = size.height
+    for (i in -3..3) {
+        val x = size.width / 2 + i * size.width / 7
+        drawLine(if (i == 0) Ink.hot else Ink.dim, Offset(x, if (i == 0) 0f else y * 0.45f), Offset(x, y), if (i == 0) 2.5.dp.toPx() else 1.dp.toPx())
     }
 }
 
