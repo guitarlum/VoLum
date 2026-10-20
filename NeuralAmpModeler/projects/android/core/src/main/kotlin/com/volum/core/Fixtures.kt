@@ -222,6 +222,15 @@ object Fixtures {
         f("builder_files", "custom amp builder with a name and two files") {
             seed().copy(builder = BuilderState(name = "Skeleton Key II", files = listOf(FakeEngine.parseAmpFile("DI-Skel-1.nam"), FakeEngine.parseAmpFile("V30-Skel-2.nam"))))
         },
+        f("gallery_tokens", "design gallery: colour, type, selection and surface tokens") { seed().ui { it.copy(view = View.PLAY, section = Section.PRE) } },
+        f("gallery_controls", "design gallery: knobs, toggles, pickers, meters, lists") { seed().ui { it.copy(view = View.PLAY, section = Section.POST) } },
+        f("gallery_dialogs", "design gallery: confirm dialogs, banners, buttons, Dual Amp hero") {
+            seed().ui { it.copy(confirm = Confirm(ConfirmKind.DELETE_PRESET, "u:1", "Delete \"Sunset Crunch\"?"), banner = Banner(BannerKind.ERROR, "File is not a WAV file: renamed-junk.wav")) }
+        },
+        f("gallery_arts", "design gallery: every factory hero art") { seed().ui { it.copy(view = View.BUILD, section = Section.AMP) } },
+        f("gallery_motifs", "design gallery: effect motifs, custom arts, thumbnails") { seed().ui { it.copy(view = View.BUILD, section = Section.POST) } },
+        f("gallery_header", "design gallery: header bars, preset bar states, glyph set, pressed header faces") { seed().ui { it.copy(buildTipSeen = false) } },
+        f("gallery_blocks", "design gallery: PRE / POST blocks with lock and chevron, Custom IR cab, name field, lamps") { seed().ui { it.copy(lane = Lane.SUPPORT) } },
         f("energy_0", "PLAY art at energy 0", energy = 0.0) { seed() },
         f("energy_half", "PLAY art at energy 0.5", energy = 0.5) { seed() },
         f("energy_full", "PLAY art at energy 1", energy = 1.0) { seed() },

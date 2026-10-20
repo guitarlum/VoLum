@@ -126,24 +126,25 @@ smoke() {
   source "$ROOT/env.sh"
   log "booting $AVD_NAME headless"
   # The adb server and the emulator outlive this script; neither may inherit the lock fd.
-  adb start-server >/dev/null
+  # adb blocks forever on a dead emulator, so every call under the lock has a deadline.
+  timeout 30 adb start-server >/dev/null
   exec 9>"$ROOT/locks/emu.lock"
   flock -w 600 9
   emulator -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -port 5554 \
     > "$ROOT/logs/emu-smoke.log" 2>&1 9>&- &
   local pid=$!
-  adb -s emulator-5554 wait-for-device
+  timeout 180 adb -s emulator-5554 wait-for-device 9>&- || { log "emulator not on adb within 180s"; kill "$pid"; exit 1; }
   local t=0
-  until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+  until [ "$(timeout 10 adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null 9>&- | tr -d '\r')" = "1" ]; do
     sleep 3; t=$((t + 3))
     [ "$t" -lt 300 ] || { log "boot timeout"; kill "$pid"; exit 1; }
   done
   log "booted in ${t}s"
-  adb -s emulator-5554 shell settings put system user_rotation 1 || true
+  timeout 30 adb -s emulator-5554 shell settings put system user_rotation 1 9>&- || true
   sleep 3
-  adb -s emulator-5554 exec-out screencap -p > "$ROOT/out/smoke.png"
+  timeout 30 adb -s emulator-5554 exec-out screencap -p > "$ROOT/out/smoke.png" 9>&-
   log "smoke.png $(stat -c %s "$ROOT/out/smoke.png") bytes"
-  adb -s emulator-5554 emu kill >/dev/null 2>&1 || kill "$pid"
+  timeout 30 adb -s emulator-5554 emu kill >/dev/null 2>&1 9>&- || kill "$pid"
   wait "$pid" 2>/dev/null || true
 }
 
