@@ -318,9 +318,9 @@ internal fun Switch(label: String, on: Boolean, onClick: () -> Unit, modifier: M
             .alpha(if (enabled) 1f else 0.4f)
             .toggleable(on, source, indication = null, enabled = enabled, role = Role.Switch) { onClick() }
             .ids(ids)
-            .padding(horizontal = 6.dp),
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         VoLumSwitchTrack(on, pressed = pressed)
         FitText(label, VoLumType.label(12.sp, if (on) VoLumColors.TextBright else VoLumColors.Cream), Modifier.weight(1f), align = TextAlign.Start, group = group)

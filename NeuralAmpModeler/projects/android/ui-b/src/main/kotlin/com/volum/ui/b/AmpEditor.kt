@@ -66,7 +66,7 @@ internal fun AmpEditor(s: VoLumState) {
             val n = laneAmp?.channels ?: 1
             val chIds = if (support) arrayOf("dual.support.channel") else arrayOf("amp.channel")
             val pick = { ch: Int -> st.go(if (support) Action.SelectSupportChannel(ch) else Action.SelectChannel(ch)) }
-            Column(Modifier.width(112.dp).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
+            Column(Modifier.width(104.dp).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
                 FitText("CHANNEL", VoLumType.KnobLabel, Modifier.fillMaxWidth().height(rememberLineHeight(VoLumType.KnobLabel)), group = knobLabels)
                 Stepper("${channel + 1}", { pick((channel - 1 + n) % n) }, { pick((channel + 1) % n) }, Modifier.fillMaxWidth().height(48.dp),
                     chIds, chIds, prevEnabled = laneAmp != null && n > 1, nextEnabled = laneAmp != null && n > 1, description = "channel")
@@ -76,7 +76,7 @@ internal fun AmpEditor(s: VoLumState) {
                 Knob(p, s.param(p), { st.go(Action.SetParam(p, it)) }, Modifier.weight(1f).fillMaxHeight(), Ids.ampKnob(p, lane),
                     support = support || p == Param.SUPPORT_PAN, group = knobLabels)
             }
-            AmpSwitches(s, support, Modifier.width(176.dp).fillMaxHeight())
+            AmpSwitches(s, support, Modifier.width(184.dp).fillMaxHeight())
         }
     }
 }
