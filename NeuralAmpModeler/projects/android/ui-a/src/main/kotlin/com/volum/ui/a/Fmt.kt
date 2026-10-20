@@ -1,9 +1,11 @@
 package com.volum.ui.a
 
 import com.volum.core.Param
+import com.volum.core.Pedal
 import com.volum.core.PostBlock
 import com.volum.core.PreBlock
 import com.volum.core.VoLumState
+import com.volum.design.art.Motif
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -46,15 +48,8 @@ internal fun captureName(s: VoLumState, slot: Int): String {
 internal fun preTitle(b: PreBlock, s: VoLumState): String = when (b) {
     PreBlock.PITCH -> if (s.param(Param.PITCH_MODE) == 0.0) "Transpose" else "Octaver"
     PreBlock.COMP -> "Compressor"
-    PreBlock.NAM1 -> captureName(s, 1).takeIf { it != "EMPTY" } ?: "NAM 1"
-    PreBlock.NAM2 -> captureName(s, 2).takeIf { it != "EMPTY" } ?: "NAM 2"
-}
-
-internal fun preCard(b: PreBlock, s: VoLumState): String = when (b) {
-    PreBlock.PITCH -> "PITCH"
-    PreBlock.COMP -> "COMP"
-    PreBlock.NAM1 -> captureName(s, 1).takeIf { it != "EMPTY" }?.uppercase() ?: "NAM 1"
-    PreBlock.NAM2 -> captureName(s, 2).takeIf { it != "EMPTY" }?.uppercase() ?: "NAM 2"
+    PreBlock.NAM1 -> captureFullName(s, 1).takeIf { it != "Empty" } ?: "NAM Pedal 1"
+    PreBlock.NAM2 -> captureFullName(s, 2).takeIf { it != "Empty" } ?: "NAM Pedal 2"
 }
 
 internal fun postTitle(b: PostBlock): String = when (b) {
@@ -62,6 +57,67 @@ internal fun postTitle(b: PostBlock): String = when (b) {
     PostBlock.DELAY -> "Delay"
     PostBlock.REVERB -> "Reverb"
     PostBlock.TREM -> "Tremolo"
+}
+
+internal fun postCard(b: PostBlock): String = when (b) {
+    PostBlock.CHORUS -> "CHORUS"
+    PostBlock.DELAY -> "DELAY"
+    PostBlock.REVERB -> "REVERB"
+    PostBlock.TREM -> "TREM"
+}
+
+/** PLAY stomp and chain-card label: the capture's short name on the NAM slots, as the desktop prints it. */
+internal fun stompLabel(b: PreBlock, s: VoLumState): String = when (b) {
+    PreBlock.PITCH -> "PITCH"
+    PreBlock.COMP -> "COMP"
+    PreBlock.NAM1 -> captureName(s, 1).takeIf { it != "EMPTY" } ?: "NAM 1"
+    PreBlock.NAM2 -> captureName(s, 2).takeIf { it != "EMPTY" } ?: "NAM 2"
+}
+
+internal val PreBlock.motif: Motif
+    get() = when (this) {
+        PreBlock.PITCH -> Motif.PITCH
+        PreBlock.COMP -> Motif.COMP
+        PreBlock.NAM1 -> Motif.NAM1
+        PreBlock.NAM2 -> Motif.NAM2
+    }
+
+internal val PostBlock.motif: Motif
+    get() = when (this) {
+        PostBlock.CHORUS -> Motif.CHORUS
+        PostBlock.DELAY -> Motif.DELAY
+        PostBlock.REVERB -> Motif.REVERB
+        PostBlock.TREM -> Motif.TREM
+    }
+
+/** Motif variant 1 is the Octaver's chevrons, 0 the Transpose helix. */
+internal fun pitchVariant(b: PreBlock, s: VoLumState): Int = if (b == PreBlock.PITCH && s.param(Param.PITCH_MODE) == 1.0) 1 else 0
+
+/** Desktop `kPrePedalCaptureMetadata`: full name and group of each bundled PRE capture, keyed by its short name. */
+internal enum class CaptureGroup(val label: String) { KLON("KLON"), TS("TS / BOOST"), DIST("DISTORTION"), FUZZ("FUZZ") }
+
+internal data class CaptureInfo(val full: String, val group: CaptureGroup, val rank: Int)
+
+private val captureInfo = mapOf(
+    "Klon" to CaptureInfo("Klon", CaptureGroup.KLON, 10),
+    "Myth" to CaptureInfo("PettyJohn Myth", CaptureGroup.KLON, 20),
+    "TS" to CaptureInfo("Halcyon TS", CaptureGroup.TS, 30),
+    "TS+" to CaptureInfo("Halcyon TS +Gain", CaptureGroup.TS, 40),
+    "Mash" to CaptureInfo("PettyJohn Mash", CaptureGroup.TS, 50),
+    "Revival Drive" to CaptureInfo("Revival Drive", CaptureGroup.DIST, 60),
+    "Fatbee" to CaptureInfo("Fatbee", CaptureGroup.FUZZ, 70),
+    "Nuke" to CaptureInfo("PettyJohn Nuke", CaptureGroup.FUZZ, 80),
+    "Bender" to CaptureInfo("JHS Bender", CaptureGroup.FUZZ, 90),
+)
+
+internal fun captureInfo(p: Pedal): CaptureInfo? = if (p.custom) null else captureInfo[p.name]
+
+/** The capture's desktop full name ("Halcyon TS"); custom pedals keep their own name. */
+internal fun captureFullName(s: VoLumState, slot: Int): String {
+    val idx = s.param(if (slot == 1) Param.NAM1_CAPTURE else Param.NAM2_CAPTURE).roundToInt()
+    val p = s.library.pedals.firstOrNull { it.index == idx } ?: return "Empty"
+    if (p.index == 0) return "Empty"
+    return captureInfo(p)?.full ?: p.name
 }
 
 internal val PreBlock.onParam: Param

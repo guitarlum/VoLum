@@ -1,17 +1,18 @@
 package com.volum.ui.a
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
@@ -19,55 +20,78 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.core.Action
 import com.volum.core.InterfaceStatus
+import com.volum.core.NamePurpose
 import com.volum.core.Overlay
 import com.volum.core.Permission
+import com.volum.core.Reducer
 import com.volum.core.SettingsTab
 import com.volum.core.View
 import com.volum.core.VoLumState
+import com.volum.design.components.VoLumBuildTip
+import com.volum.design.components.VoLumButton
+import com.volum.design.components.VoLumHeaderCluster
+import com.volum.design.components.VoLumLed
+import com.volum.design.components.VoLumLogo
+import com.volum.design.components.VoLumPresetBar
+import com.volum.design.components.hairlineFrame
+import com.volum.design.components.volumHeaderPlate
+import com.volum.design.theme.VFitText
+import com.volum.design.theme.VoLumColors
+import com.volum.design.theme.VoLumType
+import com.volum.design.theme.withOpacity
 
-internal val HeaderH = 54.dp
+internal val HeaderH = 48.dp
 
 /**
- * One header for both views: logo, PLAY / BUILD, the preset bar (BUILD), input
- * status, tuner, metronome, settings. It is composed after the surface below it so
- * the surface's controls come first in the tree; TalkBack still reads it first.
+ * One header for both views, the desktop's: logo; the preset bar in BUILD (the
+ * first-run "Tweak your sound" pointer in PLAY); SAVE; the input status chip; and
+ * the PLAY / BUILD toggle, tuner, metronome and gear. It is composed after the
+ * surface below it so the surface's controls come first in the tree; TalkBack
+ * still reads it first.
  */
 @Composable
 internal fun Header(c: Ctx) {
     val s = c.s
+    val inPlay = s.ui.view == View.PLAY
     Row(
-        Modifier.fillMaxWidth().height(HeaderH).padding(horizontal = 8.dp).semantics { isTraversalGroup = true; traversalIndex = -1f },
+        Modifier.fillMaxWidth().height(HeaderH).volumHeaderPlate().padding(start = 14.dp, end = 4.dp)
+            .semantics { isTraversalGroup = true; traversalIndex = -1f },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        T("VoLum", Type.display(fixedSp(20.dp)), Modifier.width(66.dp))
-        Chip("PLAY", { c.d(Action.SetView(View.PLAY)) }, Modifier.width(68.dp), listOf("nav.view.play"), selected = s.ui.view == View.PLAY)
-        Chip("BUILD", { c.d(Action.SetView(View.BUILD)) }, Modifier.width(72.dp), listOf("nav.view.build"), selected = s.ui.view == View.BUILD)
-        if (s.ui.view == View.BUILD) PresetBar(c, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
+        VoLumLogo(compact = true)
+        Fill()
+        if (!inPlay) {
+            val bank = s.library.presetsFor(s.ampId)
+            VoLumPresetBar(
+                s.presetName, s.rig.dirty,
+                onOpen = { c.d(Action.Open(Overlay.PresetMenu)) },
+                onPrev = { c.d(Action.StepPreset(-1)) },
+                onNext = { c.d(Action.StepPreset(1)) },
+                modifier = Modifier.width(276.dp),
+                canStep = bank.isNotEmpty(),
+                openModifier = Modifier.ids(listOfNotNull("header.preset.menu", "header.preset_name".takeIf { s.presetName != null }, "header.unsaved".takeIf { s.rig.dirty })),
+                prevModifier = Modifier.ids("header.preset.prev"),
+                nextModifier = Modifier.ids("header.preset.next"),
+            )
+            Fill()
+        }
+        VoLumButton("Save", { c.d(Action.Open(Overlay.NameDialog(NamePurpose.SAVE_PRESET, Reducer.nameSuggestion(s)))) }, Modifier.ids(if (inPlay) "play.save" else "presets.save.open"))
         InputChip(c)
-        IconTap(Glyph.TUNER, { c.d(Action.Open(Overlay.Tuner)) }, ids = listOf("nav.tuner.open"), desc = "Tuner")
-        IconTap(Glyph.METRONOME, { c.d(Action.Open(Overlay.Metronome)) }, ids = listOf("nav.metronome.open"), desc = "Metronome")
-        Tap({ c.d(Action.Open(Overlay.Settings(SettingsTab.SIGNAL))) }, Modifier.semanticsDesc("Settings"), listOf("nav.settings.open")) {
-            GlyphIcon(Glyph.GEAR, Modifier.padding(12.dp))
-            if (s.update.available != null) Led(true, Modifier.align(Alignment.TopEnd).size(10.dp).ids("system.update.badge"))
-        }
-    }
-}
-
-@Composable
-private fun PresetBar(c: Ctx, modifier: Modifier) {
-    val s = c.s
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        IconTap(Glyph.PREV, { c.d(Action.StepPreset(-1)) }, ids = listOf("header.preset.prev"), desc = "Previous preset")
-        Tap({ c.d(Action.Open(Overlay.PresetMenu)) }, Modifier.weight(1f), listOf("header.preset.menu")) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                T(s.presetName ?: "No preset", Type.value(14.sp), Modifier.weight(1f, fill = false).then(if (s.presetName != null) Modifier.ids("header.preset_name") else Modifier))
-                if (s.rig.dirty) T("  UNSAVED", Type.label(10.sp, Ink.dim), Modifier.ids("header.unsaved"))
-            }
-        }
-        IconTap(Glyph.NEXT, { c.d(Action.StepPreset(1)) }, ids = listOf("header.preset.next"), desc = "Next preset")
-        Chip("SAVE", { c.d(Action.Open(Overlay.NameDialog(com.volum.core.NamePurpose.SAVE_PRESET, com.volum.core.Reducer.nameSuggestion(s)))) },
-            Modifier.width(64.dp), listOf("presets.save.open"))
+        if (inPlay && !s.ui.buildTipSeen) VoLumBuildTip({ c.d(Action.SetView(View.BUILD)) }, Modifier.ids("tip.build"))
+        VoLumHeaderCluster(
+            inPlay,
+            onSwitchView = { c.d(Action.SetView(if (inPlay) View.BUILD else View.PLAY)) },
+            onTuner = { c.d(Action.Open(Overlay.Tuner)) },
+            onMetronome = { c.d(Action.Open(Overlay.Metronome)) },
+            onSettings = { c.d(Action.Open(Overlay.Settings(SettingsTab.SIGNAL))) },
+            metronomeOn = s.metronome.on,
+            updateBadge = s.update.available != null,
+            viewModifier = Modifier.ids(if (inPlay) "nav.view.build" else "nav.view.play"),
+            tunerModifier = Modifier.ids("nav.tuner.open"),
+            metronomeModifier = Modifier.ids("nav.metronome.open"),
+            settingsModifier = Modifier.ids(listOfNotNull("nav.settings.open", "system.update.badge".takeIf { s.update.available != null })),
+        )
     }
 }
 
@@ -81,14 +105,21 @@ internal fun inputSummary(s: VoLumState): String = when {
     else -> "PHONE MIC"
 }
 
+/** What feeds VoLum, at a glance: a teal lamp and the source, or a red lamp and the problem. A tap opens the input panel. */
 @Composable
 private fun InputChip(c: Ctx) {
     val live = inputLive(c.s)
-    Tap({ c.d(Action.Open(Overlay.AudioStatus)) }, Modifier.width(104.dp), listOf("nav.audio_status.open")) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.ids("audio.input.indicator")) {
-            Box(Modifier.size(12.dp)) { Led(live) }
-            Spacer(Modifier.width(6.dp))
-            T(inputSummary(c.s), Type.label(11.sp, if (live) Ink.text else Ink.alert))
-        }
+    val ink = if (live) VoLumColors.Cream else VoLumColors.Danger
+    Row(
+        Modifier.ids("nav.audio_status.open", "audio.input.indicator").heightIn(min = 48.dp).widthIn(min = 96.dp)
+            .clickable(role = Role.Button, onClickLabel = "Input status") { c.d(Action.Open(Overlay.AudioStatus)) }
+            .padding(vertical = 10.dp)
+            .hairlineFrame(if (live) VoLumColors.BtnOffBorder else VoLumColors.Danger.withOpacity(0.6f), radius = 3.dp)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        VoLumLed(true, color = if (live) VoLumColors.Teal else VoLumColors.Danger)
+        VFitText(inputSummary(c.s), style = VoLumType.label(11.sp, ink), minSize = 8.sp)
     }
 }
