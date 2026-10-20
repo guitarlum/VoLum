@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volum.design.theme.VFitText
 import com.volum.design.theme.VText
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumMotion
@@ -62,7 +63,6 @@ fun VoLumToggle(
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val pos by animateFloatAsState(if (checked) 1f else 0f, tween(VoLumMotion.ToggleMs), label = "toggle")
     Row(
         modifier
             .heightIn(min = 48.dp)
@@ -72,25 +72,7 @@ fun VoLumToggle(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Spacer(Modifier.size(34.dp, 18.dp).drawWithCache {
-            val cr = CornerRadius(7.dp.toPx())
-            val sh = 1.5.dp.toPx()
-            val handleR = size.height / 2f - 1.dp.toPx()
-            val rim = Stroke(0.8.dp.toPx())
-            val ballBase = ic(255, 22, 22, 27)
-            val ballLight = ic(110, 96, 96, 106)
-            onDrawBehind {
-                drawRoundRect(VoLumColors.KnobGold.withOpacity(0.3f), cornerRadius = cr)
-                drawRoundRect(ic(60, 0, 0, 0), Offset(sh, sh), size, cr)
-                drawRoundRect(lerp(Color.Black, VoLumColors.KnobGold, pos), Offset(sh, sh), Size(size.width - 2 * sh, size.height - 2 * sh), cr)
-                if (pressed) drawRoundRect(VoLumColors.KnobGold.withOpacity(0.5f), Offset(sh, sh), Size(size.width - 2 * sh, size.height - 2 * sh), cr)
-                val cx = handleR + 1.dp.toPx() + (size.width - 2 * handleR - 2.dp.toPx()) * pos
-                val cy = size.height / 2f
-                drawCircle(ballBase, handleR, Offset(cx, cy))
-                drawCircle(ballLight, handleR * 0.5f, Offset(cx - handleR * 0.25f, cy - handleR * 0.3f))
-                drawCircle(Color.Black.copy(alpha = 0.6f), handleR, Offset(cx, cy), style = rim)
-            }
-        })
+        VoLumSwitchTrack(checked, pressed = pressed)
         if (label != null) VText(label, style = VoLumType.label(13.sp))
     }
 }
@@ -213,7 +195,7 @@ fun VoLumSubModePill(options: List<String>, selected: Int, onSelect: (Int) -> Un
                     .padding(horizontal = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                VText(label, style = VoLumType.label(9.5.sp), color = selectionInk(VoLumSelectionStyle.AmberPicker, i == selected), textAlign = TextAlign.Center)
+                VFitText(label, style = VoLumType.label(9.5.sp, selectionInk(VoLumSelectionStyle.AmberPicker, i == selected)), minSize = 7.sp, textAlign = TextAlign.Center)
             }
         }
     }
@@ -260,7 +242,13 @@ fun VoLumBrassButton(
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
     ) {
         leading?.invoke()
-        VText(label, style = VoLumType.label(13.sp), color = if (!enabled) ic(70, 235, 220, 200) else selectionInk(VoLumSelectionStyle.Brass, selected))
+        val ink = when {
+            !enabled -> ic(70, 235, 220, 200)
+            selected -> selectionInk(VoLumSelectionStyle.Brass, true)
+            pressed -> VoLumColors.TextBright
+            else -> VoLumColors.BtnOffText
+        }
+        VText(label, style = VoLumType.label(13.sp), color = ink)
     }
 }
 
@@ -304,9 +292,33 @@ private fun StepArrow(glyph: String, onClick: () -> Unit, modifier: Modifier, le
     }
 }
 
-/** `DrawVoLumSegmentSwitch`: recessed two-state brass pill (FULL | LITE, All | One). */
+/**
+ * `DrawVoLumSegmentSwitch`: recessed two-state brass pill (FULL | LITE, All | One).
+ * Each half is its own radio target ([segmentModifier] false = [first], true =
+ * [second], for feature ids) with the brass press wash under the finger. The
+ * labels shrink 11 -> 8 sp before they would clip.
+ */
 @Composable
-fun VoLumSegmentSwitch(first: String, second: String, secondActive: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun VoLumSegmentSwitch(
+    first: String,
+    second: String,
+    secondActive: Boolean,
+    onSelect: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    segmentModifier: (second: Boolean) -> Modifier = { Modifier },
+) = SegmentSwitch(first, second, secondActive, onSelect, modifier, segmentModifier, previewPressed = null)
+
+/** [VoLumSegmentSwitch] with a half held down for the gallery ([previewPressed] true = the second half). */
+@Composable
+internal fun SegmentSwitch(
+    first: String,
+    second: String,
+    secondActive: Boolean,
+    onSelect: (Boolean) -> Unit,
+    modifier: Modifier,
+    segmentModifier: (second: Boolean) -> Modifier,
+    previewPressed: Boolean?,
+) {
     val pos by animateFloatAsState(if (secondActive) 1f else 0f, tween(VoLumMotion.ToggleMs), label = "segment")
     Row(
         modifier
@@ -329,12 +341,26 @@ fun VoLumSegmentSwitch(first: String, second: String, secondActive: Boolean, onS
             },
     ) {
         listOf(first to false, second to true).forEach { (label, isSecond) ->
+            val source = remember { MutableInteractionSource() }
+            val held by source.collectIsPressedAsState()
+            val pressed = held || previewPressed == isSecond
+            val active = secondActive == isSecond
             Box(
-                Modifier.weight(1f).fillMaxWidth().heightIn(min = 28.dp)
-                    .selectable(secondActive == isSecond, role = Role.RadioButton, indication = null, interactionSource = null) { onSelect(isSecond) },
+                segmentModifier(isSecond).weight(1f).fillMaxWidth().heightIn(min = 28.dp)
+                    .selectable(active, source, indication = null, role = Role.RadioButton) { onSelect(isSecond) }
+                    .drawWithCache {
+                        val cr = CornerRadius(size.height / 2)
+                        val inset = 2.dp.toPx()
+                        onDrawBehind { if (pressed) drawRoundRect(VoLumColors.SelBg, Offset(inset, inset), Size(size.width - 2 * inset, size.height - 2 * inset), cr) }
+                    },
                 contentAlignment = Alignment.Center,
             ) {
-                VText(label, Modifier.padding(horizontal = 12.dp), style = VoLumType.label(11.sp, if (secondActive == isSecond) VoLumColors.Gold else VoLumColors.CreamDim))
+                val ink = when {
+                    active -> VoLumColors.Gold
+                    pressed -> VoLumColors.TextBright
+                    else -> VoLumColors.CreamDim
+                }
+                VFitText(label, Modifier.padding(horizontal = 10.dp), style = VoLumType.label(11.sp, ink), minSize = 8.sp, textAlign = TextAlign.Center)
             }
         }
     }
@@ -344,28 +370,43 @@ fun VoLumSegmentSwitch(first: String, second: String, secondActive: Boolean, onS
  * The IN / OUT ladder (`VoLumPlaySurface::DrawMeter`): 18 brass segments in an
  * inset well, the caption under it. [level] is 0..1 and read in the draw
  * phase only; pass a frame-ticked source (see [com.volum.design.art.rememberArtFrames]).
+ * [horizontal] lays the same ladder left to right with the caption before it,
+ * for strips that have width to spare and no height.
  */
 @Composable
-fun VoLumMeter(level: () -> Float, label: String, modifier: Modifier = Modifier, out: Boolean = false, frame: () -> Long = { 0L }) {
+fun VoLumMeter(level: () -> Float, label: String, modifier: Modifier = Modifier, out: Boolean = false, frame: () -> Long = { 0L }, horizontal: Boolean = false) {
+    if (horizontal) {
+        Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            VText(label, style = VoLumType.label(8.sp, VoLumColors.CreamDim))
+            Spacer(Modifier.weight(1f).height(12.dp).insetWell(1.dp).meterLadder(level, out, frame, horizontal = true))
+        }
+        return
+    }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Spacer(
-            Modifier.weight(1f).width(12.dp).insetWell(1.dp).drawWithCache {
-                val segments = 18
-                val px = 1.dp.toPx()
-                val segH = (size.height - 4 * px) / segments
-                val lit = if (out) VoLumColors.Gold else VoLumColors.GoldDim
-                val unlit = lit.withOpacity(0.10f)
-                onDrawBehind {
-                    frame()
-                    val v = level().coerceIn(0f, 1f)
-                    for (i in 0 until segments) {
-                        val frac = (segments - i).toFloat() / segments
-                        val top = 2 * px + i * segH
-                        drawRect(if (frac <= v) lit else unlit, Offset(2 * px, top), Size(size.width - 4 * px, segH - px))
-                    }
-                }
-            },
-        )
+        Spacer(Modifier.weight(1f).width(12.dp).insetWell(1.dp).meterLadder(level, out, frame, horizontal = false))
         VText(label, style = VoLumType.label(8.sp, VoLumColors.CreamDim))
+    }
+}
+
+private fun Modifier.meterLadder(level: () -> Float, out: Boolean, frame: () -> Long, horizontal: Boolean): Modifier = drawWithCache {
+    val segments = 18
+    val px = 1.dp.toPx()
+    val span = (if (horizontal) size.width else size.height) - 4 * px
+    val seg = span / segments
+    val lit = if (out) VoLumColors.Gold else VoLumColors.GoldDim
+    val unlit = lit.withOpacity(0.10f)
+    val cell = if (horizontal) Size(seg - px, size.height - 4 * px) else Size(size.width - 4 * px, seg - px)
+    onDrawBehind {
+        frame()
+        val v = level().coerceIn(0f, 1f)
+        for (i in 0 until segments) {
+            if (horizontal) {
+                val frac = (i + 1).toFloat() / segments
+                drawRect(if (frac <= v) lit else unlit, Offset(2 * px + i * seg, 2 * px), cell)
+            } else {
+                val frac = (segments - i).toFloat() / segments
+                drawRect(if (frac <= v) lit else unlit, Offset(2 * px, 2 * px + i * seg), cell)
+            }
+        }
     }
 }

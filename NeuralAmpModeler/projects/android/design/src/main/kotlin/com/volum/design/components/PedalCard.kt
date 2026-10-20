@@ -152,9 +152,26 @@ fun QuietSlot(
     modifier: Modifier = Modifier,
     variant: Int = 0,
     toggleModifier: Modifier = Modifier,
+) = QuietSlotRow(motif, label, on, onOpen, onToggle, modifier, variant, toggleModifier, previewPillPressed = false)
+
+/** [QuietSlot] with the pill held down for the gallery. */
+@Composable
+internal fun QuietSlotRow(
+    motif: Motif,
+    label: String,
+    on: Boolean,
+    onOpen: () -> Unit,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier,
+    variant: Int,
+    toggleModifier: Modifier,
+    previewPillPressed: Boolean,
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val pillSource = remember { MutableInteractionSource() }
+    val pillHeld by pillSource.collectIsPressedAsState()
+    val pillPressed = pillHeld || previewPillPressed
     Row(
         modifier
             .heightIn(min = 48.dp)
@@ -179,7 +196,25 @@ fun QuietSlot(
             MotifArt(motif, on, Modifier.size(20.dp), variant)
             VFitText(label.uppercase(), Modifier.weight(1f), style = VoLumType.label(10.sp, if (on) VoLumColors.Cream else VoLumColors.CreamDim), minSize = 8.sp)
         }
-        Box(toggleModifier.size(48.dp).toggleable(on, indication = null, interactionSource = null, role = Role.Switch, onValueChange = onToggle), contentAlignment = Alignment.Center) {
+        Box(
+            toggleModifier
+                .size(48.dp)
+                .toggleable(on, pillSource, indication = null, role = Role.Switch, onValueChange = onToggle)
+                .drawWithCache {
+                    val px = 1.dp.toPx()
+                    val wash = Size(32.dp.toPx(), 24.dp.toPx())
+                    val at = Offset((size.width - wash.width) / 2, (size.height - wash.height) / 2)
+                    val cr = CornerRadius(wash.height / 2)
+                    val edge = Stroke(px)
+                    onDrawBehind {
+                        if (pillPressed) {
+                            drawRoundRect(ic(20, 80, 140, 160), at, wash, cr)
+                            drawRoundRect(VoLumColors.TealDim.withOpacity(0.35f), at, wash, cr, style = edge)
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
             MiniPill(on)
         }
     }

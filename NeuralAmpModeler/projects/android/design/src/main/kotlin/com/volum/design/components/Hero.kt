@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -87,12 +88,17 @@ fun VoLumHero(
 @Composable
 private fun HeroLane(amp: HeroAmp, role: String, focused: Boolean, accent: Color, modifier: Modifier, onTap: (() -> Unit)?, chipSpace: Boolean, chip: (@Composable BoxScope.() -> Unit)?, trailing: @Composable () -> Unit) {
     val source = remember { MutableInteractionSource() }
-    val corner = if (focused) accent else VoLumColors.HeroCorner
+    val pressed by source.collectIsPressedAsState()
+    val corner = if (focused || pressed) accent else VoLumColors.HeroCorner
     Box(
         modifier
             .then(if (onTap != null) Modifier.clickable(source, indication = null, role = Role.Button, onClick = onTap) else Modifier)
             .panelDepth()
-            .hairlineFrame(if (focused) accent else VoLumColors.HeroBorder)
+            .drawWithContent {
+                drawContent()
+                if (pressed) drawRect(VoLumColors.SelBgSoft)
+            }
+            .hairlineFrame(if (focused || pressed) accent else VoLumColors.HeroBorder)
             .cornerBrackets(corner, 12.dp, 6.dp, if (chipSpace) Corners.NO_TR else Corners.ALL),
     ) {
         Box(Modifier.fillMaxSize().padding(start = 10.dp, top = 28.dp, end = 10.dp, bottom = 38.dp)) {

@@ -8,6 +8,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -132,14 +134,20 @@ fun VoLumConfirmDialog(
 ) {
     val destructive = confirmLabel.contains("Delete") || confirmLabel.contains("Remove")
     val accent = if (destructive) VoLumColors.Danger else VoLumColors.Amber
+    val scrimSource = remember { MutableInteractionSource() }
+    val scrimPressed by scrimSource.collectIsPressedAsState()
     Box(
-        modifier.fillMaxSize().background(VoLumColors.Scrim).clickable(indication = null, interactionSource = null, onClick = onCancel),
+        modifier
+            .fillMaxSize()
+            .background(VoLumColors.Scrim)
+            .drawBehind { if (scrimPressed) drawRect(ic(40, 0, 0, 0)) }
+            .clickable(scrimSource, indication = null, onClickLabel = "Cancel", onClick = onCancel),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             Modifier
                 .width(444.dp)
-                .clickable(indication = null, interactionSource = null) {}
+                .pointerInput(Unit) { detectTapGestures { } }
                 .drawWithCache {
                     val glowPad = 3.5.dp.toPx()
                     val cr = CornerRadius(6.dp.toPx())

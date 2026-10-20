@@ -97,6 +97,7 @@ fun VoLumKnob(
     val change by rememberUpdatedState(onValueChange)
     var fine by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
+    var held by remember { mutableStateOf(false) }
     val span = (range.endInclusive - range.start).takeIf { it > 0 } ?: 1.0
 
     fun quantize(v: Double): Double {
@@ -109,7 +110,7 @@ fun VoLumKnob(
     val norm = ((value - range.start) / span).toFloat().coerceIn(0f, 1f)
     val accent = if (support) VoLumColors.KnobTeal else VoLumColors.KnobGold
     val accentHi = if (support) VoLumColors.KnobTealHi else VoLumColors.KnobGoldHi
-    val active = dragging || fine
+    val active = held || dragging || fine
 
     Column(
         modifier
@@ -133,6 +134,7 @@ fun VoLumKnob(
                 var lastTapUp = 0L
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    held = true
                     val start = current
                     var moved = 0f
                     var travelled = 0f
@@ -189,6 +191,7 @@ fun VoLumKnob(
                             }
                         }
                     }
+                    held = false
                     dragging = false
                     fine = false
                 }
@@ -205,56 +208,74 @@ fun VoLumKnob(
 /** The dial alone, for places that draw their own label (PAN on the hero lanes). */
 @Composable
 fun KnobDial(norm: Float, accent: Color, accentHi: Color, active: Boolean, ring: Boolean, modifier: Modifier = Modifier) {
-    Spacer(
-        modifier.drawWithCache {
-            val r = size.minDimension / 2f
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            val px = 1.dp.toPx()
-            val bodyR = r - 5 * px
-            val arcR = r - 2 * px
-            val tickOff = ic(70, 200, 162, 78)
-            val trackCol = ic(46, 200, 162, 78)
-            val body = Brush.radialGradient(listOf(ic(255, 60, 60, 73), ic(255, 15, 15, 21)), center = Offset(cx, cy - bodyR * 0.45f), radius = bodyR * 1.55f)
-            val shadow = ic(150, 0, 0, 0)
-            val sheen = ic(34, 255, 255, 255)
-            val arcTopLeft = Offset(cx - arcR, cy - arcR)
-            val arcSize = Size(arcR * 2, arcR * 2)
-            val track = Stroke(2 * px)
-            val glowStroke = Stroke(6 * px, cap = StrokeCap.Butt)
-            val valueStroke = Stroke(2.6f * px)
-            val rim = Stroke(1.2f * px)
-            val thin = Stroke(px)
-            val ringStroke = Stroke(1.5f * px)
-            onDrawBehind {
-                val angle = A1 + norm * (A2 - A1)
-                for (i in 0 until 11) {
-                    val t = A1 + (A2 - A1) * (i / 10f)
-                    val major = i % 5 == 0
-                    val passed = t <= angle + 0.5f
-                    val rad = Math.toRadians((t - 90f).toDouble())
-                    val c = cos(rad).toFloat()
-                    val s = sin(rad).toFloat()
-                    val r0 = r - (if (major) 1.5f else 0.5f) * px
-                    val r1 = r + (if (major) 2f else 1f) * px
-                    drawLine(if (passed) accent.copy(alpha = 0.9f) else tickOff, Offset(cx + c * r0, cy + s * r0), Offset(cx + c * r1, cy + s * r1), (if (major) 1.4f else 1f) * px)
-                }
-                drawArc(trackCol, A1 - 90f, A2 - A1, false, arcTopLeft, arcSize, style = track)
-                if (active) drawArc(accentHi.copy(alpha = 0.28f), A1 - 90f, angle - A1, false, arcTopLeft, arcSize, style = glowStroke)
-                drawArc(if (active) accentHi else accent, A1 - 90f, angle - A1, false, arcTopLeft, arcSize, style = valueStroke)
-                drawCircle(shadow, bodyR, Offset(cx, cy + 1.5f * px))
-                drawCircle(body, bodyR, Offset(cx, cy))
-                drawCircle(accent.copy(alpha = if (active) 0.7f else 0.4f), bodyR, Offset(cx, cy), style = rim)
-                drawCircle(sheen, bodyR - 1.5f * px, Offset(cx, cy), style = thin)
-                val rad = Math.toRadians((angle - 90f).toDouble())
-                val c = cos(rad).toFloat()
-                val s = sin(rad).toFloat()
-                val ink = if (active) accentHi else accent
-                drawLine(ink, Offset(cx + c * bodyR * 0.26f, cy + s * bodyR * 0.26f), Offset(cx + c * bodyR * 0.86f, cy + s * bodyR * 0.86f), 2.4f * px)
-                drawCircle(ink, 2.6f * px, Offset(cx + c * bodyR * 0.86f, cy + s * bodyR * 0.86f))
-                drawCircle(Color.Black.copy(alpha = 0.4f), 2.6f * px, Offset(cx + c * bodyR * 0.86f, cy + s * bodyR * 0.86f), style = thin)
-                if (ring) drawCircle(accent.copy(alpha = 0.85f), r + 3 * px, Offset(cx, cy), style = ringStroke)
-            }
-        },
-    )
+    val n = rememberUpdatedState(norm)
+    val a = rememberUpdatedState(active)
+    val f = rememberUpdatedState(ring)
+    val face = remember(accent, accentHi) { Modifier.volumKnobFace({ n.value }, accent, accentHi, { a.value }, { f.value }) }
+    Spacer(modifier.then(face))
+}
+
+/**
+ * The dial drawn only, for a caller that owns the gesture and semantics:
+ * [norm] 0..1, [active] (dragging) and [ring] (fine adjust) are read in the
+ * draw phase, so a drag redraws without rebuilding the cached brush and
+ * strokes. Pass lambdas that read State and keep them stable (remember the
+ * modifier); a new lambda per recomposition rebuilds the cache.
+ */
+fun Modifier.volumKnobFace(
+    norm: () -> Float,
+    accent: Color = VoLumColors.KnobGold,
+    accentHi: Color = VoLumColors.KnobGoldHi,
+    active: () -> Boolean = { false },
+    ring: () -> Boolean = { false },
+): Modifier = drawWithCache {
+    val r = size.minDimension / 2f
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val px = 1.dp.toPx()
+    val bodyR = r - 5 * px
+    val arcR = r - 2 * px
+    val tickOff = ic(70, 200, 162, 78)
+    val trackCol = ic(46, 200, 162, 78)
+    val body = Brush.radialGradient(listOf(ic(255, 60, 60, 73), ic(255, 15, 15, 21)), center = Offset(cx, cy - bodyR * 0.45f), radius = bodyR * 1.55f)
+    val shadow = ic(150, 0, 0, 0)
+    val sheen = ic(34, 255, 255, 255)
+    val arcTopLeft = Offset(cx - arcR, cy - arcR)
+    val arcSize = Size(arcR * 2, arcR * 2)
+    val track = Stroke(2 * px)
+    val glowStroke = Stroke(6 * px, cap = StrokeCap.Butt)
+    val valueStroke = Stroke(2.6f * px)
+    val rim = Stroke(1.2f * px)
+    val thin = Stroke(px)
+    val ringStroke = Stroke(1.5f * px)
+    onDrawBehind {
+        val hot = active()
+        val angle = A1 + norm().coerceIn(0f, 1f) * (A2 - A1)
+        for (i in 0 until 11) {
+            val t = A1 + (A2 - A1) * (i / 10f)
+            val major = i % 5 == 0
+            val passed = t <= angle + 0.5f
+            val rad = Math.toRadians((t - 90f).toDouble())
+            val c = cos(rad).toFloat()
+            val s = sin(rad).toFloat()
+            val r0 = r - (if (major) 1.5f else 0.5f) * px
+            val r1 = r + (if (major) 2f else 1f) * px
+            drawLine(if (passed) accent.copy(alpha = 0.9f) else tickOff, Offset(cx + c * r0, cy + s * r0), Offset(cx + c * r1, cy + s * r1), (if (major) 1.4f else 1f) * px)
+        }
+        drawArc(trackCol, A1 - 90f, A2 - A1, false, arcTopLeft, arcSize, style = track)
+        if (hot) drawArc(accentHi.copy(alpha = 0.28f), A1 - 90f, angle - A1, false, arcTopLeft, arcSize, style = glowStroke)
+        drawArc(if (hot) accentHi else accent, A1 - 90f, angle - A1, false, arcTopLeft, arcSize, style = valueStroke)
+        drawCircle(shadow, bodyR, Offset(cx, cy + 1.5f * px))
+        drawCircle(body, bodyR, Offset(cx, cy))
+        drawCircle(accent.copy(alpha = if (hot) 0.7f else 0.4f), bodyR, Offset(cx, cy), style = rim)
+        drawCircle(sheen, bodyR - 1.5f * px, Offset(cx, cy), style = thin)
+        val rad = Math.toRadians((angle - 90f).toDouble())
+        val c = cos(rad).toFloat()
+        val s = sin(rad).toFloat()
+        val ink = if (hot) accentHi else accent
+        drawLine(ink, Offset(cx + c * bodyR * 0.26f, cy + s * bodyR * 0.26f), Offset(cx + c * bodyR * 0.86f, cy + s * bodyR * 0.86f), 2.4f * px)
+        drawCircle(ink, 2.6f * px, Offset(cx + c * bodyR * 0.86f, cy + s * bodyR * 0.86f))
+        drawCircle(Color.Black.copy(alpha = 0.4f), 2.6f * px, Offset(cx + c * bodyR * 0.86f, cy + s * bodyR * 0.86f), style = thin)
+        if (ring()) drawCircle(accent.copy(alpha = 0.85f), r + 3 * px, Offset(cx, cy), style = ringStroke)
+    }
 }

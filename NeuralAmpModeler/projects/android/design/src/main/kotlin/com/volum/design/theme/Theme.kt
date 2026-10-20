@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlin.math.floor
 import androidx.compose.ui.Modifier.Node as ModifierNode
 
 /** The text style [VText] falls back to: Josefin Bold, the desktop's label face. */
@@ -52,7 +53,8 @@ fun VoLumTheme(content: @Composable () -> Unit) {
     )
 }
 
-private val VoLumSelectionColors = TextSelectionColors(handleColor = VoLumColors.Gold, backgroundColor = VoLumColors.Gold.withOpacity(0.32f))
+/** The name dialog's selection: amber wash (`IColor(90, 232, 168, 92)`), gold handles. */
+private val VoLumSelectionColors = TextSelectionColors(handleColor = VoLumColors.Gold, backgroundColor = ic(90, 232, 168, 92))
 
 /**
  * Press state of every clickable: the brass wash the desktop shows on hover,
@@ -115,7 +117,9 @@ fun VText(
 
 /**
  * Desktop auto-shrink (`VoLumAmpList` names 13 -> 10.5, pedal-card footers 11.5 -> 8):
- * steps the size down by 0.5 sp until the line fits, then hard-clips.
+ * the largest size on the 0.5 sp grid at which the line fits, then a hard clip
+ * at [minSize]. The first overflowing layout jumps straight to the size its
+ * measured width calls for, so a busy frame settles in one or two passes.
  * Hidden until it has settled, so it never flashes the overflowing size.
  */
 @Composable
@@ -138,7 +142,18 @@ fun VFitText(
         softWrap = false,
         maxLines = 1,
         onTextLayout = { r ->
-            if (r.didOverflowWidth && size - 0.5f >= minSize.value) size -= 0.5f else settled = 1f
+            if (r.didOverflowWidth && size - 0.5f >= minSize.value) size = fitSize(size, r.layoutInput.constraints.maxWidth.toFloat(), r.multiParagraph.intrinsics.maxIntrinsicWidth, minSize.value)
+            else settled = 1f
         },
     )
+}
+
+/**
+ * The next size [VFitText] tries after a line of [needed] px overflowed [available] px at
+ * [size] sp: text width scales with the size, so the estimate is `size * available / needed`
+ * rounded down to the 0.5 sp grid, at least one step below [size] and never below [min].
+ */
+internal fun fitSize(size: Float, available: Float, needed: Float, min: Float): Float {
+    val guess = if (needed > 0f && available > 0f) floor(size * available / needed * 2f) / 2f else size - 0.5f
+    return guess.coerceAtMost(size - 0.5f).coerceAtLeast(min)
 }
