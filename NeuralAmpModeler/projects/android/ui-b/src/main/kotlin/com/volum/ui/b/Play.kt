@@ -268,13 +268,13 @@ private fun SoundTile(s: VoLumState, program: Int, sound: Sound, order: List<Int
             }
             .clickable(source, null, role = Role.Button) {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                st.go(Action.RecallSound(program))
+                st.go(if (valid) Action.RecallSound(program) else Action.Open(Overlay.SoundPicker(program, replace = true)))
             }
             .semantics {
                 customActions = listOf(moveDown, moveUp)
-                contentDescription = "Program ${twoDigit(program)}"
+                contentDescription = if (valid) "Program ${twoDigit(program)}" else "Program ${twoDigit(program)}: invalid, tap to replace"
             }
-            .ids(if (valid) arrayOf("play.sound.recall", "play.sound.reorder") else arrayOf("play.sound.invalid", "play.sound.reorder")),
+            .ids(if (valid) arrayOf("play.sound.recall", "play.sound.reorder") else arrayOf("play.sound.invalid", "play.sound.reorder", "play.sound.replace")),
     ) {
         if (live && valid && amp != null) {
             PlayStagePanel(ArtRef.of(amp), st.input, Modifier.fillMaxSize().featureId("play.art"), animate = s.signal.animateArt)
@@ -302,7 +302,7 @@ private fun SoundTile(s: VoLumState, program: Int, sound: Sound, order: List<Int
                 }
             } else {
                 FitText("Invalid slot", VoLumType.label(14.sp, VoLumColors.Danger), Modifier.fillMaxWidth().height(22.dp), align = TextAlign.Start)
-                FitText("its preset was deleted · REPLACE or CLEAR it", VoLumType.body(10.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
+                FitText("preset deleted · tap to replace", VoLumType.body(11.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
             }
         }
     }
