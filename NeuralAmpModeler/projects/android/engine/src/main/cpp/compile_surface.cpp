@@ -5,6 +5,7 @@
 #include "ImpulseResponse.h"
 #include "NoiseGate.h"
 #include "RecursiveLinearFilter.h"
+#include "Resample.h"
 #include "Reverb.h"
 #include "dsp.h"
 #include "wav.h"
