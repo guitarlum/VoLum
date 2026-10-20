@@ -78,7 +78,7 @@ object ScreenRegistry {
         ScreenSpec(ScreenId.AUDIO_STATUS, "default", listOf("mic_denied", "mic_denied_permanent", "no_interface", "interface_unplugged")),
         ScreenSpec(ScreenId.PACK_EXPORT, "default", listOf("export_sounds", "export_sounds_support")),
         ScreenSpec(ScreenId.PACK_IMPORT, "default", listOf("pack_preview", "pack_conflict", "pack_damaged", "pack_refused")),
-        ScreenSpec(ScreenId.DESIGN_GALLERY, "default", listOf("default"), Scope.DESIGN),
+        ScreenSpec(ScreenId.DESIGN_GALLERY, "default", listOf("default", "pre_nam1", "gallery_tokens", "gallery_controls", "gallery_dialogs", "gallery_arts", "gallery_motifs"), Scope.DESIGN),
     )
 
     private val byScreen = specs.associateBy { it.screen }
