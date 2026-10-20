@@ -125,11 +125,12 @@ smoke() {
   # shellcheck disable=SC1091
   source "$ROOT/env.sh"
   log "booting $AVD_NAME headless"
+  # The adb server and the emulator outlive this script; neither may inherit the lock fd.
+  adb start-server >/dev/null
   exec 9>"$ROOT/locks/emu.lock"
   flock -w 600 9
-  adb start-server >/dev/null
   emulator -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -port 5554 \
-    > "$ROOT/logs/emu-smoke.log" 2>&1 &
+    > "$ROOT/logs/emu-smoke.log" 2>&1 9>&- &
   local pid=$!
   adb -s emulator-5554 wait-for-device
   local t=0
