@@ -32,8 +32,9 @@ LOGS="$OUT/logs"
 mkdir -p "$RES" "$LOGS"
 
 SERIAL="emulator-5554"
-# Every adb call closes the lock fds: an adb server it spawns daemonizes and would keep the lock.
-adbx() { adb -s "$SERIAL" "$@" 8>&- 9>&-; }
+# Every adb call closes the lock fds (an adb server it spawns daemonizes and would keep
+# the lock) and reads no stdin (adb shell would swallow the registry lists the loops read).
+adbx() { adb -s "$SERIAL" "$@" < /dev/null 8>&- 9>&-; }
 AVD="volum_phone"
 PKG="com.volum.android.$FLAVOR"
 TEST_PKG="$PKG.test"
@@ -152,8 +153,8 @@ run_instrumented() {
   local cls="$1" report="$2"
   log "instrumented $cls"
   adbx shell run-as "$PKG" rm -f "files/harness/$report" >/dev/null 2>&1 || true
-  timeout 1800 adbx shell am instrument -w -r -e class "com.volum.harness.tests.$cls" \
-    "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" > "$LOGS/instrument-$cls.txt" 2>&1 || true
+  timeout 1800 adb -s "$SERIAL" shell am instrument -w -r -e class "com.volum.harness.tests.$cls" \
+    "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" < /dev/null > "$LOGS/instrument-$cls.txt" 2>&1 8>&- 9>&- || true
   if ! adbx shell run-as "$PKG" cat "files/harness/$report" > "$RES/$report" 2>/dev/null || [ ! -s "$RES/$report" ]; then
     python3 - "$RES/$report" "$LOGS/instrument-$cls.txt" <<'PY'
 import json, sys
@@ -261,7 +262,7 @@ step_motion() {
     skip="$(python3 -c 'import sys; print(max(0.0, float(sys.argv[2]) - float(sys.argv[1]) - 0.2))' "$t0" "$t1")"
     dur="$(python3 -c 'import sys; print(int(sys.argv[1]) / 1000.0)' "$duration_ms")"
     fps="$(python3 -c 'import sys; print(16.0 / float(sys.argv[1]))' "$dur")"
-    if "$FFMPEG" -loglevel error -y -ss "$skip" -t "$dur" -i "$OUT/motion/$id.mp4" \
+    if "$FFMPEG" -nostdin -loglevel error -y -ss "$skip" -t "$dur" -i "$OUT/motion/$id.mp4" \
         -vf "fps=$fps,scale=480:-1,tile=4x4:padding=4:margin=4:color=0x202020" -frames:v 1 "$OUT/motion/$id.png" \
         > "$LOGS/ffmpeg-$id.txt" 2>&1 && [ -s "$OUT/motion/$id.png" ]; then
       sheets+=("$id")
