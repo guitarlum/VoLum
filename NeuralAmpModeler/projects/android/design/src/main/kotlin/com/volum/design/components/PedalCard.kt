@@ -117,7 +117,7 @@ fun PedalCard(
             Modifier.align(Alignment.BottomStart).fillMaxWidth().height(22.dp).padding(start = 10.dp, end = 24.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            VFitText(title, Modifier.weight(1f), style = VoLumType.label(11.5.sp, if (on) VoLumColors.Cream else VoLumColors.CreamDim), minSize = 8.sp)
+            VFitText(title, Modifier.weight(1f), style = VoLumType.label(11.5.sp, if (on) VoLumColors.Cream else VoLumColors.CreamDim), minSize = 6.5.sp)
         }
         Led(on, onToggle, ledModifier.align(Alignment.BottomEnd))
     }

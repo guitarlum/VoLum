@@ -89,46 +89,16 @@ object SceneHeroes {
         badCatEyes(g, r, true)
     }
 
-    // ---- Brunetti XL 2: "Verdant Fern" ---------------------------------------------
-
-    fun brunetti(g: ArtCanvas, r: Box) {
-        val w = r.w
-        val h = r.h
-        ArtCommon.bloom(g, r.mw, r.t + h * 0.86f, min(w, h) * 0.8f, kTeal, 0.13f)
-        fun fern(n: Int, fh: Float, fsc: Float, bx: Float, by: Float, base: Int, tip: Int, rr: Float, a: Float, gold: Boolean) {
-            var px = 0f
-            var py = 0f
-            var s = 42
-            for (i in 0 until n) {
-                s = s * 1103515245 + 12345
-                val rv = Integer.remainderUnsigned(s, 1000) / 1000f
-                val nx: Float
-                val ny: Float
-                if (rv < 0.01f) { nx = 0f; ny = 0.16f * py }
-                else if (rv < 0.86f) { nx = 0.85f * px + 0.04f * py; ny = -0.04f * px + 0.85f * py + 1.6f }
-                else if (rv < 0.93f) { nx = 0.2f * px - 0.26f * py; ny = 0.23f * px + 0.22f * py + 1.6f }
-                else { nx = -0.15f * px + 0.28f * py; ny = 0.26f * px + 0.24f * py + 0.44f }
-                px = nx
-                py = ny
-                if (i == 0) continue
-                val sx = bx + px * fsc
-                val sy = by - py * fh
-                if (sx < r.l - 4f || sx > r.r + 4f || sy < r.t - 4f || sy > r.b + 4f) continue
-                var c = mix(base, tip, min(1f, py / 9f))
-                if (gold && py > 7.6f) c = mix(c, kGoldHi, (py - 7.6f) / 2.4f)
-                g.fillCircle(withA(c, a), sx, sy, rr)
-            }
-        }
-        fern(6000, (h * 0.78f) / 10.5f, h * 0.188f, r.l + w * 0.55f, r.t + h * 0.9f, argb(255, 45, 90, 110), kMid, 0.9f, 0.32f, false)
-        fern(11000, (h * 0.86f) / 10.5f, h * 0.207f, r.l + w * 0.5f, r.t + h * 0.94f, argb(255, 55, 120, 140), kTeal, 1.1f, 0.7f, false)
-        fern(9000, (h * 0.86f) / 10.5f, h * 0.207f, r.l + w * 0.5f, r.t + h * 0.94f, argb(255, 55, 120, 140), kTeal, 1.15f, 0.55f, true)
-    }
-
     // ---- Fryette Deliverance 120: "Spiral Galaxy" -----------------------------------
 
-    fun fryette(g: ArtCanvas, r: Box) {
+    fun fryetteBloom(g: ArtCanvas, r: Box) {
         val maxR = min(r.w, r.h) * 0.46f
         for (b in 6 downTo 1) g.fillCircle(argb(6, 120, 210, 220), r.mw, r.mh, maxR * b / 6f)
+    }
+
+    /** [bin] < 0 draws every particle; 0..2 only that radial ring. The LCG always replays in full. */
+    fun fryetteArms(g: ArtCanvas, r: Box, bin: Int = -1) {
+        val maxR = min(r.w, r.h) * 0.46f
         val f = Frand(5)
         for (arm in 0 until 2) {
             val off = arm * 3.14159f
@@ -139,13 +109,23 @@ object SceneHeroes {
                 val px = r.mw + rr * cos(theta) + (f.next() - 0.5f) * rr * 0.12f
                 val py = r.mh + rr * sin(theta) + (f.next() - 0.5f) * rr * 0.12f
                 if (px < r.l || px > r.r || py < r.t || py > r.b) continue
+                if (bin >= 0 && i * 3 / 560 != bin) continue
                 val al = (255f * (0.2f + 0.6f * (1f - t))).toInt()
                 g.fillCircle(if (t < 0.5f) argb(al, 120, 210, 220) else argb(al, 100, 180, 200), px, py, if (t < 0.2f) 1.4f else 1f)
             }
         }
+    }
+
+    fun fryetteCore(g: ArtCanvas, r: Box) {
         g.fillCircle(argb(50, 200, 165, 87), r.mw, r.mh, 10f)
         g.fillCircle(argb(90, 200, 165, 87), r.mw, r.mh, 6f)
         g.fillCircle(argb(235, 252, 222, 145), r.mw, r.mh, 4f)
+    }
+
+    fun fryette(g: ArtCanvas, r: Box) {
+        fryetteBloom(g, r)
+        fryetteArms(g, r)
+        fryetteCore(g, r)
     }
 
     // ---- Marshall JMP 2203: "Depth Triforce" ----------------------------------------
@@ -252,10 +232,19 @@ object SceneHeroes {
         }
     }
 
-    fun marshall2204(g: ArtCanvas, r: Box) {
+    fun marshall2204Glow(g: ArtCanvas, r: Box) {
         val rr = min(r.w, r.h)
         ArtCommon.bloom(g, r.mw, r.b, rr * 0.8f, kGold, 0.12f)
         ArtCommon.bloom(g, r.mw, r.mh, rr * 0.6f, kTeal, 0.06f)
+    }
+
+    fun marshall2204(g: ArtCanvas, r: Box) {
+        marshall2204Glow(g, r)
+        marshall2204Tree(g, r)
+        marshall2204Embers(g, r)
+    }
+
+    fun marshall2204Tree(g: ArtCanvas, r: Box) {
         marshallGrow(r, 9) { x, y, ex, ey, d ->
             val c = withA(mix(kDim, kTeal, max(0f, 1f - d / 6f)), 0.9f)
             if (d < 3) ArtCommon.glowLine(g, kTeal, c, x, y, ex, ey, 2.6f, 4f) else g.line(c, x, y, ex, ey, 1f)
@@ -263,6 +252,9 @@ object SceneHeroes {
         marshallGrow(r, 9) { _, _, ex, ey, d ->
             if (d >= 7) ArtCommon.glowDot(g, kGold, if (d % 2 != 0) kGoldHi else kTeal, ex, ey, 1.7f, 4f)
         }
+    }
+
+    fun marshall2204Embers(g: ArtCanvas, r: Box) {
         val f = Frand(9)
         for (i in 0 until 26) {
             val px = r.l + r.w * (0.55f + 0.4f * f.next())
@@ -331,8 +323,16 @@ object SceneHeroes {
 
     // ---- Diezel Herbert Mk1: "Lichtenberg Glow" -------------------------------------------
 
-    /** One discharge segment: x0, y0, x1, y1, tier (0 bright, 1 mid, 2 dim). */
-    fun diezelDischarge(r: Box): FloatArray {
+    /** The recorded discharge (`DiezelSeg` x n): ends, path length from its seed, parent, tier, seed root. */
+    class DiezelSegs(cap: Int) {
+        var n = 0
+        val x0 = FloatArray(cap); val y0 = FloatArray(cap); val x1 = FloatArray(cap); val y1 = FloatArray(cap)
+        val d0 = FloatArray(cap); val d1 = FloatArray(cap)
+        val up = IntArray(cap); val tier = IntArray(cap); val root = IntArray(cap)
+    }
+
+    /** `GrowDiezelDischarge`: the RNG calls, rejections and float expressions of the static art. */
+    fun diezelGrow(r: Box): DiezelSegs {
         val cx = r.mw
         val w = r.w
         val h = r.h
@@ -354,7 +354,7 @@ object SceneHeroes {
             tx[i] = cx + (f.next() - 0.5f) * w * 0.72f
             ty[i] = r.t + 18f + f.next() * (h - 36f)
         }
-        val out = ArrayList<Float>(1400 * 5)
+        val out = DiezelSegs(1400)
         for (i in 0 until 1400) {
             val ti = (f.next() * attractors).toInt() % attractors
             val trials = min(48, n)
@@ -377,27 +377,36 @@ object SceneHeroes {
             val ny = py[nearest] + sin(ang) * len
             if (nx < r.l + 14f || nx > r.r - 14f || ny < r.t + 12f || ny > r.b - 12f) continue
             if (!grid.add(key(nx, ny))) continue
-            val tier = if (i < 90) 0f else if (i < 380) 1f else 2f
-            out += px[nearest]; out += py[nearest]; out += nx; out += ny; out += tier
+            val k = out.n
+            val up = if (nearest < 2) -1 else nearest - 2
+            val d0 = if (up < 0) 0f else out.d1[up]
+            out.x0[k] = px[nearest]; out.y0[k] = py[nearest]; out.x1[k] = nx; out.y1[k] = ny
+            out.d0[k] = d0; out.d1[k] = d0 + len; out.up[k] = up
+            out.tier[k] = if (i < 90) 0 else if (i < 380) 1 else 2
+            out.root[k] = if (up < 0) nearest else out.root[up]
+            out.n++
             if (n < px.size) { px[n] = nx; py[n] = ny; n++ }
         }
-        return out.toFloatArray()
+        return out
     }
 
-    fun diezelHerbert(g: ArtCanvas, r: Box) {
-        val segs = diezelDischarge(r)
-        ArtCommon.bloom(g, r.mw, r.mh, min(r.w, r.h) * 0.55f, kTeal, 0.16f)
-        var i = 0
-        while (i + 4 < segs.size) {
-            val tier = segs[i + 4].toInt()
-            val col = when (tier) { 0 -> ArtInk.HeroBright; 1 -> ArtInk.HeroMid; else -> ArtInk.HeroDim }
-            val th = when (tier) { 0 -> 2.4f; 1 -> 1.5f; else -> 1f }
-            g.line(col, segs[i], segs[i + 1], segs[i + 2], segs[i + 3], th)
-            i += 5
+    fun diezelBloom(g: ArtCanvas, r: Box) = ArtCommon.bloom(g, r.mw, r.mh, min(r.w, r.h) * 0.55f, kTeal, 0.16f)
+
+    fun diezelDischarge(g: ArtCanvas, r: Box, s: DiezelSegs) {
+        for (i in 0 until s.n) {
+            val col = when (s.tier[i]) { 0 -> ArtInk.HeroBright; 1 -> ArtInk.HeroMid; else -> ArtInk.HeroDim }
+            val th = when (s.tier[i]) { 0 -> 2.4f; 1 -> 1.5f; else -> 1f }
+            g.line(col, s.x0[i], s.y0[i], s.x1[i], s.y1[i], th)
         }
         ArtCommon.glowDot(g, kTeal, kTeal, r.mw, r.b - 16f, 2.6f, 5f)
         ArtCommon.glowDot(g, kTeal, kTeal, r.mw, r.t + 16f, 2.6f, 5f)
         g.fillCircle(withA(kGoldHi, 0.85f), r.mw, r.b - 16f, 1.2f)
         g.fillCircle(withA(kGoldHi, 0.85f), r.mw, r.t + 16f, 1.2f)
+    }
+
+    fun diezelHerbert(g: ArtCanvas, r: Box) {
+        val segs = diezelGrow(r)
+        diezelBloom(g, r)
+        diezelDischarge(g, r, segs)
     }
 }

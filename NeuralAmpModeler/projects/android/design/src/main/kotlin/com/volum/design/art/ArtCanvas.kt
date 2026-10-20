@@ -122,9 +122,9 @@ class ArtCanvas {
         c.drawRoundRect(rect, rad, rad, stroke)
     }
 
-    fun fillEllipse(col: Int, l: Float, t: Float, r: Float, b: Float, w: Float = 1f) {
-        if (alphaOf(col) == 0) return
-        fill.ink(col, w, false)
+    fun fillEllipse(col: Int, l: Float, t: Float, r: Float, b: Float, w: Float = 1f, add: Boolean = false) {
+        if (alphaOf(col) == 0 || w <= 0f) return
+        fill.ink(col, w, add)
         rect.set(l, t, r, b)
         c.drawOval(rect, fill)
     }
@@ -265,13 +265,16 @@ class ArtCanvas {
         clearPath()
     }
 
-    fun strokePath(col: Int, width: Float, w: Float = 1f, add: Boolean = false, roundJoin: Boolean = false) {
+    /** [roundJoin] is `RoundStroke()`; with [buttCap] too, the tier stroke whose segments meet end to end. */
+    fun strokePath(col: Int, width: Float, w: Float = 1f, add: Boolean = false, roundJoin: Boolean = false, buttCap: Boolean = false) {
         flushSub(closed = false)
         if (alphaOf(col) != 0 && w > 0f) {
             val p = if (roundJoin) round else stroke
             p.ink(col, w, add)
             p.strokeWidth = width
+            if (roundJoin && buttCap) p.strokeCap = Paint.Cap.BUTT
             c.drawPath(out, p)
+            round.strokeCap = Paint.Cap.ROUND
         }
         clearPath()
     }
@@ -289,7 +292,7 @@ class ArtCanvas {
     // ---- batched live primitives (art/VoLumArtAnimator.h cookbook) ------------
 
     /** `BatchLines`: [n] segments `x0, y0, x1, y1, ...`, one round-capped stroke. */
-    fun batchLines(col: Int, width: Float, xyxy: FloatArray, n: Int, w: Float = 1f, add: Boolean = false) {
+    fun batchLines(col: Int, width: Float, xyxy: FloatArray, n: Int, w: Float = 1f, add: Boolean = false, buttCap: Boolean = false) {
         if (n <= 0 || alphaOf(col) == 0 || w <= 0f) return
         out.rewind()
         for (i in 0 until n) {
@@ -298,7 +301,9 @@ class ArtCanvas {
         }
         round.ink(col, w, add)
         round.strokeWidth = width
+        if (buttCap) round.strokeCap = Paint.Cap.BUTT
         c.drawPath(out, round)
+        round.strokeCap = Paint.Cap.ROUND
         out.rewind()
     }
 

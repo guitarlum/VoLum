@@ -31,7 +31,7 @@ object FactoryArt {
     fun hero(case: Int): HeroArt = when (norm(case)) {
         0 -> NebulaHeroes::ampeteOne
         1 -> SceneHeroes::badCat
-        2 -> SceneHeroes::brunetti
+        2 -> Brunetti::hero
         3 -> SceneHeroes::fryette
         4 -> NebulaHeroes::hkTriamp
         5 -> NebulaHeroes::lichtlaerm
@@ -46,11 +46,23 @@ object FactoryArt {
         else -> SceneHeroes::diezelHerbert
     }
 
-    /** Arts whose animator is ported move; the rest draw their static layer lit by PLAY's bloom. */
+    /** Every factory art moves on the desktop (`kArtSpecs[].animate`); each has its port here. */
     fun animator(case: Int): ArtAnimator = when (norm(case)) {
+        0 -> AmpeteOneAnimator()
+        1 -> BadCatAnimator()
+        2 -> Brunetti.animator()
+        3 -> FryetteAnimator()
         4 -> HkTriampAnimator()
+        5 -> LichtlaermAnimator()
+        6 -> Marshall2204Animator()
+        7 -> Jmp2203Animator()
+        8 -> Jvm210Animator()
+        9 -> OrangeOd120Animator()
+        10 -> OrangeOrs100Animator()
+        11 -> SebagoAnimator()
         12 -> SoldanoAnimator()
         13 -> ThcSunset.animator()
+        14 -> DiezelHerbertAnimator()
         else -> StaticArtAnimator(hero(case))
     }
 }

@@ -47,6 +47,7 @@ import com.volum.design.art.AmpThumbnail
 import com.volum.design.art.ArtInput
 import com.volum.design.art.ArtRef
 import com.volum.design.art.Motif
+import com.volum.design.art.MovingArt
 import com.volum.design.art.amps.FactoryArt
 import com.volum.design.art.rememberArtFrames
 import com.volum.design.components.AmpTitle
@@ -201,7 +202,8 @@ internal fun TokensPage() {
                 Box(Modifier.size(96.dp, 64.dp).insetWell(), contentAlignment = Alignment.Center) { Caption("inset well") }
             }
             Spacer(Modifier.width(110.dp).height(12.dp).diamondRule())
-            Caption("spacing 4 / 8 / 12 / 18 / 28  ·  radius 3 / 4 / 8")
+            Caption("spacing 4 / 8 / 12 / 18 / 28")
+            Caption("radius 3 / 4 / 8  ·  stroke 1 / 1.6 / 2.2")
         }
     }
 }
@@ -305,14 +307,21 @@ internal fun DialogsPage(store: VoLumStore, s: VoLumState) {
 // ---- Every factory hero art --------------------------------------------------------
 
 @Composable
-internal fun ArtsPage() {
+internal fun ArtsPage(store: VoLumStore) {
+    val input = remember(store) { storeInput(store) }
+    var moving by remember { mutableStateOf(true) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Caption("EVERY FACTORY ART  ·  PLAY motion at the engine's energy, picks on", Modifier.weight(1f))
+            VoLumSegmentSwitch("MOVING", "STATIC", !moving, { moving = !it }, Modifier.width(170.dp))
+        }
         FactoryArt.specs.chunked(5).forEach { row ->
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { spec ->
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Box(Modifier.fillMaxWidth().weight(1f).panelDepth().hairlineFrame(VoLumColors.HeroBorder).cornerBrackets(VoLumColors.HeroCorner, 10.dp, 4.dp)) {
-                            AmpArt(ArtRef.factory(spec.case), Modifier.fillMaxSize().padding(4.dp))
+                            if (moving) MovingArt(ArtRef.factory(spec.case), input, Modifier.fillMaxSize().padding(4.dp))
+                            else AmpArt(ArtRef.factory(spec.case), Modifier.fillMaxSize().padding(4.dp))
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             AmpThumbnail(ArtRef.factory(spec.case), Modifier.size(14.dp))
@@ -328,7 +337,8 @@ internal fun ArtsPage() {
 // ---- Motifs, quiet slots, custom arts, thumbnails ----------------------------------
 
 @Composable
-internal fun MotifsPage() {
+internal fun MotifsPage(store: VoLumStore) {
+    val input = remember(store) { storeInput(store) }
     val labels = mapOf(Motif.PITCH to "+0 st", Motif.COMP to "Compressor", Motif.NAM1 to "Klon", Motif.NAM2 to "TS", Motif.CHORUS to "Ensemble . 50 %", Motif.DELAY to "Digital . 320 ms", Motif.REVERB to "Hall . 20 %", Motif.TREM to "Bias . 5.0 Hz")
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth().weight(1.25f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -344,7 +354,7 @@ internal fun MotifsPage() {
                 Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     (0 until 6).forEach { st ->
                         Box(Modifier.weight(1f).fillMaxHeight().background(VoLumColors.HeroBg).hairlineFrame(VoLumColors.HeroBorder)) {
-                            AmpArt(ArtRef.custom(st), Modifier.fillMaxSize().padding(4.dp))
+                            MovingArt(ArtRef.custom(st), input, Modifier.fillMaxSize().padding(4.dp))
                         }
                     }
                 }

@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.volum.design.art.ArtCanvas
 import com.volum.design.art.ArtCommon
@@ -122,7 +123,7 @@ fun PlayBanner(title: String, modifier: Modifier = Modifier, program: Int? = nul
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        if (program != null) VText(twoDigits(program), Modifier.width(36.dp), style = VoLumType.value(19.sp, VoLumColors.Gold))
+        if (program != null) VText(twoDigits(program), Modifier.widthIn(min = 36.dp), style = VoLumType.value(19.sp, VoLumColors.Gold), overflow = TextOverflow.Visible)
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             VText(title, Modifier.weight(1f, fill = false), style = VoLumType.SoundTitle)
             if (secondary != null) VText(secondary, style = VoLumType.label(10.sp, VoLumColors.TealDim))

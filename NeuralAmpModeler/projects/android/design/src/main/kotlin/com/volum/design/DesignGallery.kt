@@ -80,8 +80,8 @@ fun DesignGallery(store: VoLumStore, modifier: Modifier = Modifier) {
                     GalleryPage.TOKENS -> TokensPage()
                     GalleryPage.CONTROLS -> ControlsPage(store)
                     GalleryPage.DIALOGS -> DialogsPage(store, state)
-                    GalleryPage.ARTS -> ArtsPage()
-                    GalleryPage.MOTIFS -> MotifsPage()
+                    GalleryPage.ARTS -> ArtsPage(store)
+                    GalleryPage.MOTIFS -> MotifsPage(store)
                 }
             }
         }
