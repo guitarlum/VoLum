@@ -18,7 +18,6 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("Sync", "Build", "Unit", "Test", "Capture", "Motion", "Fetch")]
   [string[]] $Step,
   [ValidateSet("a", "b", "c", "design")]
   [string] $Candidate = "a",
@@ -27,6 +26,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$validSteps = @("Sync", "Build", "Unit", "Test", "Capture", "Motion", "Fetch")
+$Step = @($Step | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+foreach ($s in $Step) { if ($s -notin $validSteps) { throw "unknown step '$s' (use $($validSteps -join ', '))" } }
 $BoxHost = "lum@192.168.178.91"
 $BoxKey = "C:/Users/SteffenDangmann/.ssh/volum_a2_pc"
 $BoxRepo = "ssh://lum@192.168.178.91/home/lum/volum-android/VoLum.git"
