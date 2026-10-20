@@ -37,6 +37,11 @@ class FeatureSpecTest(private val id: String) {
             val target = FeatureRegistry.dragTarget(p, before.param(p))
             assertTrue("drag moved away from its target", (after.param(p) - before.param(p)) * (target - before.param(p)) > 0)
         }
+        val opposite = spec.opposite ?: return
+        val reversed = VoLumStore.forScreen(screen, spec.fixture)
+        reversed.dispatch(opposite(before))
+        assertTrue("the opposite action ${opposite(before)} must change the state, or rejecting it proves nothing", reversed.current != before)
+        assertFalse("a control wired the wrong way round (${opposite(before)}) passes the check", spec.check(before, reversed.current))
     }
 
     private fun <T : Any> assertNotNullAnd(v: T?): T {

@@ -19,17 +19,30 @@ object Reducer {
         is Action.SelectAmp -> selectAmp(s, a.ampId)
         is Action.SelectChannel -> selectChannel(s, a.channel)
         is Action.SelectCab -> selectCab(s, a.cab)
-        is Action.SelectIr -> s.rig { it.copy(cab = Cab.CUSTOM_IR, irId = a.irId, dirty = true) }.pop<Overlay.IrMenu>()
-        is Action.SelectSupportAmp -> s.rig { it.copy(support = it.support.copy(ampId = a.ampId, channel = 0, irId = null), dirty = true) }
+        is Action.SelectIr -> if (s.supportFocused) selectSupportIr(s, a.irId)
+        else if (s.library.ir(a.irId) == null) s
+        else s.rig { it.copy(cab = Cab.CUSTOM_IR, irId = a.irId, dirty = true) }.pop<Overlay.IrMenu>()
+        is Action.SelectSupportIr -> selectSupportIr(s, a.irId)
+        is Action.SelectSupportAmp -> s.rig {
+            val cab = if (it.support.cab == Cab.CUSTOM_IR) stockCab(s.library.amp(a.ampId), 0) else it.support.cab
+            it.copy(support = it.support.copy(ampId = a.ampId, channel = 0, cab = cab, irId = null), dirty = true)
+        }
             .let { if (a.ampId == null) it.ui(it.ui.copy(lane = Lane.MAIN)) else it }
             .pop<Overlay.SupportAmpMenu>()
         is Action.SelectSupportChannel -> {
             val amp = s.library.amp(s.rig.support.ampId)
             if (amp == null || a.channel !in 0 until amp.channels) s
-            else s.rig { it.copy(support = it.support.copy(channel = a.channel), dirty = true) }
+            else s.rig {
+                val leavesIr = it.support.cab == Cab.CUSTOM_IR && a.channel !in amp.noCabChannels
+                val support = if (leavesIr) it.support.copy(channel = a.channel, cab = stockCab(amp, a.channel), irId = null) else it.support.copy(channel = a.channel)
+                it.copy(support = support, dirty = true)
+            }
         }
-        is Action.SelectSupportCab -> if (s.rig.support.ampId == null) s
-        else s.rig { it.copy(support = it.support.copy(cab = a.cab), dirty = true) }
+        is Action.SelectSupportCab -> {
+            val amp = s.library.amp(s.rig.support.ampId)
+            if (amp == null || (a.cab == Cab.CUSTOM_IR && (s.rig.support.channel !in amp.noCabChannels || s.rig.support.irId == null))) s
+            else s.rig { it.copy(support = it.support.copy(cab = a.cab), dirty = true) }
+        }
         is Action.SetLock -> setLock(s, a.section, a.locked)
         is Action.StoreLock -> storeLock(s, a.section)
         is Action.SelectCapture -> {
@@ -256,10 +269,45 @@ object Reducer {
         val amp = s.amp ?: return s
         if (ch !in 0 until amp.channels || ch == s.rig.channel) return s
         return s.rig {
-            val cab = if (it.cab == Cab.CUSTOM_IR && ch !in amp.noCabChannels) Cab.G12 else it.cab
+            val cab = if (it.cab == Cab.CUSTOM_IR && ch !in amp.noCabChannels) stockCab(amp, ch) else it.cab
             it.copy(channel = ch, cab = cab, dirty = true)
         }
     }
+
+    private fun selectSupportIr(s: VoLumState, irId: String): VoLumState {
+        val amp = s.library.amp(s.rig.support.ampId) ?: return s
+        if (s.library.ir(irId) == null || s.rig.support.channel !in amp.noCabChannels) return s
+        return s.rig { it.copy(support = it.support.copy(cab = Cab.CUSTOM_IR, irId = irId), dirty = true) }.pop<Overlay.IrMenu>()
+    }
+
+    /** The real cab a lane takes when it leaves Custom IR: cab 1 on a bundled amp, a custom amp's first real cab on [channel], else No Cab. */
+    fun stockCab(amp: Amp?, channel: Int): Cab =
+        if (amp?.custom != true) Cab.G12
+        else amp.files.filter { it.channel - 1 == channel && it.cabSlot > 0 }.minOfOrNull { it.cabSlot }?.let { Cab.entries[it] } ?: Cab.NONE
+
+    /** Desktop "deleting a playing IR": keep the channel when a real cab covers it, else the custom amp's first real cab; No Cab only without one. */
+    private fun irFallback(amp: Amp?, channel: Int): Pair<Int, Cab> {
+        val here = stockCab(amp, channel)
+        if (here != Cab.NONE || amp == null) return channel to here
+        val first = amp.files.filter { it.cabSlot > 0 }.minByOrNull { it.channel } ?: return channel to Cab.NONE
+        return (first.channel - 1) to Cab.entries[first.cabSlot]
+    }
+
+    private fun dropIr(lib: Library, ampId: String, r: Rig, irId: String): Rig {
+        var n = r
+        if (r.irId == irId) {
+            val (ch, cab) = if (r.cab == Cab.CUSTOM_IR) irFallback(lib.amp(ampId), r.channel) else r.channel to r.cab
+            n = n.copy(irId = null, channel = ch, cab = cab)
+        }
+        if (r.support.irId == irId) {
+            val (ch, cab) = if (r.support.cab == Cab.CUSTOM_IR) irFallback(lib.amp(r.support.ampId), r.support.channel) else r.support.channel to r.support.cab
+            n = n.copy(support = n.support.copy(irId = null, channel = ch, cab = cab))
+        }
+        return n
+    }
+
+    private fun dropSupportAmp(r: Rig, ampId: String): Rig =
+        if (r.support.ampId != ampId) r else r.copy(support = SupportLane(), params = r.params + (Param.DUAL_ON to 0.0))
 
     private fun selectCab(s: VoLumState, cab: Cab): VoLumState {
         val amp = s.amp ?: return s
@@ -361,19 +409,19 @@ object Reducer {
             )
             val ampId = if (s.ampId == c.targetId) Catalog.ampId(0) else s.ampId
             val rigs = (s.rigs - c.targetId).let { if (ampId in it) it else it + (ampId to Catalog.defaultRig(lib.amp(ampId)!!)) }
-            s.copy(library = lib, ampId = ampId, rigs = rigs.mapValues { (_, r) ->
-                if (r.support.ampId == c.targetId) r.copy(support = SupportLane()) else r
-            })
+            val n = s.copy(
+                library = lib.copy(presets = lib.presets.map { it.copy(rig = dropSupportAmp(it.rig, c.targetId)) }),
+                ampId = ampId,
+                rigs = rigs.mapValues { (_, r) -> dropSupportAmp(r, c.targetId) },
+            )
+            if (n.dual) n else n.ui(n.ui.copy(lane = Lane.MAIN))
         }
         ConfirmKind.DELETE_IR -> {
             val lib = s.library.copy(irs = s.library.irs.filter { it.id != c.targetId })
-            s.copy(library = lib, rigs = s.rigs.mapValues { (ampId, r) ->
-                val stock = if (s.library.amp(ampId)?.custom == true) Cab.NONE else Cab.G12
-                var n = r
-                if (r.irId == c.targetId) n = n.copy(irId = null, cab = if (r.cab == Cab.CUSTOM_IR) stock else r.cab)
-                if (r.support.irId == c.targetId) n = n.copy(support = n.support.copy(irId = null, cab = if (n.support.cab == Cab.CUSTOM_IR) Cab.G12 else n.support.cab))
-                n
-            })
+            s.copy(
+                library = lib.copy(presets = lib.presets.map { it.copy(rig = dropIr(lib, it.ampId, it.rig, c.targetId)) }),
+                rigs = s.rigs.mapValues { (ampId, r) -> dropIr(lib, ampId, r, c.targetId) },
+            )
         }
         ConfirmKind.DELETE_PEDAL -> {
             val idx = c.targetId.toDoubleOrNull() ?: -1.0

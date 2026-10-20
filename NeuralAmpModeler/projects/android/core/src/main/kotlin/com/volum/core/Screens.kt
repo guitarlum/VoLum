@@ -56,7 +56,7 @@ object ScreenRegistry {
     val specs: List<ScreenSpec> = listOf(
         ScreenSpec(ScreenId.PLAY, "default", listOf("default", "first_launch", "invalid_slot", "update_available", "mic_denied")),
         ScreenSpec(ScreenId.PLAY_PICKER, "default", listOf("default")),
-        ScreenSpec(ScreenId.BUILD_AMP, "default", listOf("default", "dual_amp", "dual_amp_support", "output_safety", "load_failed", "custom_amp_no_direct")),
+        ScreenSpec(ScreenId.BUILD_AMP, "default", listOf("default", "dual_amp", "dual_amp_support", "dual_support_ir", "output_safety", "load_failed", "custom_amp_no_direct")),
         ScreenSpec(ScreenId.BUILD_PRE, "default", listOf("pre_pitch", "pre_pitch_transpose", "pre_comp", "pre_nam1", "pre_locked_differs")),
         ScreenSpec(ScreenId.BUILD_POST, "default", listOf("post_chorus", "post_delay", "post_delay_sync", "post_reverb_okt", "post_trem_harmonic")),
         ScreenSpec(ScreenId.AMP_PICKER, "default", listOf("default")),
@@ -76,7 +76,7 @@ object ScreenRegistry {
         ScreenSpec(ScreenId.SETTINGS_SYSTEM, "default", listOf("default", "update_available")),
         ScreenSpec(ScreenId.SETTINGS_AUDIO, "default", listOf("default", "midi_device_lost")),
         ScreenSpec(ScreenId.AUDIO_STATUS, "default", listOf("mic_denied", "mic_denied_permanent", "no_interface", "interface_unplugged")),
-        ScreenSpec(ScreenId.PACK_EXPORT, "default", listOf("export_sounds")),
+        ScreenSpec(ScreenId.PACK_EXPORT, "default", listOf("export_sounds", "export_sounds_support")),
         ScreenSpec(ScreenId.PACK_IMPORT, "default", listOf("pack_preview", "pack_conflict", "pack_damaged", "pack_refused")),
         ScreenSpec(ScreenId.DESIGN_GALLERY, "default", listOf("default"), Scope.DESIGN),
     )

@@ -27,10 +27,12 @@ sealed interface Action {
     data class SelectAmp(val ampId: String) : Action
     data class SelectChannel(val channel: Int) : Action
     data class SelectCab(val cab: Cab) : Action
+    /** The IR menu's row: plays the IR on the focused lane, like the desktop's shared Custom IR menu. */
     data class SelectIr(val irId: String) : Action
     data class SelectSupportAmp(val ampId: String?) : Action
     data class SelectSupportChannel(val channel: Int) : Action
     data class SelectSupportCab(val cab: Cab) : Action
+    data class SelectSupportIr(val irId: String) : Action
     data class SetLock(val section: Section, val locked: Boolean) : Action
     data class StoreLock(val section: Section) : Action
     data class SelectCapture(val slot: Int, val index: Int) : Action

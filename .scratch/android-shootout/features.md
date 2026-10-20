@@ -22,6 +22,10 @@ the reducer):
 
 When several nodes carry one id (list rows, channel options), the harness tries
 them in order, from a fresh fixture each time, until one satisfies the check.
+Prev / Next controls (`header.preset.*`, `play.sound.*`, `midi.bank.*`) pass only
+when they land where the desktop steps in their own direction: presets and Sounds
+wrap at both ends, MIDI banks stop at the first and last bank. A control that
+steps the other way fails.
 Screen ids and fixtures live in `:core` (`ScreenRegistry`, `Fixtures`); the
 fixture each feature starts from is in `FeatureRegistry`.
 
@@ -96,6 +100,7 @@ fixture each feature starts from is in `FeatureRegistry`.
 | id | desktop source | Android mapping | screen | interaction | N/A reason |
 | --- | --- | --- | --- | --- | --- |
 | amp.list.select | §Amps And Cabs "Pick an amp in the left list" / `kCtrlTagVoLumAmpList` | amp list row | amp.picker | tap | |
+| amp.list.select_custom | §The BUILD Screen 1 "your own amps under CUSTOM" / `kCtrlTagVoLumAmpList` CUSTOM rows, `mVolumCustomMainIdx` | custom amp row plays that amp | amp.picker | tap | |
 | amp.list.custom | §The BUILD Screen 1 "your own amps under CUSTOM" | CUSTOM group in the amp list (the list may be its own panel or shown in place; reachability checks it is at most 3 taps from home) | amp.picker | view | |
 | amp.name | §The BUILD Screen 2 / `kCtrlTagVoLumAmpName`, `VoLumHero` | amp title (Poiret One) on the hero art | build.amp | view | |
 | amp.hero | §The BUILD Screen 2 / `kCtrlTagVoLumHeroImage`, `VoLumHero.h` | sunset hero / per-amp art | build.amp | view | |
@@ -128,13 +133,17 @@ fixture each feature starts from is in `FeatureRegistry`.
 | dual.focus.support | §Dual Amp 4 "Click ... SUPPORT" (Tab) | SUPPORT lane choice | build.amp | select | |
 | dual.support.choose | §Dual Amp 3 "Choose support amp" / `kCtrlTagVoLumSupportAmpMenu` | empty SUPPORT lane opens the support amp list | build.amp | tap | |
 | dual.support.select | §Dual Amp 3 / `kSupportAmpIdx` | support amp row | support.amp_menu | tap | |
+| dual.support.select_custom | §Dual Amp 3 + §The BUILD Screen 1 "your own amps under CUSTOM" / `_VolumShowSupportAmpMenu` CUSTOM group, `mVolumCustomSupportIdx` | custom amp row in the support amp list | support.amp_menu | tap | |
 | dual.support.none | §Dual Amp 3 "(none) empties it again" | (none) row | support.amp_menu | tap | |
 | dual.support.close | §Keyboard Shortcuts `Esc` | close the support amp list | support.amp_menu | tap | |
 | dual.pan.main | §Dual Amp "a small PAN knob" / `kMainAmpPan` | MAIN PAN knob | build.amp | drag | |
 | dual.pan.support | §Dual Amp / `kSupportAmpPan` | SUPPORT PAN knob | build.amp | drag | |
 | dual.polarity | §Dual Amp "Ø (polarity) button, on by default" | SUPPORT Ø switch | build.amp | toggle | |
 | dual.support.channel | §Dual Amp "Each side has its own channel" / `kSupportChannelIdx`, `kCtrlTagVoLumSupportChannelStep` | SUPPORT channel | build.amp | select | |
-| dual.support.cab | §Dual Amp "cab or IR" / `kSupportSpeakerIdx`, `kSupportIRToggle` | SUPPORT cab choice | build.amp | select | |
+| dual.support.cab | §Dual Amp "cab or IR" / `kSupportSpeakerIdx` | SUPPORT stock cab choice | build.amp | select | |
+| dual.support.cab.custom_ir | §Dual Amp "Each side has its own channel, cab or IR" + §Custom IRs "Click Custom IR in the cab row" / `kCtrlTagVoLumSpeakerRow` with SUPPORT focused, `kCtrlTagVoLumIrMenu` | Custom IR in the SUPPORT cab choice opens the IR menu for SUPPORT | build.amp | tap | |
+| dual.support.cab.custom_ir_disabled | §Custom IRs "On other channels the Custom IR button is greyed out", on a custom SUPPORT amp / `volum::custom::ChannelHasDirect` | SUPPORT Custom IR shown disabled on a channel without a No Cab capture | build.amp | view | |
+| dual.support.ir.select | §Dual Amp "cab or IR" + §Custom IRs 3 "Pick the IR from the Custom IR menu" / `kSupportIRToggle`, scene `supportActiveIrId` (the menu acts on the focused lane) | IR row picked while SUPPORT is focused plays on SUPPORT; MAIN keeps its cab and IR | cab.ir_menu | tap | |
 | dual.support.knob.input | §Dual Amp "knobs" / `kSupportInputLevel` | SUPPORT INPUT | build.amp | drag | |
 | dual.support.knob.gate | `kSupportNoiseGateThreshold` | SUPPORT GATE | build.amp | drag | |
 | dual.support.knob.bass | `kSupportToneBass` | SUPPORT BASS | build.amp | drag | |
@@ -192,6 +201,7 @@ fixture each feature starts from is in `FeatureRegistry`.
 | pre.nam2.treble | `kPreNam2Treble` | NAM 2 TREBLE | build.pre | drag | |
 | pre.nam2.level | `kPreNam2Level` | NAM 2 LEVEL | build.pre | drag | |
 | pre.capture.select | §NAM Pedals capture menu / `kPreNam1Capture`, `kPreNam2Capture` | capture row | pre.capture_menu | tap | |
+| pre.capture.select_custom | §NAM Pedals "Your own pedals appear under CUSTOM" / `kPreNam1Capture` custom index (64 and up) | custom pedal row loads that capture | pre.capture_menu | tap | |
 | pre.capture.empty | menu row 0 EMPTY / `VoLumSceneRig.inc.cpp` | empty the slot | pre.capture_menu | tap | |
 | pre.capture.custom | §NAM Pedals "Your own pedals appear under CUSTOM" | CUSTOM group | pre.capture_menu | view | |
 | pre.capture.manage | §Custom Pedals "Manage custom pedals..." | opens custom pedal management | pre.capture_menu | tap | |
@@ -362,7 +372,7 @@ fixture each feature starts from is in `FeatureRegistry`.
 | pedal.rename | `kRowRenameBase` | rename a pedal | custom.pedal_manage | tap | |
 | pedal.delete | §Deleting Content / `kRowDeleteBase` | delete a pedal (asks first) | custom.pedal_manage | tap | |
 | pedal.manage.close | `kClose` | close pedal management | custom.pedal_manage | tap | |
-| content.delete_fallback | §Deleting Content "a deleted amp falls back ... a deleted IR returns to a stock cab" | same fallbacks | - | engine | |
+| content.delete_fallback | §Deleting Content "a deleted amp falls back ... a deleted IR returns to a stock cab" | same fallbacks on MAIN and SUPPORT; deleting the custom SUPPORT amp switches Dual Amp off | - | engine | |
 
 ## Packs
 
@@ -376,6 +386,7 @@ fixture each feature starts from is in `FeatureRegistry`.
 | pack.export.sound_tick | §Export "the presets you tick" | tick a Sound | pack.export | toggle | |
 | pack.export.amp_pick | §Export "a custom amp with all its presets" | pick the custom amp | pack.export | select | |
 | pack.export.also | §Export "ALSO INCLUDING lists what your choice needs" | ALSO INCLUDING band | pack.export | view | |
+| pack.export.also.support | §Export "ALSO INCLUDING ... like an IR or a pedal" / `VoLumPack.h` closure over `activeIrId`, `supportActiveIrId`, `supportCustomId` | a Dual Amp preset also brings its SUPPORT custom IR and custom SUPPORT amp | - | engine | |
 | pack.export.save | §Export / `VOLUM_PACK_SAVE_PATH` path | Storage Access Framework create-document | pack.export | file | |
 | pack.export.close | `kClose` | close export | pack.export | tap | |
 | pack.import.rows | §Import "The preview lists everything in the Pack" | preview rows | pack.import | view | |
@@ -469,14 +480,15 @@ Every `EParams` entry (`NeuralAmpModeler/VoLumParams.h`):
 | kReverbActive, kReverbMix, kReverbDecay, kReverbTone, kReverbPreDelay, kReverbShimmer, kReverbMode, kReverbSubMode | post.reverb.on, post.reverb.mix, post.reverb.decay, post.reverb.tone, post.reverb.predelay, post.reverb.intensity, post.reverb.mode.*, post.reverb.sub.* |
 | kBoostActive, kBoostDrive, kBoostTone, kBoostLevel | pre.boost (N/A) |
 | kPreCompActive, kPreCompAmount, kPreCompRatio, kPreCompAttack, kPreCompRelease, kPreCompMix, kPreCompLevel | pre.comp.on, pre.comp.input, pre.comp.ratio (N/A), pre.comp.attack, pre.comp.release, pre.comp.mix (N/A), pre.comp.output |
-| kPreNam1Active … kPreNam1Level | pre.nam1.on, pre.capture.select, pre.nam1.gain/bass/mid/midhz/treble/level |
-| kPreNam2Active … kPreNam2Level | pre.nam2.on, pre.capture.select, pre.nam2.gain/bass/mid/midhz/treble/level |
+| kPreNam1Active … kPreNam1Level | pre.nam1.on, pre.capture.select/select_custom, pre.nam1.gain/bass/mid/midhz/treble/level |
+| kPreNam2Active … kPreNam2Level | pre.nam2.on, pre.capture.select/select_custom, pre.nam2.gain/bass/mid/midhz/treble/level |
 | kCalibrateInput, kInputCalibrationLevel, kOutputMode | signal.calibration.on, signal.calibration.level, signal.output.* |
 | kVoLumAmpeteRig | amp.channel, amp.cab.* (Ampete One maps channel + cab to its rig file) |
 | kDualAmpActive, kDualAmpRoute, kMainAmpPan | dual.toggle, dual.route (N/A), dual.pan.main |
-| kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx | dual.support.select/none, dual.support.cab, dual.support.channel |
+| kSupportAmpIdx, kSupportSpeakerIdx, kSupportChannelIdx | dual.support.select/select_custom/none, dual.support.cab, dual.support.channel |
 | kSupportInputLevel … kSupportOutputLevel | dual.support.knob.* |
-| kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan, kSupportIRToggle | dual.support.gate.toggle, dual.support.eq.toggle, dual.pan.support, dual.support.cab |
+| kSupportNoiseGateActive, kSupportEQActive, kSupportAmpPan | dual.support.gate.toggle, dual.support.eq.toggle, dual.pan.support |
+| kSupportIRToggle | dual.support.cab.custom_ir, dual.support.ir.select, dual.support.cab.custom_ir_disabled |
 | kPrePitchActive, kPrePitchMode, kPrePitchSemitones, kPrePitchMix, kPrePitchOctDown, kPrePitchOctUp, kPrePitchDry, kPrePitchVoicing, kPrePitchLevel, kPrePitchTransChar | pre.pitch.on, pre.pitch.mode.*, pre.pitch.semi, pre.pitch.mix, pre.pitch.octdown, pre.pitch.octup, pre.pitch.dry, pre.pitch.voicing.*, pre.pitch.level / pre.pitch.oct_level, pre.pitch.char.* |
 | kTremoloActive, kTremoloMode, kTremoloRate, kTremoloDepth, kTremoloShape, kTremoloMix, kTremoloCrossover, kTremoloSync, kTremoloDivision | post.trem.on, post.trem.mode.*, post.trem.rate, post.trem.depth, post.trem.shape, post.trem.mix, post.trem.xover, post.trem.sync, post.trem.division |
 | kChorusActive, kChorusMode, kChorusRate, kChorusDepth, kChorusTone, kChorusWidth, kChorusMix | post.chorus.on, post.chorus.mode.*, post.chorus.rate, post.chorus.depth, post.chorus.tone, post.chorus.width, post.chorus.mix |
@@ -496,14 +508,14 @@ fails when a heading is missing here or a listed id is unknown):
 | ## PRE Pedals | pre.card.pitch, pre.card.comp, pre.card.nam1, pre.card.nam2, pre.pitch.on, pre.comp.on, pre.nam1.on, pre.nam2.on |
 | ### Pitch | pre.pitch.mode.transpose, pre.pitch.mode.octaver, pre.pitch.semi, pre.pitch.mix, pre.pitch.level, pre.pitch.char.instant, pre.pitch.char.poly, pre.pitch.octdown, pre.pitch.octup, pre.pitch.dry, pre.pitch.oct_level, pre.pitch.voicing.vintage, pre.pitch.voicing.modern |
 | ### Compressor | pre.comp.input, pre.comp.attack, pre.comp.release, pre.comp.output |
-| ### NAM Pedals | pre.nam1.capture, pre.nam2.capture, pre.capture.select, pre.capture.empty, pre.capture.custom, pre.nam1.gain, pre.nam1.bass, pre.nam1.mid, pre.nam1.midhz, pre.nam1.treble, pre.nam1.level |
+| ### NAM Pedals | pre.nam1.capture, pre.nam2.capture, pre.capture.select, pre.capture.empty, pre.capture.custom, pre.capture.select_custom, pre.nam1.gain, pre.nam1.bass, pre.nam1.mid, pre.nam1.midhz, pre.nam1.treble, pre.nam1.level |
 | ## POST Effects | post.card.chorus, post.card.delay, post.card.reverb, post.card.trem, post.chorus.on, post.delay.on, post.reverb.on, post.trem.on, post.mode_memory |
 | ### Chorus | post.chorus.mode.classic, post.chorus.mode.warped, post.chorus.mode.clear, post.chorus.mode.ensemble, post.chorus.rate, post.chorus.depth, post.chorus.tone, post.chorus.width, post.chorus.mix |
 | ### Delay | post.delay.mode.digital, post.delay.mode.analog, post.delay.mode.reverse, post.delay.time, post.delay.feedback, post.delay.mix, post.delay.tone, post.delay.grit, post.delay.wear, post.delay.bloom, post.delay.pingpong, post.delay.sync, post.delay.division |
 | ### Reverb | post.reverb.mode.hall, post.reverb.mode.plate, post.reverb.mode.oktaverb, post.reverb.mix, post.reverb.decay, post.reverb.tone, post.reverb.predelay, post.reverb.sub.halo, post.reverb.sub.shimmer, post.reverb.sub.bloom, post.reverb.intensity |
 | ### Tremolo | post.trem.mode.optical, post.trem.mode.bias, post.trem.mode.harmonic, post.trem.rate, post.trem.depth, post.trem.shape, post.trem.mix, post.trem.xover, post.trem.sync, post.trem.division |
 | ### Tempo | post.tempo, post.tempo.daw, metronome.bpm |
-| ## Dual Amp | dual.toggle, dual.support.choose, dual.support.select, dual.support.none, dual.focus.main, dual.focus.support, dual.pan.main, dual.pan.support, dual.polarity, dual.support.channel, dual.support.cab, dual.support.knob.input |
+| ## Dual Amp | dual.toggle, dual.support.choose, dual.support.select, dual.support.select_custom, dual.support.none, dual.focus.main, dual.focus.support, dual.pan.main, dual.pan.support, dual.polarity, dual.support.channel, dual.support.cab, dual.support.cab.custom_ir, dual.support.ir.select, dual.support.cab.custom_ir_disabled, dual.support.knob.input |
 | ## Presets | header.preset.menu, presets.menu.factory, presets.menu.user |
 | ### Factory Presets | presets.factory_catalog, presets.menu.factory, play.picker.factory |
 | ### Save A Preset | presets.save.open, name.field, name.save, name.update, name.cancel, presets.save.dedupe |
@@ -518,12 +530,12 @@ fails when a heading is missing here or a listed id is unknown):
 | ### The MIDI Tab | midi.channel.all, midi.channel.one, midi.channel.number, midi.recall_cc, midi.vst3_channel, midi.bank.next, midi.bank.prev, midi.slot.assign, midi.slot.move, midi.slot.clear, midi.learn, midi.bank_select, midi.channel_filter |
 | ## Tuner And Metronome | tuner.note, tuner.cents, tuner.muted, tuner.close, nav.tuner.open, nav.metronome.open, metronome.on, metronome.bpm, metronome.volume, metronome.sig.1_4, metronome.sig.2_4, metronome.sig.3_4, metronome.sig.4_4, metronome.sig.6_8, metronome.beat, metronome.close |
 | ## Your Own Amps, IRs And Pedals | custom.amp.add, ir.import, pedal.import |
-| ### Custom Amps | custom.amp.add, custom.amp.edit, custom.amp.delete, builder.name, builder.add_files, builder.file.cab, builder.file.channel, builder.file.remove, builder.cab_name, builder.art, builder.save, builder.close, builder.autofill |
-| ### Custom IRs | amp.cab.custom_ir, amp.cab.custom_ir_disabled, ir.menu.select, ir.menu.manage, ir.import, ir.import.invalid, ir.config.open, ir.config.level, ir.config.lowcut, ir.config.highcut, ir.naming, ir.rename, ir.delete |
-| ### Custom Pedals | pre.capture.manage, pedal.import, pedal.rename, pedal.delete, pre.capture.custom |
+| ### Custom Amps | custom.amp.add, custom.amp.edit, custom.amp.delete, amp.list.select_custom, dual.support.select_custom, builder.name, builder.add_files, builder.file.cab, builder.file.channel, builder.file.remove, builder.cab_name, builder.art, builder.save, builder.close, builder.autofill |
+| ### Custom IRs | amp.cab.custom_ir, amp.cab.custom_ir_disabled, dual.support.cab.custom_ir, dual.support.cab.custom_ir_disabled, dual.support.ir.select, ir.menu.select, ir.menu.manage, ir.import, ir.import.invalid, ir.config.open, ir.config.level, ir.config.lowcut, ir.config.highcut, ir.naming, ir.rename, ir.delete |
+| ### Custom Pedals | pre.capture.manage, pedal.import, pedal.rename, pedal.delete, pre.capture.custom, pre.capture.select_custom |
 | ### Deleting Content | content.delete_fallback, dialog.confirm.message, dialog.confirm.accept, dialog.confirm.cancel |
 | ## Back Up And Share With Packs | pack.export.open, pack.import.open |
-| ### Export | pack.export.scope.everything, pack.export.scope.sounds, pack.export.scope.amp, pack.export.sound_tick, pack.export.amp_pick, pack.export.also, pack.export.save |
+| ### Export | pack.export.scope.everything, pack.export.scope.sounds, pack.export.scope.amp, pack.export.sound_tick, pack.export.amp_pick, pack.export.also, pack.export.also.support, pack.export.save |
 | ### Import | pack.import.rows, pack.import.tick, pack.import.outcome, pack.import.merge.overwrite, pack.import.merge.add, pack.import.merge.reset, pack.import.machine, pack.import.confirm, pack.import.refused, pack.import.damaged, pack.packbak, pack.plugin_rules |
 | ## Settings | nav.settings.open, settings.close, settings.tab.signal, settings.tab.midi, settings.tab.system |
 | ### SIGNAL Tab | signal.calibration.level, signal.calibration.on, signal.calibration.unavailable, signal.output.raw, signal.output.normalized, signal.output.calibrated, signal.perf.full, signal.perf.lite, signal.animate_art, signal.audio_devices |

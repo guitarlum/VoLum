@@ -41,8 +41,9 @@ import org.junit.runner.RunWith
 
 /**
  * Proves the harness can pass a correct UI and catch a wrong one, independent of
- * the flavor's candidate: a probe UI implements a few features right, a stomp and
- * a knob wired to the wrong parameter, one tagged but inert, one target too
+ * the flavor's candidate: a probe UI implements a few features right (including
+ * Custom IR on the Dual Amp SUPPORT lane), a stomp and a knob wired to the wrong
+ * parameter, Next controls that step back, one tagged but inert, one target too
  * small, and a three-tap-deep screen.
  */
 @RunWith(AndroidJUnit4::class)
@@ -58,6 +59,7 @@ class HarnessSelfTest {
         val shouldPass = listOf(
             "nav.view.build", "nav.tuner.open", "play.stomp.delay", "play.art", "header.preset.menu",
             "amp.knob.bass", "amp.knob.reset", "amp.knob.exact", "presets.menu.manage", "tuner.close",
+            "header.preset.prev", "play.sound.prev", "dual.support.cab.custom_ir", "dual.support.ir.select", "ir.menu.select",
         )
         val failed = shouldPass.associateWith { exerciser.exercise(FeatureRegistry.byId.getValue(it)) }.filterValues { it != null }
         assertEquals("probe features the harness should accept", emptyMap<String, String?>(), failed)
@@ -65,6 +67,10 @@ class HarnessSelfTest {
         assertNotNull("a knob bound to BASS must not pass as MID", exerciser.exercise(FeatureRegistry.byId.getValue("amp.knob.mid")))
         assertNotNull("a tagged but inert node must not pass", exerciser.exercise(FeatureRegistry.byId.getValue("amp.eq.toggle")))
         assertNotNull("an absent feature must not pass", exerciser.exercise(FeatureRegistry.byId.getValue("amp.knob.gate")))
+        assertNotNull("a preset Next that steps back must not pass", exerciser.exercise(FeatureRegistry.byId.getValue("header.preset.next")))
+        assertNotNull("a Sound Next that steps back must not pass", exerciser.exercise(FeatureRegistry.byId.getValue("play.sound.next")))
+        assertNotNull("a MIDI bank Next that pages back must not pass", exerciser.exercise(FeatureRegistry.byId.getValue("midi.bank.next")))
+        assertNotNull("a MIDI bank Prev that pages forward must not pass", exerciser.exercise(FeatureRegistry.byId.getValue("midi.bank.prev")))
     }
 
     @Test
@@ -104,10 +110,15 @@ private object ProbeCandidate : CandidateUi {
                 Button("TUNER", "nav.tuner.open") { store.dispatch(Action.Open(Overlay.Tuner)) }
                 Button("DLY", "play.stomp.delay") { store.dispatch(Action.ToggleParam(Param.DELAY_ON)) }
                 Button("REV", "play.stomp.reverb") { store.dispatch(Action.ToggleParam(Param.DELAY_ON)) }
+                Button("PREV", "play.sound.prev") { store.dispatch(Action.StepSound(-1)) }
+                Button("NEXT", "play.sound.next") { store.dispatch(Action.StepSound(-1)) }
                 Box(Modifier.size(96.dp).featureId("play.art"))
             }
             ScreenId.BUILD_AMP -> Row(Modifier.fillMaxSize().screen(screen)) {
                 Button("PRESET", "header.preset.menu") { store.dispatch(Action.Open(Overlay.PresetMenu)) }
+                Button("<", "header.preset.prev") { store.dispatch(Action.StepPreset(-1)) }
+                Button(">", "header.preset.next") { store.dispatch(Action.StepPreset(-1)) }
+                Button("IR", "dual.support.cab.custom_ir") { store.dispatch(Action.Open(Overlay.IrMenu)) }
                 Knob(store, Param.BASS, state.param(Param.BASS), "amp.knob.bass", "amp.knob.reset", "amp.knob.exact")
                 Knob(store, Param.BASS, state.param(Param.BASS), "amp.knob.mid")
                 Box(Modifier.size(30.dp).featureId("amp.gate.toggle").clickable { store.dispatch(Action.ToggleParam(Param.GATE_ON)) })
@@ -119,13 +130,20 @@ private object ProbeCandidate : CandidateUi {
             ScreenId.TUNER -> Row(Modifier.fillMaxSize().screen(screen)) {
                 Button("CLOSE", "tuner.close") { store.dispatch(Action.Back) }
             }
+            ScreenId.CAB_IR_MENU -> Row(Modifier.fillMaxSize().screen(screen)) {
+                Button("ROYER", "ir.menu.select", "dual.support.ir.select") { store.dispatch(Action.SelectIr("ir:royer")) }
+            }
+            ScreenId.SETTINGS_MIDI -> Row(Modifier.fillMaxSize().screen(screen)) {
+                Button("BANK-", "midi.bank.prev") { store.dispatch(Action.SetMidiBank(state.midi.bank + 1)) }
+                Button("BANK+", "midi.bank.next") { store.dispatch(Action.SetMidiBank(state.midi.bank - 1)) }
+            }
             else -> Box(Modifier.fillMaxSize().screen(screen)) { BasicText(screen.id) }
         }
     }
 
     @Composable
-    private fun Button(label: String, id: String, onClick: () -> Unit) {
-        Box(Modifier.size(64.dp).featureId(id).clickable(onClick = onClick)) { BasicText(label) }
+    private fun Button(label: String, vararg ids: String, onClick: () -> Unit) {
+        Box(Modifier.size(64.dp).featureId(*ids).clickable(onClick = onClick)) { BasicText(label) }
     }
 
     @Composable

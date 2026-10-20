@@ -146,6 +146,44 @@ class EngineFeatureTest(private val id: String) {
                 s.dispatch(Action.AcceptConfirm)
                 assertEquals(Catalog.ampId(0), s.current.ampId)
                 assertTrue(s.current.library.amps.none { it.custom })
+
+                val support = store("dual_support_ir")
+                val mainCab = support.current.rig.cab
+                support.dispatch(Action.RequestDeleteIr("ir:royer"))
+                support.dispatch(Action.AcceptConfirm)
+                assertEquals("a deleted SUPPORT IR returns SUPPORT to cab 1 of its bundled amp", Cab.G12, support.current.rig.support.cab)
+                assertNull(support.current.rig.support.irId)
+                assertEquals(mainCab, support.current.rig.cab)
+
+                val custom = store("dual_amp_empty_support")
+                custom.dispatch(Action.SelectSupportAmp("c:1"))
+                custom.dispatch(Action.FocusLane(Lane.SUPPORT))
+                custom.dispatch(Action.SelectSupportIr("ir:royer"))
+                custom.dispatch(Action.RequestDeleteIr("ir:royer"))
+                custom.dispatch(Action.AcceptConfirm)
+                assertEquals("a custom SUPPORT amp keeps its channel on the real cab that covers it", Cab.V30, custom.current.rig.support.cab)
+                assertEquals(0, custom.current.rig.support.channel)
+                custom.dispatch(Action.RequestDeleteAmp("c:1"))
+                custom.dispatch(Action.AcceptConfirm)
+                assertNull(custom.current.rig.support.ampId)
+                assertTrue("deleting the custom SUPPORT amp switches Dual Amp off", !custom.current.dual)
+                assertEquals(Lane.MAIN, custom.current.ui.lane)
+
+                val main = store("custom_levels")
+                main.dispatch(Action.SelectIr("ir:royer"))
+                main.dispatch(Action.RequestDeleteIr("ir:royer"))
+                main.dispatch(Action.AcceptConfirm)
+                assertEquals("a custom MAIN amp keeps its channel on the real cab that covers it", Cab.V30, main.current.rig.cab)
+            },
+            "pack.export.also.support" to {
+                val s = Fixtures.build("export_sounds_support")
+                val also = s.packExport.alsoIncluding(s.library)
+                assertTrue(also.toString(), "Marshall 4x12 _ Royer" in also)
+                assertTrue(also.toString(), "Monomyth Skeleton Key" in also)
+                val dualOff = s.copy(library = s.library.copy(presets = s.library.presets.map {
+                    if (it.id == "u:4") it.copy(rig = it.rig.copy(params = it.rig.params + (Param.DUAL_ON to 0.0))) else it
+                }))
+                assertEquals("a switched-off SUPPORT lane needs nothing", emptyList<String>(), dualOff.packExport.alsoIncluding(dualOff.library))
             },
             "pack.packbak" to {
                 val s = store("pack_preview")

@@ -109,6 +109,12 @@ object Fixtures {
         f("dual_amp", "Dual Amp on, SUPPORT Soldano SLO100, editing MAIN") { seed().dual(supportFocus = false) },
         f("dual_amp_support", "Dual Amp on, editing SUPPORT") { seed().dual(supportFocus = true) },
         f("dual_amp_empty_support", "Dual Amp on, SUPPORT empty") { seed().dual(supportFocus = false, support = null) },
+        f("dual_support_ir", "Dual Amp on, editing SUPPORT, which plays the Royer custom IR") {
+            seed().dual(supportFocus = true).rig { it.copy(support = it.support.copy(cab = Cab.CUSTOM_IR, irId = "ir:royer")) }
+        },
+        f("dual_custom_support_no_direct", "Dual Amp on, editing a custom SUPPORT amp on a channel without a No Cab capture: Custom IR greyed out") {
+            seed().dual(supportFocus = true, support = CUSTOM_AMP)
+        },
         f("pre_pitch", "PRE, Pitch focused (OCTAVER)") { seed().pre(PreBlock.PITCH) },
         f("pre_pitch_transpose", "PRE, Pitch in TRANSPOSE (INSTANT)") { seed().params(Param.PITCH_MODE to 0.0, Param.PITCH_ON to 1.0).pre(PreBlock.PITCH) },
         f("pre_pitch_transpose_poly", "PRE, Pitch in TRANSPOSE POLY") { seed().params(Param.PITCH_MODE to 0.0, Param.PITCH_CHAR to 2.0).pre(PreBlock.PITCH) },
@@ -185,6 +191,19 @@ object Fixtures {
         f("ir_config", "IR management with Level / Low cut / High cut open on Royer") { seed().ui { it.copy(irConfigOpen = "ir:royer") } },
         f("export_sounds", "Pack export, Sounds scope, Sunset Crunch and Skeleton Drive (needs its custom amp) ticked") {
             seed().copy(packExport = PackExportState(scope = ExportScope.SOUNDS, ticked = setOf("u:1", "u:3")))
+        },
+        f("export_sounds_support", "Pack export, Sounds scope, a Dual Amp preset whose SUPPORT is the custom amp on the Royer custom IR ticked") {
+            seed().let { s ->
+                val dualRig = s.rig.copy(
+                    params = s.rig.params + (Param.DUAL_ON to 1.0),
+                    support = SupportLane(ampId = CUSTOM_AMP, channel = 0, cab = Cab.CUSTOM_IR, irId = "ir:royer"),
+                    presetId = null,
+                )
+                s.copy(
+                    library = s.library.copy(presets = s.library.presets + Preset("u:4", THC, "Sunset Stack", factory = false, rig = dualRig)),
+                    packExport = PackExportState(scope = ExportScope.SOUNDS, ticked = setOf("u:4")),
+                )
+            }
         },
         f("export_amp", "Pack export, whole-amp scope, no amp picked yet") { seed().copy(packExport = PackExportState(scope = ExportScope.AMP)) },
         f("pack_preview", "an Everything Pack with three new items") { seed().let { it.copy(packImport = FakeEngine.packPreview(it, PickedFile("seed.volumpack", 48_000))) } },

@@ -204,13 +204,19 @@ data class PackExportState(
     fun alsoIncluding(lib: Library): List<String> = when (scope) {
         ExportScope.EVERYTHING -> emptyList()
         ExportScope.SOUNDS -> ticked.mapNotNull { lib.preset(it) }.flatMap { p ->
-            listOfNotNull(lib.ir(p.rig.irId)?.name) +
+            irsOf(lib, p.rig) +
                 listOf(p.rig.params[Param.NAM1_CAPTURE], p.rig.params[Param.NAM2_CAPTURE]).mapNotNull { idx ->
                     lib.pedals.firstOrNull { it.custom && it.index.toDouble() == idx }?.name
-                } + listOfNotNull(lib.amp(p.ampId)?.takeIf { it.custom }?.name)
+                } + listOf(p.ampId, supportOf(p.rig)).mapNotNull { id -> lib.amp(id)?.takeIf { it.custom }?.name }
         }.distinct()
-        ExportScope.AMP -> lib.presets.filter { it.ampId == ampId }.mapNotNull { lib.ir(it.rig.irId)?.name }.distinct()
+        ExportScope.AMP -> lib.presets.filter { it.ampId == ampId }.flatMap { p ->
+            irsOf(lib, p.rig) + listOfNotNull(lib.amp(supportOf(p.rig))?.takeIf { it.custom && it.id != ampId }?.name)
+        }.distinct()
     }
+
+    private fun supportOf(r: Rig): String? = r.support.ampId.takeIf { (r.params[Param.DUAL_ON] ?: 0.0) >= 0.5 }
+    private fun irsOf(lib: Library, r: Rig): List<String> =
+        listOfNotNull(lib.ir(r.irId)?.name, lib.ir(r.support.irId)?.takeIf { supportOf(r) != null }?.name)
 }
 
 data class PackRow(val id: String, val name: String, val kind: String, val outcome: PackOutcome, val ticked: Boolean = true)
@@ -273,6 +279,8 @@ data class VoLumState(
     val amp: Amp? get() = library.amp(ampId)
     val rig: Rig get() = rigs[ampId] ?: Rig()
     val dual: Boolean get() = param(Param.DUAL_ON) == 1.0
+    /** Dual Amp on with SUPPORT focused: the cab row, Custom IR and the IR menu act on SUPPORT. */
+    val supportFocused: Boolean get() = dual && ui.lane == Lane.SUPPORT
 
     fun param(p: Param): Double {
         val lock = when (p.group) {

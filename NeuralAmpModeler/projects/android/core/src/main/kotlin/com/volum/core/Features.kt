@@ -8,6 +8,8 @@ typealias StateCheck = (before: VoLumState, after: VoLumState) -> Boolean
  * UI features carry the [check] the harness applies after operating the node
  * through semantics, and the [canonical] action a correct UI dispatches (used
  * only by `:core` unit tests to prove fixture + reducer satisfy [check]).
+ * [opposite] is what the same control wired the wrong way round dispatches
+ * (Next stepping back); `:core` tests prove [check] rejects it.
  */
 data class FeatureSpec(
     val id: String,
@@ -21,6 +23,7 @@ data class FeatureSpec(
     val check: StateCheck = { _, _ -> true },
     val canonical: ((VoLumState) -> Action)? = null,
     val precondition: (VoLumState) -> Boolean = { true },
+    val opposite: ((VoLumState) -> Action)? = null,
 ) {
     val isNa: Boolean get() = naReason != null
     val isEngine: Boolean get() = interaction == "engine"
@@ -47,6 +50,27 @@ object FeatureRegistry {
 
     private fun select(id: String, screen: ScreenId, p: Param, value: Double, fixture: String = "default") =
         add(FeatureSpec(id, screen, "select", fixture, param = p, check = { b, a -> b.param(p) != value && a.param(p) == value }, canonical = { Action.SetParam(p, value) }))
+
+    private fun step(id: String, screen: ScreenId, fixture: String = "default", action: (VoLumState, Int) -> Action, delta: Int, check: StateCheck) =
+        add(FeatureSpec(id, screen, "tap", fixture, check = check, canonical = { action(it, delta) }, opposite = { action(it, -delta) }))
+
+    /**
+     * Desktop `StepPresetIndex`: the amp's preset list in menu order, wrapping at both
+     * ends; with nothing selected, Next starts at the first and Prev at the last.
+     */
+    fun presetAfter(s: VoLumState, delta: Int): String? {
+        val list = s.library.presetsFor(s.ampId)
+        if (list.isEmpty()) return null
+        val i = list.indexOfFirst { it.id == s.rig.presetId }
+        return list[if (i < 0) (if (delta > 0) 0 else list.lastIndex) else Math.floorMod(i + delta, list.size)].id
+    }
+
+    /** Desktop `StepAssignedSlot`: recallable programs only, wrapping at both ends; with nothing LIVE, Next starts at the top and Prev at the bottom. */
+    fun soundAfter(s: VoLumState, delta: Int): Int? {
+        val programs = s.library.sounds.keys.filter { s.library.soundValid(it) }.sorted()
+        val live = s.library.live ?: return if (delta > 0) programs.firstOrNull() else programs.lastOrNull()
+        return if (delta > 0) programs.firstOrNull { it > live } ?: programs.firstOrNull() else programs.lastOrNull { it < live } ?: programs.lastOrNull()
+    }
 
     private fun view(id: String, screen: ScreenId, fixture: String = "default", precondition: (VoLumState) -> Boolean = { true }) =
         add(FeatureSpec(id, screen, "view", fixture, precondition = precondition))
@@ -80,8 +104,8 @@ object FeatureRegistry {
         tap("nav.audio_status.open", play, canonical = { Action.Open(Overlay.AudioStatus) }, check = opened<Overlay.AudioStatus>())
         na("nav.back", "Esc is a keyboard key; Android Back is a system gesture the harness cannot operate through semantics, and every panel's close control is its own feature id")
         view("header.preset_name", buildAmp) { it.presetName != null }
-        tap("header.preset.prev", buildAmp, canonical = { Action.StepPreset(-1) }, check = changed { it.rig.presetId })
-        tap("header.preset.next", buildAmp, canonical = { Action.StepPreset(1) }, check = changed { it.rig.presetId })
+        step("header.preset.prev", buildAmp, action = { _, d -> Action.StepPreset(d) }, delta = -1) { b, a -> a.rig.presetId != b.rig.presetId && a.rig.presetId == presetAfter(b, -1) }
+        step("header.preset.next", buildAmp, action = { _, d -> Action.StepPreset(d) }, delta = 1) { b, a -> a.rig.presetId != b.rig.presetId && a.rig.presetId == presetAfter(b, 1) }
         tap("header.preset.menu", buildAmp, canonical = { Action.Open(Overlay.PresetMenu) }, check = opened<Overlay.PresetMenu>())
         view("header.unsaved", buildAmp, "preset_dirty") { it.rig.dirty }
         view("meters.in", buildAmp)
@@ -100,8 +124,8 @@ object FeatureRegistry {
 
         // PLAY
         tap("play.sound.recall", play, canonical = { Action.RecallSound(1) }, check = changed { it.library.live })
-        tap("play.sound.next", play, canonical = { Action.StepSound(1) }, check = changed { it.library.live })
-        tap("play.sound.prev", play, canonical = { Action.StepSound(-1) }, check = changed { it.library.live })
+        step("play.sound.next", play, action = { _, d -> Action.StepSound(d) }, delta = 1) { b, a -> a.library.live != b.library.live && a.library.live == soundAfter(b, 1) }
+        step("play.sound.prev", play, action = { _, d -> Action.StepSound(d) }, delta = -1) { b, a -> a.library.live != b.library.live && a.library.live == soundAfter(b, -1) }
         view("play.sound.live", play) { it.library.live != null }
         view("play.sound.name", play)
         view("play.sound.program", play)
@@ -152,6 +176,7 @@ object FeatureRegistry {
 
         // BUILD amps and cabs
         tap("amp.list.select", ScreenId.AMP_PICKER, canonical = { Action.SelectAmp(Catalog.ampId(0)) }, check = changed { it.ampId })
+        tap("amp.list.select_custom", ScreenId.AMP_PICKER, canonical = { Action.SelectAmp("c:1") }) { b, a -> b.amp?.custom != true && a.amp?.custom == true }
         view("amp.list.custom", ScreenId.AMP_PICKER) { s -> s.library.amps.any { it.custom } }
         view("amp.name", buildAmp)
         view("amp.hero", buildAmp)
@@ -185,6 +210,9 @@ object FeatureRegistry {
         tap("dual.support.select", ScreenId.SUPPORT_AMP_MENU, "dual_amp_empty_support", canonical = { Action.SelectSupportAmp(Catalog.ampId(0)) }) { b, a ->
             a.rig.support.ampId != null && a.rig.support.ampId != b.rig.support.ampId
         }
+        tap("dual.support.select_custom", ScreenId.SUPPORT_AMP_MENU, "dual_amp_empty_support", canonical = { Action.SelectSupportAmp("c:1") }) { b, a ->
+            b.library.amp(b.rig.support.ampId)?.custom != true && a.library.amp(a.rig.support.ampId)?.custom == true
+        }
         tap("dual.support.none", ScreenId.SUPPORT_AMP_MENU, "dual_amp", canonical = { Action.SelectSupportAmp(null) }) { b, a -> b.rig.support.ampId != null && a.rig.support.ampId == null }
         tap("dual.support.close", ScreenId.SUPPORT_AMP_MENU, "dual_amp_empty_support", canonical = { Action.Back }, check = closed<Overlay.SupportAmpMenu>())
         drag("dual.pan.main", buildAmp, Param.MAIN_PAN, "dual_amp")
@@ -192,6 +220,16 @@ object FeatureRegistry {
         toggle("dual.polarity", buildAmp, Param.SUPPORT_POLARITY, "dual_amp_support")
         tap("dual.support.channel", buildAmp, "dual_amp_support", interaction = "select", canonical = { Action.SelectSupportChannel(0) }, check = changed { it.rig.support.channel })
         tap("dual.support.cab", buildAmp, "dual_amp_support", interaction = "select", canonical = { Action.SelectSupportCab(Cab.V30) }, check = changed { it.rig.support.cab })
+        tap("dual.support.cab.custom_ir", buildAmp, "dual_amp_support", canonical = { Action.Open(Overlay.IrMenu) }) { b, a ->
+            b.ui.top !is Overlay.IrMenu && a.ui.top is Overlay.IrMenu && a.supportFocused
+        }
+        view("dual.support.cab.custom_ir_disabled", buildAmp, "dual_custom_support_no_direct") { s ->
+            s.supportFocused && s.rig.support.channel !in (s.library.amp(s.rig.support.ampId)?.noCabChannels ?: emptySet())
+        }
+        tap("dual.support.ir.select", ScreenId.CAB_IR_MENU, "dual_amp_support", canonical = { Action.SelectIr("ir:royer") }) { b, a ->
+            b.rig.support.cab != Cab.CUSTOM_IR && a.rig.support.cab == Cab.CUSTOM_IR && a.rig.support.irId != null &&
+                a.rig.cab == b.rig.cab && a.rig.irId == b.rig.irId
+        }
         drag("dual.support.knob.input", buildAmp, Param.SUPPORT_INPUT, "dual_amp_support")
         drag("dual.support.knob.gate", buildAmp, Param.SUPPORT_GATE, "dual_amp_support")
         drag("dual.support.knob.bass", buildAmp, Param.SUPPORT_BASS, "dual_amp_support")
@@ -248,6 +286,10 @@ object FeatureRegistry {
         drag("pre.nam2.treble", buildPre, Param.NAM2_TREBLE, "pre_nam2")
         drag("pre.nam2.level", buildPre, Param.NAM2_LEVEL, "pre_nam2")
         tap("pre.capture.select", ScreenId.PRE_CAPTURE_MENU, canonical = { Action.SelectCapture(1, 2) }, check = changed { it.param(Param.NAM1_CAPTURE) })
+        tap("pre.capture.select_custom", ScreenId.PRE_CAPTURE_MENU, canonical = { s -> Action.SelectCapture((s.ui.top as Overlay.CaptureMenu).slot, 64) }) { b, a ->
+            val p = if ((b.ui.top as? Overlay.CaptureMenu)?.slot == 2) Param.NAM2_CAPTURE else Param.NAM1_CAPTURE
+            a.param(p) != b.param(p) && a.library.pedals.any { it.custom && it.index.toDouble() == a.param(p) }
+        }
         tap("pre.capture.empty", ScreenId.PRE_CAPTURE_MENU, canonical = { Action.SelectCapture(1, 0) }) { b, a -> b.param(Param.NAM1_CAPTURE) != 0.0 && a.param(Param.NAM1_CAPTURE) == 0.0 }
         view("pre.capture.custom", ScreenId.PRE_CAPTURE_MENU) { s -> s.library.pedals.any { it.custom } }
         tap("pre.capture.manage", ScreenId.PRE_CAPTURE_MENU, canonical = { Action.Open(Overlay.PedalManage) }, check = opened<Overlay.PedalManage>())
@@ -375,8 +417,8 @@ object FeatureRegistry {
         tap("midi.channel.one", midiTab, interaction = "select", canonical = { s -> Action.SetMidiChannel(s.midi.lastOneChannel) }) { b, a -> b.midi.channel == 0 && a.midi.channel != 0 }
         tap("midi.channel.number", midiTab, "midi_one_channel", interaction = "select", canonical = { Action.SetMidiChannel(4) }) { b, a -> a.midi.channel != 0 && a.midi.channel != b.midi.channel }
         tap("midi.recall_cc", midiTab, canonical = { Action.SetRecallCc(103) }, check = changed { it.midi.recallCc })
-        tap("midi.bank.next", midiTab, canonical = { s -> Action.SetMidiBank(s.midi.bank + 1) }, check = changed { it.midi.bank })
-        tap("midi.bank.prev", midiTab, "midi_bank_2", canonical = { s -> Action.SetMidiBank(s.midi.bank - 1) }, check = changed { it.midi.bank })
+        step("midi.bank.next", midiTab, "midi_bank_2", action = { s, d -> Action.SetMidiBank(s.midi.bank + d) }, delta = 1) { b, a -> a.midi.bank == b.midi.bank + 1 }
+        step("midi.bank.prev", midiTab, "midi_bank_2", action = { s, d -> Action.SetMidiBank(s.midi.bank + d) }, delta = -1) { b, a -> a.midi.bank == b.midi.bank - 1 }
         tap("midi.slot.assign", midiTab, canonical = { Action.Open(Overlay.SoundPicker(0, replace = true)) }, check = opened<Overlay.SoundPicker>())
         tap("midi.slot.move", midiTab, interaction = "action:Move down", canonical = { Action.MoveSound(0, 1) }) { b, a ->
             a.library.sounds.size == b.library.sounds.size && a.library.sounds != b.library.sounds
@@ -445,6 +487,7 @@ object FeatureRegistry {
         tap("pack.export.sound_tick", export, "export_sounds", interaction = "toggle", canonical = { Action.ToggleExportSound("u:2") }, check = changed { it.packExport.ticked })
         tap("pack.export.amp_pick", export, "export_amp", interaction = "select", canonical = { Action.SetExportAmp("c:1") }, check = changed { it.packExport.ampId })
         view("pack.export.also", export, "export_sounds") { it.packExport.alsoIncluding(it.library).isNotEmpty() }
+        engine("pack.export.also.support")
         tap("pack.export.save", export, interaction = "file", canonical = { Action.PickFiles(PickKind.PACK_SAVE) }) { b, a -> b.packExport.savedAs == null && a.packExport.savedAs != null }
         tap("pack.export.close", export, canonical = { Action.Back }, check = closed<Overlay.PackExport>())
         val import = ScreenId.PACK_IMPORT
