@@ -3,8 +3,11 @@ package com.volum.ui.c
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -24,6 +27,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -42,6 +47,7 @@ import com.volum.design.components.VoLumLed
 import com.volum.design.components.VoLumMeter
 import com.volum.design.components.VoLumSelectionStyle
 import com.volum.design.components.VoLumSubModePill
+import com.volum.design.components.VoLumSwitchTrack
 import com.volum.design.components.VoLumToggle
 import com.volum.design.components.volumGlyph
 import com.volum.design.components.volumSelection
@@ -95,6 +101,21 @@ internal fun Toggle(label: String, on: Boolean, ids: List<String>, onToggle: () 
     VoLumToggle(on, { onToggle() }, modifier.ids(ids), label = label, enabled = enabled)
 }
 
+/** A `:design` switch with its caption above it, for a row that has no room for the label beside it. */
+@Composable
+internal fun CompactToggle(label: String, on: Boolean, ids: List<String>, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    Column(
+        modifier.size(72.dp, Metrics.target).toggleable(on, src, null, role = Role.Switch, onValueChange = { onToggle() }).ids(ids),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+    ) {
+        VFitText(label.uppercase(), style = VoLumType.label(9.sp, if (on) VoLumColors.Gold else VoLumColors.CreamDim), minSize = 7.sp)
+        VoLumSwitchTrack(on, pressed = pressed)
+    }
+}
+
 /** Small caps heading over or beside a group. */
 @Composable
 internal fun Caption(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.GoldDim) {
@@ -134,6 +155,13 @@ internal fun GlyphBtn(glyph: VoLumGlyph, description: String, ids: List<String>,
     ) {
         val ink by rememberUpdatedState(if (pressed) VoLumColors.Gold else color)
         Spacer(Modifier.size(glyphSize).volumGlyph(glyph, { ink }))
+    }
+}
+
+/** While [on], the subtree takes no touch: what has stepped back behind a panel cannot be hit blind. */
+internal fun Modifier.inert(on: Boolean): Modifier = if (!on) this else pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
     }
 }
 

@@ -1,23 +1,28 @@
 package com.volum.ui.c
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +39,7 @@ import com.volum.design.art.Motif
 import com.volum.design.components.PedalCard
 import com.volum.design.components.VoLumBlockHeader
 import com.volum.design.components.VoLumGlyph
+import com.volum.design.components.VoLumIcon
 import com.volum.design.components.VoLumSelectionStyle
 import com.volum.design.components.hairlineFrame
 import com.volum.design.components.volumGlyph
@@ -44,43 +50,85 @@ import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
 
 internal val OriginRow = 56.dp
+private val ChipW = 140.dp
+private val PostSlotW = 150.dp
 
 /** One pedal of a sheet: the `:design` card focuses it, its LED is its power. */
 private class Card(val motif: Motif, val title: String, val power: Param, val focusId: String, val powerId: String, val focused: Boolean, val focus: Action)
 
+/**
+ * The sheet's first row: four pedal cards of one width, then [fixed] dp of other
+ * controls in [others] more children. Every card title shares the size at which
+ * the longest one fits its footer.
+ */
 @Composable
-private fun RowScope.Cards(ui: Ui, cards: List<Card>) {
-    cards.forEach { c ->
-        val on = ui.s.on(c.power)
-        PedalCard(
-            c.motif,
-            c.title,
-            on,
-            onClick = { ui.d(c.focus) },
-            onToggle = { ui.d(Action.ToggleParam(c.power)) },
-            modifier = Modifier.weight(1f).fillMaxHeight().ids(c.focusId),
-            focused = c.focused,
-            ledModifier = Modifier.semantics { contentDescription = c.title + " power" }.ids(c.powerId),
-        )
+private fun OriginCards(ui: Ui, cards: List<Card>, fixed: Dp, others: Int, trailing: @Composable RowScope.() -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth().height(OriginRow)) {
+        val card = (maxWidth - fixed - CardGap * (cards.size + others - 1)) / cards.size
+        val k = sharedFit(cards.map { it.title to (card - 34.dp) }, VoLumType.label(11.5.sp))
+        val d = LocalDensity.current
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(CardGap)) {
+            cards.forEach { c ->
+                val on = ui.s.on(c.power)
+                CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * k)) {
+                    PedalCard(
+                        c.motif,
+                        c.title,
+                        on,
+                        onClick = { ui.d(c.focus) },
+                        onToggle = { ui.d(Action.ToggleParam(c.power)) },
+                        modifier = Modifier.width(card).fillMaxHeight().ids(c.focusId),
+                        focused = c.focused,
+                        ledModifier = Modifier.semantics { contentDescription = c.title + " power" }.ids(c.powerId),
+                    )
+                }
+            }
+            trailing()
+        }
     }
 }
 
-/** The block header of the sheet: title, padlock, and store-to-amp while the locked block differs from this amp. */
+private val CardGap = 6.dp
+private val HeaderW = 96.dp
+private val StoreW = 96.dp
+
+private fun headerWidth(ui: Ui, section: Section): Dp {
+    val locked = (if (section == Section.PRE) ui.s.locks.pre else ui.s.locks.post) != null
+    return HeaderW + if (locked && Reducer.lockDiffers(ui.s, section)) StoreW else 0.dp
+}
+
+/**
+ * The block header of the sheet: title and padlock, then, while the locked block
+ * differs from what this amp stores, a labelled STORE TO AMP in full teal.
+ */
 @Composable
 private fun LockHeader(ui: Ui, section: Section) {
     val locked = (if (section == Section.PRE) ui.s.locks.pre else ui.s.locks.post) != null
     val pre = section == Section.PRE
-    VoLumBlockHeader(
-        if (pre) "PRE" else "POST",
-        locked,
-        { ui.d(Action.SetLock(section, !locked)) },
-        Modifier.width(if (locked && Reducer.lockDiffers(ui.s, section)) 150.dp else 104.dp),
-        dirty = Reducer.lockDiffers(ui.s, section),
-        onStore = { ui.d(Action.StoreLock(section)) },
-        storeFirst = !pre,
-        lockModifier = Modifier.ids(if (pre) "pre.lock" else "post.lock"),
-        storeModifier = Modifier.ids(if (pre) "pre.store" else "post.store"),
-    )
+    val title = if (pre) "PRE" else "POST"
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        VoLumBlockHeader(title, locked, { ui.d(Action.SetLock(section, !locked)) }, Modifier.width(HeaderW), lockModifier = Modifier.ids(if (pre) "pre.lock" else "post.lock"))
+        if (locked && Reducer.lockDiffers(ui.s, section)) {
+            Tappable(
+                { ui.d(Action.StoreLock(section)) },
+                Modifier.size(StoreW, Metrics.target).semantics { contentDescription = "Store $title to this amp" },
+                listOf(if (pre) "pre.store" else "post.store"),
+            ) { pressed ->
+                Row(
+                    Modifier.fillMaxSize().padding(start = 6.dp, top = 8.dp, bottom = 8.dp).volumSelection(false, pressed, VoLumSelectionStyle.Brass, radius = 3.dp, inset = 0.dp)
+                        .hairlineFrame(if (pressed) VoLumColors.Teal else VoLumColors.TealDim, radius = 3.dp).padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                ) {
+                    VoLumIcon(VoLumGlyph.Store, color = VoLumColors.Teal)
+                    Column(Modifier.weight(1f, fill = false)) {
+                        VFitText("STORE", style = VoLumType.label(9.sp, VoLumColors.Teal), minSize = 6.sp)
+                        VFitText("TO AMP", style = VoLumType.label(9.sp, VoLumColors.Teal), minSize = 6.sp)
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** A capture chooser on the PRE row: the slot and its capture; amber while its menu is open. */
@@ -91,7 +139,7 @@ private fun CaptureChip(ui: Ui, slot: Int) {
     val open = ui.s.ui.overlays.contains(overlay)
     Tappable(
         { ui.d(if (open) Action.Back else Action.Open(overlay)) },
-        Modifier.width(140.dp).height(Metrics.target).semantics { contentDescription = "Change NAM $slot capture" },
+        Modifier.width(ChipW).height(Metrics.target).semantics { contentDescription = "Change NAM $slot capture" },
         listOf(if (slot == 1) "pre.nam1.capture" else "pre.nam2.capture"),
     ) { pressed ->
         Row(
@@ -167,16 +215,17 @@ internal fun PreSheet(ui: Ui) {
     val s = ui.s
     val focus = s.ui.preFocus
     val transpose = s.param(Param.PITCH_MODE) == 0.0
-    Row(Modifier.fillMaxWidth().height(OriginRow), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Cards(
-            ui,
-            listOf(
-                Card(Motif.PITCH, if (transpose) "%+d st".format(s.param(Param.PITCH_SEMI).toInt()) else "Octaver", Param.PITCH_ON, "pre.card.pitch", "pre.pitch.on", focus == PreBlock.PITCH, Action.FocusPre(PreBlock.PITCH)),
-                Card(Motif.COMP, "Compressor", Param.COMP_ON, "pre.card.comp", "pre.comp.on", focus == PreBlock.COMP, Action.FocusPre(PreBlock.COMP)),
-                Card(Motif.NAM1, captureName(ui, Param.NAM1_CAPTURE), Param.NAM1_ON, "pre.card.nam1", "pre.nam1.on", focus == PreBlock.NAM1, Action.FocusPre(PreBlock.NAM1)),
-                Card(Motif.NAM2, captureName(ui, Param.NAM2_CAPTURE), Param.NAM2_ON, "pre.card.nam2", "pre.nam2.on", focus == PreBlock.NAM2, Action.FocusPre(PreBlock.NAM2)),
-            ),
-        )
+    OriginCards(
+        ui,
+        listOf(
+            Card(Motif.PITCH, if (transpose) "%+d st".format(s.param(Param.PITCH_SEMI).toInt()) else "Octaver", Param.PITCH_ON, "pre.card.pitch", "pre.pitch.on", focus == PreBlock.PITCH, Action.FocusPre(PreBlock.PITCH)),
+            Card(Motif.COMP, "Compressor", Param.COMP_ON, "pre.card.comp", "pre.comp.on", focus == PreBlock.COMP, Action.FocusPre(PreBlock.COMP)),
+            Card(Motif.NAM1, captureName(ui, Param.NAM1_CAPTURE), Param.NAM1_ON, "pre.card.nam1", "pre.nam1.on", focus == PreBlock.NAM1, Action.FocusPre(PreBlock.NAM1)),
+            Card(Motif.NAM2, captureName(ui, Param.NAM2_CAPTURE), Param.NAM2_ON, "pre.card.nam2", "pre.nam2.on", focus == PreBlock.NAM2, Action.FocusPre(PreBlock.NAM2)),
+        ),
+        fixed = ChipW * 2 + headerWidth(ui, Section.PRE),
+        others = 3,
+    ) {
         CaptureChip(ui, 1)
         CaptureChip(ui, 2)
         LockHeader(ui, Section.PRE)
@@ -213,24 +262,27 @@ internal fun PostSheet(ui: Ui) {
     val s = ui.s
     val focus = s.ui.postFocus
     val synced = (focus == PostBlock.DELAY && s.on(Param.DELAY_SYNC)) || (focus == PostBlock.TREM && s.on(Param.TREM_SYNC))
-    Row(Modifier.fillMaxWidth().height(OriginRow), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        fun title(base: String, p: Param) = base + "  " + p.options[s.param(p).toInt()].lowercase().replaceFirstChar { it.uppercase() }
-        Cards(
-            ui,
-            listOf(
-                Card(Motif.CHORUS, title("Chorus", Param.CHORUS_MODE), Param.CHORUS_ON, "post.card.chorus", "post.chorus.on", focus == PostBlock.CHORUS, Action.FocusPost(PostBlock.CHORUS)),
-                Card(Motif.DELAY, title("Delay", Param.DELAY_MODE), Param.DELAY_ON, "post.card.delay", "post.delay.on", focus == PostBlock.DELAY, Action.FocusPost(PostBlock.DELAY)),
-                Card(Motif.REVERB, title("Reverb", Param.REVERB_MODE), Param.REVERB_ON, "post.card.reverb", "post.reverb.on", focus == PostBlock.REVERB, Action.FocusPost(PostBlock.REVERB)),
-                Card(Motif.TREM, title("Trem", Param.TREM_MODE), Param.TREM_ON, "post.card.trem", "post.trem.on", focus == PostBlock.TREM, Action.FocusPost(PostBlock.TREM)),
-            ),
-        )
-        when (focus) {
-            PostBlock.DELAY -> {
-                Toggle("Ping-Pong", s.on(Param.DELAY_PING_PONG), listOf("post.delay.pingpong"), { ui.d(Action.ToggleParam(Param.DELAY_PING_PONG)) })
-                Toggle("Tempo Sync", s.on(Param.DELAY_SYNC), listOf("post.delay.sync"), { ui.d(Action.ToggleParam(Param.DELAY_SYNC)) })
+    fun title(base: String, p: Param) = base + "  " + p.options[s.param(p).toInt()].lowercase().replaceFirstChar { it.uppercase() }
+    OriginCards(
+        ui,
+        listOf(
+            Card(Motif.CHORUS, title("Chorus", Param.CHORUS_MODE), Param.CHORUS_ON, "post.card.chorus", "post.chorus.on", focus == PostBlock.CHORUS, Action.FocusPost(PostBlock.CHORUS)),
+            Card(Motif.DELAY, title("Delay", Param.DELAY_MODE), Param.DELAY_ON, "post.card.delay", "post.delay.on", focus == PostBlock.DELAY, Action.FocusPost(PostBlock.DELAY)),
+            Card(Motif.REVERB, title("Reverb", Param.REVERB_MODE), Param.REVERB_ON, "post.card.reverb", "post.reverb.on", focus == PostBlock.REVERB, Action.FocusPost(PostBlock.REVERB)),
+            Card(Motif.TREM, title("Trem", Param.TREM_MODE), Param.TREM_ON, "post.card.trem", "post.trem.on", focus == PostBlock.TREM, Action.FocusPost(PostBlock.TREM)),
+        ),
+        fixed = PostSlotW + headerWidth(ui, Section.POST),
+        others = 2,
+    ) {
+        Row(Modifier.width(PostSlotW), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {
+            when (focus) {
+                PostBlock.DELAY -> {
+                    CompactToggle("Ping-Pong", s.on(Param.DELAY_PING_PONG), listOf("post.delay.pingpong"), { ui.d(Action.ToggleParam(Param.DELAY_PING_PONG)) })
+                    CompactToggle("Tempo Sync", s.on(Param.DELAY_SYNC), listOf("post.delay.sync"), { ui.d(Action.ToggleParam(Param.DELAY_SYNC)) })
+                }
+                PostBlock.TREM -> CompactToggle("Tempo Sync", s.on(Param.TREM_SYNC), listOf("post.trem.sync"), { ui.d(Action.ToggleParam(Param.TREM_SYNC)) })
+                else -> Unit
             }
-            PostBlock.TREM -> Toggle("Tempo Sync", s.on(Param.TREM_SYNC), listOf("post.trem.sync"), { ui.d(Action.ToggleParam(Param.TREM_SYNC)) })
-            else -> Unit
         }
         LockHeader(ui, Section.POST)
     }

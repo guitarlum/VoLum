@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,22 +43,35 @@ internal fun PresetMenu(ui: Ui, modifier: Modifier) {
     val presets = s.library.presetsFor(s.ampId)
     val current = s.currentPreset
     PanelFrame(ui, "Presets", "presets.menu.close", { ui.back() }, modifier, crumb = s.amp?.name) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column(Modifier.width(230.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Caption("This rig")
-                Btn("Save as new", listOf("presets.menu.save_new"), { ui.d(Action.Open(Overlay.NameDialog(NamePurpose.SAVE_PRESET, "New Preset"))) }, Modifier.fillMaxWidth())
-                Btn("Manage", listOf("presets.menu.manage"), { ui.d(Action.Open(Overlay.PresetManage)) }, Modifier.fillMaxWidth())
-                Btn("Default", listOf("presets.menu.default"), { ui.d(Action.ResetToDefault) }, Modifier.fillMaxWidth())
-                if (current != null && !current.factory && s.rig.dirty) {
-                    Btn("Overwrite", listOf("presets.menu.overwrite"), { ui.d(Action.RequestOverwritePreset(current.id)) }, Modifier.fillMaxWidth(), primary = true)
-                    VFitText("\u201C${current.name}\u201D with what you hear", style = VoLumType.body(11.sp, VoLumColors.CreamDim), minSize = 8.sp)
+        val overwrite = current != null && !current.factory && s.rig.dirty
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val room = rowTitleRoom((maxWidth - ActionsW - 28.dp) / 2 - 8.dp, art = false)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.width(ActionsW), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Caption("This rig")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Btn("Save as new", listOf("presets.menu.save_new"), { ui.d(Action.Open(Overlay.NameDialog(NamePurpose.SAVE_PRESET, "New Preset"))) }, Modifier.weight(1f))
+                        Btn("Default", listOf("presets.menu.default"), { ui.d(Action.ResetToDefault) }, Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Btn("Manage", listOf("presets.menu.manage"), { ui.d(Action.Open(Overlay.PresetManage)) }, Modifier.weight(1f))
+                        if (overwrite) Btn("Overwrite", listOf("presets.menu.overwrite"), { ui.d(Action.RequestOverwritePreset(current!!.id)) }, Modifier.weight(1f), primary = true)
+                        else Box(Modifier.weight(1f))
+                    }
+                    if (overwrite) VFitText("Overwrite stores what you hear in \u201C${current!!.name}\u201D", style = VoLumType.body(11.sp, VoLumColors.Cream), minSize = 8.sp)
+                }
+                SharedFitRows(presets.map { it.name to room }) {
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        PresetList(ui, "Factory", presets.filter { it.factory }, "presets.menu.factory", Modifier.weight(1f))
+                        PresetList(ui, "User", presets.filter { !it.factory }, "presets.menu.user", Modifier.weight(1f))
+                    }
                 }
             }
-            PresetList(ui, "Factory", presets.filter { it.factory }, "presets.menu.factory", Modifier.weight(1f))
-            PresetList(ui, "User", presets.filter { !it.factory }, "presets.menu.user", Modifier.weight(1f))
         }
     }
 }
+
+private val ActionsW = 290.dp
 
 @Composable
 private fun PresetList(ui: Ui, title: String, list: List<Preset>, id: String, modifier: Modifier) {

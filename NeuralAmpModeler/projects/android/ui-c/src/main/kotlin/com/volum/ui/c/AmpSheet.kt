@@ -15,11 +15,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.core.Action
+import com.volum.core.Amp
 import com.volum.core.Cab
 import com.volum.core.KnobRows
 import com.volum.core.Lane
@@ -94,7 +100,10 @@ internal fun AmpSheet(ui: Ui) {
             val irAllowed = amp != null && (if (support) s.rig.support.channel else s.rig.channel) in amp.noCabChannels
             when {
                 support -> Toggle("Ø Phase", s.on(Param.SUPPORT_POLARITY), listOf("dual.polarity"), { ui.d(Action.ToggleParam(Param.SUPPORT_POLARITY)) })
-                amp != null && !irAllowed -> Note("Custom IR needs a No Cab capture on this channel.", color = VoLumColors.CreamDim, maxLines = 3, size = 10.sp)
+                amp != null && !irAllowed -> VText(
+                    "CH ${s.rig.channel + 1} has no ${cabLabel(Cab.NONE, amp)} capture, so Custom IR is off.",
+                    style = VoLumType.label(10.sp, VoLumColors.Amber), maxLines = 3,
+                )
                 else -> Gap(h = Metrics.target)
             }
         }
@@ -151,14 +160,14 @@ private fun CabRow(ui: Ui, support: Boolean) {
     val irName = s.library.ir(if (support) s.rig.support.irId else s.rig.irId)?.name
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf(Cab.NONE to "amp.cab.none", Cab.G12 to "amp.cab.g12", Cab.G65 to "amp.cab.g65", Cab.V30 to "amp.cab.v30").forEach { (c, id) ->
-            Brass(cabLabel(c, amp), cab == c, listOf(if (support) "dual.support.cab" else id), { ui.d(if (support) Action.SelectSupportCab(c) else Action.SelectCab(c)) }, enabled = amp != null)
+            Brass(cabLabel(c, amp), cab == c, listOf(if (support) "dual.support.cab" else id), { ui.d(if (support) Action.SelectSupportCab(c) else Action.SelectCab(c)) }, enabled = amp != null && hasCapture(amp, c, channel))
         }
         val irAllowed = amp != null && channel in amp.noCabChannels
         val open = s.ui.overlays.contains(Overlay.IrMenu)
         VoLumIrCabButton(
-            cab == Cab.CUSTOM_IR || open,
+            cab == Cab.CUSTOM_IR,
             { ui.d(if (open) Action.Back else Action.Open(Overlay.IrMenu)) },
-            Modifier.ids(
+            Modifier.then(if (open) Modifier.openFrame() else Modifier).ids(
                 when {
                     support && irAllowed -> "dual.support.cab.custom_ir"
                     support -> "dual.support.cab.custom_ir_disabled"
@@ -170,4 +179,16 @@ private fun CabRow(ui: Ui, support: Boolean) {
             enabled = irAllowed,
         )
     }
+}
+
+/** A custom amp plays a cab slot only where one of its files is that slot on this channel; bundled amps have every cab. */
+private fun hasCapture(amp: Amp, cab: Cab, channel: Int): Boolean =
+    !amp.custom || amp.files.isEmpty() || amp.files.any { it.cabSlot == cab.ordinal && it.channel == channel + 1 }
+
+/** The amber outline of a cab-row button whose menu is open, on the button's 28 dp face inside its 48 dp target. */
+private fun Modifier.openFrame(): Modifier = drawWithContent {
+    drawContent()
+    val inset = 9.dp.toPx()
+    val w = 1.4.dp.toPx()
+    drawRoundRect(VoLumColors.Amber, Offset(w / 2, inset), Size(size.width - w, size.height - 2 * inset), CornerRadius(3.dp.toPx()), style = Stroke(w))
 }

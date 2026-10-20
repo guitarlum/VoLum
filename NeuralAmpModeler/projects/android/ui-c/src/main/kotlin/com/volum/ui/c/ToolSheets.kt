@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,7 +32,6 @@ import com.volum.design.components.VoLumLed
 import com.volum.design.theme.VText
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
-import com.volum.design.theme.ic
 import com.volum.design.theme.withOpacity
 import kotlin.math.abs
 import kotlin.math.cos
@@ -52,21 +52,21 @@ internal fun Tuner(ui: Ui, modifier: Modifier) {
         cents < 0 -> "FLAT"
         else -> "SHARP"
     }
-    Box(modifier.background(ic(110, 8, 10, 14)), contentAlignment = Alignment.Center) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 28.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            Column(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Box(modifier.background(Glass.Veil), contentAlignment = Alignment.Center) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Column(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 VText("Tuner", style = VoLumType.display(30.sp, VoLumColors.Gold))
                 Row(Modifier.ids("tuner.muted"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     VoLumLed(true, color = VoLumColors.Danger)
                     VText("OUTPUT MUTED", style = VoLumType.label(12.sp, VoLumColors.Danger))
                 }
-                Note("Muted while the tuner is open, so you can tune on stage in silence.", maxLines = 3)
+                Note("Muted while the tuner is open, so you can tune on stage in silence.", maxLines = 3, color = VoLumColors.Cream)
                 Btn("Close tuner", listOf("tuner.close"), { ui.back() }, Modifier.fillMaxWidth().height(60.dp), primary = true)
             }
             Box(
-                Modifier.weight(1f).height(300.dp).drawBehind {
-                    val c = Offset(size.width / 2, size.height * 0.80f)
-                    val r = size.height * 0.64f
+                Modifier.weight(1f).fillMaxHeight().drawBehind {
+                    val r = minOf(size.height * 0.62f, size.width * 0.42f)
+                    val c = Offset(size.width / 2, size.height / 2 + r * 0.5f)
                     val sweep = 100f
                     drawArc(VoLumColors.Frame, 270f - sweep / 2, sweep, false, Offset(c.x - r, c.y - r), Size(r * 2, r * 2), style = Stroke(3.dp.toPx()))
                     drawArc(VoLumColors.Teal.withOpacity(0.35f), 270f - 3f, 6f, false, Offset(c.x - r, c.y - r), Size(r * 2, r * 2), style = Stroke(9.dp.toPx()))
@@ -83,9 +83,9 @@ internal fun Tuner(ui: Ui, modifier: Modifier) {
                 },
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(verticalAlignment = Alignment.Bottom) {
-                        VText(t.tunerNote, Modifier.ids("tuner.note"), style = VoLumType.display(96.sp, ink))
+                        VText(t.tunerNote, Modifier.ids("tuner.note"), style = VoLumType.display(84.sp, ink))
                         VText("${t.tunerOctave}", Modifier.padding(bottom = 14.dp), style = VoLumType.display(30.sp, VoLumColors.CreamDim))
                     }
                     VText(verdict, style = VoLumType.label(13.sp, ink))
@@ -108,7 +108,7 @@ internal fun Metronome(ui: Ui, modifier: Modifier) {
                 VText("%.0f".format(m.bpm), style = VoLumType.value(34.sp, VoLumColors.Gold))
                 VText("BPM", style = VoLumType.label(10.sp, VoLumColors.CreamDim))
             }
-            Knob("TEMPO", m.bpm, 30.0, 300.0, listOf("metronome.bpm"), { "%.0f".format(it) }, { it.toDoubleOrNull() }, { ui.d(Action.SetBpm(Math.round(it).toDouble())) }, { ui.d(Action.SetBpm(120.0)) })
+            Knob("TEMPO", m.bpm, 30.0, 300.0, listOf("metronome.bpm"), { "%.0f".format(it) }, { it.toDoubleOrNull() }, { ui.d(Action.SetBpm(Math.round(it).toDouble())) }, { ui.d(Action.SetBpm(120.0)) }, readout = false)
             Knob("VOLUME", m.volume, 0.0, 1.0, listOf("metronome.volume"), { "%.0f%%".format(it * 100) }, { it.toDoubleOrNull()?.let { v -> if (v > 1) v / 100 else v } }, { ui.d(Action.SetMetronomeVolume(it)) }, { ui.d(Action.SetMetronomeVolume(0.7)) })
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Caption("Time signature")
@@ -136,7 +136,7 @@ private fun Beats(ui: Ui, beats: Int) {
                     val on = t.beat == i
                     val k = if (on) (1f - t.beatPhase.toFloat()).coerceIn(0.35f, 1f) else 0f
                     val accent = if (i == 0) VoLumColors.Amber else VoLumColors.Gold
-                    drawCircle(ic(255, 42, 48, 52), size.minDimension / 2)
+                    drawCircle(VoLumColors.WellDark, size.minDimension / 2)
                     if (on) drawCircle(accent.withOpacity(k), size.minDimension / 2)
                     drawCircle(if (i == 0) VoLumColors.GoldDim else VoLumColors.Frame, size.minDimension / 2, style = Stroke(1.dp.toPx()))
                 },

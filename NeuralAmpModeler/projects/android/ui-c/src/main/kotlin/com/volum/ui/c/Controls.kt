@@ -133,6 +133,7 @@ internal fun Knob(
     enabled: Boolean = true,
     dial: Dp = 60.dp,
     width: Dp = 84.dp,
+    readout: Boolean = true,
 ) {
     var dragging by remember { mutableStateOf(false) }
     var fine by remember { mutableStateOf(false) }
@@ -202,7 +203,7 @@ internal fun Knob(
         Box(Modifier.fillMaxWidth().heightIn(min = 20.dp), contentAlignment = Alignment.Center) {
             if (editing) {
                 ExactEntry(value, format, parse) { v -> v?.let { set(it.coerceIn(min, max)) }; editing = false }
-            } else {
+            } else if (readout) {
                 VFitText(text, style = VoLumType.label(13.sp, if (dragging) VoLumColors.Amber else if (support) VoLumColors.Teal else VoLumColors.TextBright), minSize = 9.sp, textAlign = TextAlign.Center)
             }
         }

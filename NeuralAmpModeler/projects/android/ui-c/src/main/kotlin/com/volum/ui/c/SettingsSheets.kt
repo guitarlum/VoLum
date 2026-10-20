@@ -2,11 +2,13 @@ package com.volum.ui.c
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -173,30 +175,43 @@ private fun MidiTab(ui: Ui) {
                     Spacer(Modifier.size(6.dp).drawBehind { drawCircle(if (i == midi.bank) VoLumColors.Gold else VoLumColors.Frame) })
                 }
             }
-            Grid((midi.bank * 8 until midi.bank * 8 + 8).toList(), 2) { p, m ->
-                val sound = lib.sounds[p]
-                Row(m, verticalAlignment = Alignment.CenterVertically) {
-                    ListRow(
-                        sound?.let { lib.preset(it.presetId)?.name ?: "Invalid slot" } ?: "Empty",
-                        listOf("midi.slot.assign", "midi.slot.move"),
-                        { ui.d(Action.Open(Overlay.SoundPicker(p, replace = sound != null))) },
-                        Modifier.weight(1f).semantics {
-                            customActions = listOf(
-                                CustomAccessibilityAction("Move down") { ui.d(Action.MoveSound(p, 1)); true },
-                                CustomAccessibilityAction("Move up") { ui.d(Action.MoveSound(p, -1)); true },
-                            )
-                        },
-                        sub = "%03d".format(p) + if (lib.live == p) "  ·  LIVE" else "",
-                        selected = lib.live == p,
-                    )
-                    if (sound != null) {
-                        Gap(w = 14.dp)
-                        CrossButton({ ui.d(Action.ClearSound(p)) }, Modifier.semantics { contentDescription = "Clear program $p" }.ids("midi.slot.clear"), VoLumColors.Danger.withOpacity(0.8f))
-                    } else Gap(w = 62.dp)
+            val slots = (midi.bank * 8 until midi.bank * 8 + 8).toList()
+            fun slotName(p: Int) = lib.sounds[p]?.let { lib.preset(it.presetId)?.name ?: "Invalid slot" } ?: "Empty"
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val room = rowTitleRoom((maxWidth - 6.dp) / 2 - 62.dp, art = false)
+                SharedFitRows(slots.map { slotName(it) to room }) {
+                    SlotGrid(ui, slots, ::slotName)
                 }
             }
         },
     )
+}
+
+@Composable
+private fun SlotGrid(ui: Ui, slots: List<Int>, slotName: (Int) -> String) {
+    val lib = ui.s.library
+    Grid(slots, 2) { p, m ->
+        val sound = lib.sounds[p]
+        Row(m, verticalAlignment = Alignment.CenterVertically) {
+            ListRow(
+                slotName(p),
+                listOf("midi.slot.assign", "midi.slot.move"),
+                { ui.d(Action.Open(Overlay.SoundPicker(p, replace = sound != null))) },
+                Modifier.weight(1f).semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction("Move down") { ui.d(Action.MoveSound(p, 1)); true },
+                        CustomAccessibilityAction("Move up") { ui.d(Action.MoveSound(p, -1)); true },
+                    )
+                },
+                sub = "%03d".format(p) + if (lib.live == p) "  ·  LIVE" else "",
+                selected = lib.live == p,
+            )
+            if (sound != null) {
+                Gap(w = 14.dp)
+                CrossButton({ ui.d(Action.ClearSound(p)) }, Modifier.semantics { contentDescription = "Clear program $p" }.ids("midi.slot.clear"), VoLumColors.Danger.withOpacity(0.8f))
+            } else Gap(w = 62.dp)
+        }
+    }
 }
 
 @Composable
@@ -243,33 +258,44 @@ private fun SystemTab(ui: Ui) {
 @Composable
 internal fun AudioDevices(ui: Ui, modifier: Modifier) {
     val a = ui.s.audio
-    PanelFrame(ui, "Audio & MIDI devices", "audio.devices.close", { ui.back() }, modifier, crumb = "Settings  ·  Signal") {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+    PanelFrame(ui, "Audio & MIDI devices", "audio.devices.close", { ui.back() }, modifier) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val dev = a.inputs.firstOrNull { it.id == a.inputId }
-                Spaced(gap = 4) {
+                Spaced(Modifier.height(Metrics.target), gap = 4) {
                     Caption("Input", Modifier.weight(1f))
                     if (dev != null && dev.channels > 1) (0 until dev.channels).forEach { ch -> Brass("${ch + 1}", a.inputChannel == ch, listOf("audio.input.channel"), { ui.d(Action.SelectInputChannel(ch)) }, minWidth = 48.dp) }
                 }
                 a.inputs.forEach { d -> ListRow(d.name, listOf("audio.input.device"), { ui.d(Action.SelectInput(d.id)) }, Modifier.fillMaxWidth(), sub = if (d.usb) "USB" else "BUILT-IN", selected = a.inputId == d.id) }
-                Caption("Output")
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.height(Metrics.target), contentAlignment = Alignment.CenterStart) { Caption("Output") }
                 a.outputs.forEach { d -> ListRow(d.name, listOf("audio.output.device"), { ui.d(Action.SelectOutput(d.id)) }, Modifier.fillMaxWidth(), sub = if (d.usb) "USB" else "BUILT-IN", selected = a.outputId == d.id) }
             }
-            Column(Modifier.weight(0.85f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Caption("Sample rate")
-                Spaced(gap = 4) { a.sampleRates.forEach { r -> Brass("%.1f k".format(r / 1000.0), a.sampleRate == r, listOf("audio.sample_rate"), { ui.d(Action.SetSampleRate(r)) }) } }
+            Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Spaced(gap = 6) {
+                    Caption("Sample rate")
+                    VText("kHz", style = VoLumType.label(10.sp, VoLumColors.CreamDim))
+                }
+                Spaced(gap = 4) { a.sampleRates.forEach { r -> Brass(if (r % 1000 == 0) "${r / 1000}" else "%.1f".format(r / 1000.0), a.sampleRate == r, listOf("audio.sample_rate"), { ui.d(Action.SetSampleRate(r)) }, minWidth = 48.dp) } }
                 Caption("Buffer")
-                Spaced(gap = 4) { a.buffers.forEach { b -> Brass("$b", a.bufferFrames == b, listOf("audio.buffer"), { ui.d(Action.SetBuffer(b)) }) } }
-                Note("About %.1f ms. Smaller answers faster; raise it if you hear crackles.".format(a.bufferFrames * 1000.0 / a.sampleRate), maxLines = 2, size = 11.sp)
+                Spaced(gap = 4) { a.buffers.forEach { b -> Brass("$b", a.bufferFrames == b, listOf("audio.buffer"), { ui.d(Action.SetBuffer(b)) }, minWidth = 48.dp) } }
+                Note("About %.1f ms. Smaller answers faster; raise it if you hear crackles.".format(a.bufferFrames * 1000.0 / a.sampleRate), maxLines = 3, size = 11.sp, color = VoLumColors.Cream)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Caption("MIDI controllers")
-                if (a.midiLost) Alert("Controller disconnected", "Plug it back in or pick another.", "midi.device.lost")
+                if (a.midiLost) Alert("Controller lost", "It was unplugged. Plug it back in or pick another.", "midi.device.lost")
                 a.midiDevices.forEach { d ->
-                    ListRow(d.name, listOf("midi.device.select"), { ui.d(Action.SelectMidiDevice(d.id)) }, Modifier.fillMaxWidth(), sub = (if (d.ble) "BLUETOOTH" else "USB") + if (a.midiDeviceId == d.id) "  ·  IN USE" else "", selected = a.midiDeviceId == d.id && !a.midiLost)
+                    val used = a.midiDeviceId == d.id
+                    val gone = used && a.midiLost
+                    ListRow(
+                        d.name, listOf("midi.device.select"), { ui.d(Action.SelectMidiDevice(d.id)) }, Modifier.fillMaxWidth().alpha(if (gone) 0.45f else 1f),
+                        sub = (if (d.ble) "BLUETOOTH" else "USB") + when { gone -> "  ·  LAST USED"; used -> "  ·  IN USE"; else -> "" },
+                        selected = used && !gone, enabled = !gone,
+                    )
                 }
                 if (a.midiDevices.isEmpty()) Note("No MIDI controller connected.")
-                Btn(if (a.bleScanning) "Scanning..." else "Scan for Bluetooth MIDI", listOf("midi.device.ble_scan"), { ui.d(Action.ScanBleMidi) })
+                Btn(if (a.bleScanning) "Scanning..." else "Scan Bluetooth", listOf("midi.device.ble_scan"), { ui.d(Action.ScanBleMidi) }, Modifier.fillMaxWidth())
             }
         }
     }
@@ -322,7 +348,7 @@ internal fun Alert(title: String, body: String, id: String?, ok: Boolean = false
     ) {
         if (!ok) WarnGlyph(accent) else Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { com.volum.design.components.VoLumLed(true, color = accent) }
         Column(Modifier.weight(1f)) {
-            VText(title, style = VoLumType.label(15.sp, VoLumColors.TextBright))
+            VFitText(title, style = VoLumType.label(15.sp, VoLumColors.TextBright), minSize = 10.sp)
             Note(body, color = VoLumColors.Cream, maxLines = 3)
         }
     }

@@ -26,7 +26,7 @@ import com.volum.harness.CandidateUi
  * rail floating on it; BUILD keeps a living art window with the PRE / AMP / POST
  * blocks floating on it above a sheet capped under half the screen. A picker folds
  * that sheet down to the row it came from and rises above it; panels opened from
- * the top bar hang under their control, sized to their content.
+ * the top bar drop from it, never ending across a row of controls.
  */
 object CandidateC : CandidateUi {
     override val name = "C Studio Instrument"

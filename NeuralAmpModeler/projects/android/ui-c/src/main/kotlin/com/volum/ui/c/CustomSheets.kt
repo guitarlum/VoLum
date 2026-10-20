@@ -41,7 +41,7 @@ internal fun Builder(ui: Ui, modifier: Modifier) {
     val ready = b.name.isNotBlank() && b.files.isNotEmpty()
     PanelFrame(ui, if (b.editAmpId != null) "Edit custom amp" else "New custom amp", "builder.close", { ui.back() }, modifier, crumb = "Custom", actions = {
         Btn("+ Add .nam files", listOf("builder.add_files"), { ui.d(Action.PickFiles(PickKind.NAM_AMP_FILES)) })
-        Btn(if (b.files.isEmpty()) "Add files to save" else "Save amp", listOf("builder.save"), { ui.d(Action.BuilderSave) }, primary = true, enabled = ready)
+        Btn(if (b.files.isEmpty()) "Add files to save" else if (b.name.isBlank()) "Name it to save" else "Save amp", listOf("builder.save"), { ui.d(Action.BuilderSave) }, primary = ready, enabled = ready)
     }) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Stack(Modifier.width(300.dp), gap = 4) {
@@ -100,12 +100,12 @@ internal fun IrManage(ui: Ui, modifier: Modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             SnapList(irs.size, Modifier.weight(1f)) { irs.forEach { IrRow(ui, it, it.id == open?.id) } }
             if (open != null) {
-                Column(Modifier.width(290.dp).insetWell(4.dp).hairlineFrame(VoLumColors.Frame, radius = 4.dp).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Column(Modifier.width(336.dp).insetWell(4.dp).hairlineFrame(VoLumColors.Frame, radius = 4.dp).padding(horizontal = 10.dp, vertical = 4.dp)) {
                     VFitText("LEVEL & CUTS  ·  ${open.name}", style = VoLumType.label(10.sp, VoLumColors.GoldDim), minSize = 7.sp)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        Knob("LEVEL", open.levelDb, -20.0, 20.0, listOf("ir.config.level"), { "%+.1f dB".format(it) }, { it.toDoubleOrNull() }, { ui.d(Action.SetIrLevel(open.id, it)) }, { ui.d(Action.SetIrLevel(open.id, 0.0)) }, width = 88.dp, dial = 52.dp)
-                        Knob("LOW CUT", open.lowCutHz, 20.0, 500.0, listOf("ir.config.lowcut"), { "%.0f Hz".format(it) }, { it.toDoubleOrNull() }, { ui.d(Action.SetIrLowCut(open.id, it)) }, { ui.d(Action.SetIrLowCut(open.id, 20.0)) }, width = 88.dp, dial = 52.dp)
-                        Knob("HIGH CUT", open.highCutHz, 2000.0, 20000.0, listOf("ir.config.highcut"), { "%.1f kHz".format(it / 1000) }, { it.toDoubleOrNull()?.let { v -> if (v < 100) v * 1000 else v } }, { ui.d(Action.SetIrHighCut(open.id, it)) }, { ui.d(Action.SetIrHighCut(open.id, 20000.0)) }, width = 88.dp, dial = 52.dp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                        Knob("LEVEL", open.levelDb, -20.0, 20.0, listOf("ir.config.level"), { "%+.1f dB".format(it) }, { it.toDoubleOrNull() }, { ui.d(Action.SetIrLevel(open.id, it)) }, { ui.d(Action.SetIrLevel(open.id, 0.0)) }, width = 96.dp, dial = 52.dp)
+                        Knob("LOW CUT", open.lowCutHz, 20.0, 500.0, listOf("ir.config.lowcut"), { "%.0f Hz".format(it) }, { it.toDoubleOrNull() }, { ui.d(Action.SetIrLowCut(open.id, it)) }, { ui.d(Action.SetIrLowCut(open.id, 20.0)) }, width = 96.dp, dial = 52.dp)
+                        Knob("HIGH CUT", open.highCutHz, 2000.0, 20000.0, listOf("ir.config.highcut"), { "%.1f kHz".format(it / 1000) }, { it.toDoubleOrNull()?.let { v -> if (v < 100) v * 1000 else v } }, { ui.d(Action.SetIrHighCut(open.id, it)) }, { ui.d(Action.SetIrHighCut(open.id, 20000.0)) }, width = 96.dp, dial = 52.dp)
                     }
                 }
             }

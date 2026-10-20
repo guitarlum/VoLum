@@ -5,10 +5,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.core.Action
@@ -31,7 +35,7 @@ internal fun PackExport(ui: Ui, modifier: Modifier) {
     val s = ui.s
     val e = s.packExport
     val also = e.alsoIncluding(s.library)
-    PanelFrame(ui, "Export pack", "pack.export.close", { ui.back() }, modifier, crumb = "Settings  ·  System", actions = {
+    PanelFrame(ui, "Export pack", "pack.export.close", { ui.back() }, modifier, actions = {
         if (e.savedAs != null) VFitText("Saved as ${e.savedAs}", Modifier.width(200.dp), style = VoLumType.label(10.sp, VoLumColors.Teal), minSize = 7.sp)
         Btn("Save pack", listOf("pack.export.save"), { ui.d(Action.PickFiles(PickKind.PACK_SAVE)) }, primary = true)
     }) {
@@ -44,10 +48,13 @@ internal fun PackExport(ui: Ui, modifier: Modifier) {
             }
             Stack(Modifier.weight(1f), gap = 6) {
                 if (also.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth().insetWell(4.dp).hairlineFrame(VoLumColors.TealDim, radius = 4.dp).ids("pack.export.also"), verticalAlignment = Alignment.CenterVertically) {
-                        Gap(w = 10.dp)
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 40.dp).insetWell(4.dp).hairlineFrame(VoLumColors.TealDim, radius = 4.dp).ids("pack.export.also")
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
                         Caption("Also including", color = VoLumColors.Teal)
-                        Gap(w = 10.dp)
                         Note(also.joinToString("  ·  "), Modifier.weight(1f), VoLumColors.Cream, maxLines = 2)
                     }
                 }
@@ -76,29 +83,42 @@ internal fun PackExport(ui: Ui, modifier: Modifier) {
     }
 }
 
-/** A row you tick in or out: the `:design` switch, the name, and what it is. */
+/**
+ * A row you tick in or out: the `:design` switch, the name, what it is and, for an
+ * import, what will happen to it. A row that cannot come in shows off and dimmed.
+ */
 @Composable
-private fun TickRow(title: String, sub: String, on: Boolean, ids: List<String>, onToggle: () -> Unit, modifier: Modifier, trailing: @Composable () -> Unit = {}) {
-    Tappable(onToggle, modifier.height(Metrics.target), ids, role = androidx.compose.ui.semantics.Role.Switch) { pressed ->
+private fun TickRow(title: String, sub: String, on: Boolean, ids: List<String>, onToggle: () -> Unit, modifier: Modifier, enabled: Boolean = true, outcome: Pair<String, Color>? = null) {
+    Tappable(onToggle, modifier.height(Metrics.target), ids, role = androidx.compose.ui.semantics.Role.Switch, enabled = enabled) { pressed ->
         Row(Modifier.fillMaxWidth().height(Metrics.target), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            VoLumSwitchTrack(on, pressed = pressed)
+            VoLumSwitchTrack(on && enabled, Modifier.alpha(if (enabled) 1f else 0.4f), pressed = pressed)
             Column(Modifier.weight(1f)) {
-                VFitText(title, style = VoLumType.label(13.sp, if (on) VoLumColors.TextBright else VoLumColors.CreamDim), minSize = 9.sp)
-                VText(sub, style = VoLumType.label(9.sp, VoLumColors.TealDim))
+                VFitText(title, style = VoLumType.label(13.sp, if (on && enabled) VoLumColors.TextBright else VoLumColors.CreamDim), minSize = 9.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    VText(sub, style = VoLumType.label(9.sp, VoLumColors.TealDim))
+                    if (outcome != null) {
+                        VText("  ·  ", style = VoLumType.label(9.sp, VoLumColors.TealDim))
+                        VFitText(outcome.first, Modifier.weight(1f).ids("pack.import.outcome"), style = VoLumType.label(10.sp, outcome.second), minSize = 7.sp)
+                    }
+                }
             }
-            trailing()
         }
     }
 }
 
+/** Whether ticking a row can bring anything in: a missing file, a kept original or a replace under Add cannot. */
+private fun importable(r: PackRow, merge: MergeMode): Boolean =
+    r.outcome != PackOutcome.SKIP && r.outcome != PackOutcome.KEEP_MINE && !(merge == MergeMode.ADD && r.outcome == PackOutcome.REPLACE)
+
 /** What will happen to a row, in words, coloured by how much it changes your library. */
-private fun outcome(r: PackRow): Pair<String, androidx.compose.ui.graphics.Color> = when {
+private fun outcome(r: PackRow, merge: MergeMode): Pair<String, Color> = when {
+    r.outcome == PackOutcome.SKIP -> "Skipped: file missing" to VoLumColors.CreamDim
+    r.outcome == PackOutcome.KEEP_MINE -> "Yours is kept" to VoLumColors.Gold
+    merge == MergeMode.ADD && r.outcome == PackOutcome.REPLACE -> "Yours is kept (Add)" to VoLumColors.Gold
     !r.ticked -> "Not imported" to VoLumColors.CreamDim
     r.outcome == PackOutcome.ADD -> "New: added" to VoLumColors.Teal
     r.outcome == PackOutcome.REPLACE -> "Replaces yours" to VoLumColors.Amber
-    r.outcome == PackOutcome.RELOADS -> "Replaces yours, reloads" to VoLumColors.Amber
-    r.outcome == PackOutcome.KEEP_MINE -> "Yours is kept" to VoLumColors.Gold
-    else -> "Skipped: file missing" to VoLumColors.CreamDim
+    else -> "Replaces yours, reloads" to VoLumColors.Amber
 }
 
 @Composable
@@ -121,12 +141,9 @@ internal fun PackImport(ui: Ui, modifier: Modifier) {
                 }
             }
             else -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                SnapList(pi.rows.size, Modifier.weight(1f), inner = Modifier.ids("pack.import.rows")) {
-                    pi.rows.forEach { r ->
-                        TickRow(r.name, r.kind.uppercase(), r.ticked, listOf("pack.import.tick"), { ui.d(Action.ToggleImportRow(r.id)) }, Modifier.fillMaxWidth()) {
-                            val (text, color) = outcome(r)
-                            VFitText(text, Modifier.width(190.dp).ids("pack.import.outcome"), style = VoLumType.label(11.sp, color), minSize = 8.sp)
-                        }
+                SnapList(gridRows(pi.rows.size, 2), Modifier.weight(1f), inner = Modifier.ids("pack.import.rows")) {
+                    Grid(pi.rows, 2) { r, m ->
+                        TickRow(r.name, r.kind.uppercase(), r.ticked, listOf("pack.import.tick"), { ui.d(Action.ToggleImportRow(r.id)) }, m, enabled = importable(r, pi.merge), outcome = outcome(r, pi.merge))
                     }
                 }
                 Stack(Modifier.width(330.dp), gap = 6) {

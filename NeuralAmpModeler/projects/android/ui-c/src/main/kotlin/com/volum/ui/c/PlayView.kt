@@ -2,6 +2,7 @@ package com.volum.ui.c
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -77,31 +78,38 @@ import com.volum.design.theme.VFitText
 import com.volum.design.theme.VText
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
-import com.volum.design.theme.ic
 import com.volum.design.theme.withOpacity
 import com.volum.harness.screen
 
-private val ChainH = 112.dp
+internal val PlayChainH = 112.dp
 
-/** PLAY: the moving art fills the stage, the Sound rail floats on its right, the chain of stomps runs under it. */
+/**
+ * PLAY: the moving art fills the stage, the Sound rail floats on its right, the
+ * chain of stomps runs under it. Under a panel the title strip and the rail step
+ * back to the art and the chain stays; under the Sound picker the rail it was
+ * opened from stays and the chain steps back.
+ */
 @Composable
 internal fun PlayView(ui: Ui, fade: () -> Float, banner: Boolean) {
     val s = ui.s
     val frames = rememberArtFrames()
     Box(Modifier.fillMaxSize().padding(top = Metrics.top).screen(ScreenId.PLAY)) {
-        Stage(ui, Modifier.fillMaxWidth().fillMaxHeight().padding(bottom = ChainH))
-        Box(Modifier.fillMaxSize().graphicsLayer { alpha = fade() }) {
-            Column(Modifier.fillMaxSize()) {
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    Column(Modifier.fillMaxHeight().padding(start = 12.dp, end = Metrics.rail + 16.dp, top = 10.dp, bottom = 10.dp)) {
-                        if (banner) FloatingBanner(ui, Modifier.align(Alignment.CenterHorizontally))
-                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { InputAlert(ui) }
-                        TitleRow(ui)
-                    }
-                    SoundRail(ui, Modifier.align(Alignment.TopEnd).width(Metrics.rail).fillMaxHeight().padding(top = 8.dp, end = 8.dp, bottom = 8.dp))
+        val top = s.ui.overlays.lastOrNull()
+        val stage by animateFloatAsState(if (top == null || top is Overlay.NameDialog) 1f else 0f, tween(200), label = "stage")
+        val docked = top is Overlay.SoundPicker && s.ui.overlays.size == 1
+        val rail by animateFloatAsState(if (top == null || top is Overlay.NameDialog || docked) 1f else 0f, tween(200), label = "rail")
+        val chain by animateFloatAsState(if (docked) 0f else 1f, tween(200), label = "chain")
+        Stage(ui, Modifier.fillMaxWidth().fillMaxHeight().padding(bottom = PlayChainH))
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxWidth().graphicsLayer { alpha = fade() }) {
+                Column(Modifier.fillMaxHeight().padding(start = 12.dp, end = Metrics.rail + 16.dp, top = 10.dp, bottom = 10.dp).graphicsLayer { alpha = stage }.inert(stage < 1f)) {
+                    if (banner) FloatingBanner(ui, Modifier.align(Alignment.CenterHorizontally))
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { if (banner) InputAlert(ui) }
+                    TitleRow(ui)
                 }
-                Chain(ui, frames)
+                SoundRail(ui, Modifier.align(Alignment.TopEnd).width(Metrics.rail).fillMaxHeight().padding(top = 8.dp, end = 8.dp, bottom = 8.dp).graphicsLayer { alpha = rail }.inert(rail < 1f))
             }
+            Box(Modifier.graphicsLayer { alpha = minOf(0.32f + 0.68f * fade(), chain) }.inert(docked)) { Chain(ui, frames) }
         }
     }
 }
@@ -115,8 +123,8 @@ private fun Stage(ui: Ui, modifier: Modifier) {
     Box(modifier.ids("play.art")) {
         Crossfade(Triple(s.ampId, s.dual, s.rig.support.ampId), animationSpec = tween(360), label = "stage") { (_, dual, _) ->
             Row(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                PlayStagePanel(artOf(s.amp), input, Modifier.weight(1f).fillMaxHeight(), role = if (dual) "MAIN  ·  ${s.amp?.name ?: ""}" else null, animate = s.signal.animateArt)
-                if (dual && support != null) PlayStagePanel(artOf(support), input, Modifier.weight(1f).fillMaxHeight(), support = true, role = "SUPPORT  ·  ${support.name}", animate = s.signal.animateArt)
+                PlayStagePanel(artOf(s.amp), input, Modifier.weight(1f).fillMaxHeight(), role = if (dual) "MAIN  Â·  ${s.amp?.name ?: ""}" else null, animate = s.signal.animateArt)
+                if (dual && support != null) PlayStagePanel(artOf(support), input, Modifier.weight(1f).fillMaxHeight(), support = true, role = "SUPPORT  Â·  ${support.name}", animate = s.signal.animateArt)
             }
         }
     }
@@ -135,7 +143,7 @@ private fun TitleRow(ui: Ui) {
             label = "recall",
         ) { (live, name, _) ->
             Row(
-                Modifier.fillMaxSize().background(ic(205, 5, 7, 11)).drawBehind { drawLine(VoLumColors.GoldDim.withOpacity(0.5f), Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }.padding(horizontal = 14.dp),
+                Modifier.fillMaxSize().background(Glass.Strip).drawBehind { drawLine(VoLumColors.GoldDim.withOpacity(0.5f), Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }.padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -156,7 +164,7 @@ private fun Paddle(glyph: VoLumGlyph, description: String, id: String, onClick: 
     Tappable(onClick, Modifier.size(72.dp, 64.dp).semantics { contentDescription = description }, listOf(id)) { pressed ->
         val ink by rememberUpdatedState(if (pressed) VoLumColors.Gold else VoLumColors.GoldDim)
         Box(
-            Modifier.fillMaxSize().background(ic(205, 5, 7, 11)).volumSelection(false, pressed, VoLumSelectionStyle.Brass, radius = 4.dp, inset = 2.dp)
+            Modifier.fillMaxSize().background(Glass.Strip).volumSelection(false, pressed, VoLumSelectionStyle.Brass, radius = 4.dp, inset = 2.dp)
                 .hairlineFrame(if (pressed) VoLumColors.Gold else VoLumColors.Frame, radius = 4.dp),
             contentAlignment = Alignment.Center,
         ) { Spacer(Modifier.size(22.dp, 26.dp).volumGlyph(glyph, { ink })) }
@@ -205,7 +213,7 @@ private fun SoundRail(ui: Ui, modifier: Modifier) {
         if (i > 0) scroll.scrollTo(i * pitchPx)
     }
     Column(
-        modifier.background(ic(214, 12, 12, 18), androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).hairlineFrame(VoLumColors.Frame, radius = 6.dp)
+        modifier.background(Glass.Float, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).hairlineFrame(VoLumColors.Frame, radius = 6.dp)
             .cornerBrackets(VoLumColors.HeroCorner, 10.dp, 4.dp).padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -237,13 +245,22 @@ private fun SoundRail(ui: Ui, modifier: Modifier) {
             },
         ) {
             if (programs.isEmpty()) Note("No Sounds yet. + Pick puts a preset on a program number; + This adds what you hear.", Modifier.padding(6.dp))
-            programs.forEach { p -> SoundRow(ui, p, lifted == p) }
+            val row = Metrics.rail - 18.dp - 8.dp - 16.dp
+            val names = programs.mapNotNull { p ->
+                val preset = lib.preset(lib.sounds[p]?.presetId)?.takeIf { lib.soundValid(p) } ?: return@mapNotNull null
+                preset.name to (row - 34.dp - if (lib.live == p) RowTools else 0.dp)
+            }
+            val nameStyle = VoLumType.display(16.sp, VoLumColors.Cream).let { it.copy(fontSize = it.fontSize * sharedFit(names, it)) }
+            programs.forEach { p -> SoundRow(ui, p, lifted == p, nameStyle) }
         }
     }
 }
 
+/** SWAP and CLEAR on the live and broken rows, with the gaps before them. */
+private val RowTools = Metrics.target * 2 + 16.dp
+
 @Composable
-private fun SoundRow(ui: Ui, program: Int, lifted: Boolean) {
+private fun SoundRow(ui: Ui, program: Int, lifted: Boolean, nameStyle: androidx.compose.ui.text.TextStyle) {
     val lib = ui.s.library
     val sound = lib.sounds[program]
     val valid = lib.soundValid(program)
@@ -278,9 +295,10 @@ private fun SoundRow(ui: Ui, program: Int, lifted: Boolean) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     VText(twoDigits(program), Modifier.ids("play.sound.program"), style = VoLumType.value(11.sp, if (live) VoLumColors.Gold else VoLumColors.GoldDim))
                     if (live) VText("LIVE", Modifier.ids("play.sound.live"), style = VoLumType.label(8.sp, VoLumColors.Teal))
+                    if (!valid) VText("INVALID SLOT", style = VoLumType.label(8.sp, VoLumColors.Danger))
                 }
-                if (valid && preset != null) VFitText(preset.name, style = VoLumType.display(16.sp, VoLumColors.Cream), minSize = 8.sp)
-                else VFitText("Invalid slot: preset deleted", Modifier.ids("play.sound.invalid"), style = VoLumType.label(11.sp, VoLumColors.Danger), minSize = 8.sp)
+                if (valid && preset != null) VFitText(preset.name, style = nameStyle, minSize = 8.sp)
+                else VFitText("Preset deleted", Modifier.ids("play.sound.invalid"), style = VoLumType.label(11.sp, VoLumColors.Danger), minSize = 7.sp)
             }
             if (live || !valid) {
                 GlyphBtn(VoLumGlyph.Edit, "Swap the preset on program $program", listOf("play.sound.replace"), { ui.d(Action.Open(Overlay.SoundPicker(program, replace = true))) }, color = VoLumColors.GoldDim)
@@ -309,7 +327,7 @@ private val postStomps = listOf(
 @Composable
 private fun Chain(ui: Ui, frames: LongState) {
     Row(
-        Modifier.fillMaxWidth().height(ChainH).padding(start = 6.dp, end = 6.dp, bottom = 6.dp, top = 2.dp),
+        Modifier.fillMaxWidth().height(PlayChainH).padding(start = 6.dp, end = 6.dp, bottom = 6.dp, top = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Column(Modifier.fillMaxHeight().width(26.dp).ids("play.meters"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {

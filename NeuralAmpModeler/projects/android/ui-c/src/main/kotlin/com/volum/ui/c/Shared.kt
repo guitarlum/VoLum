@@ -16,13 +16,22 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.floor
 import com.volum.core.Action
 import com.volum.core.Amp
 import com.volum.core.BannerKind
@@ -39,9 +48,11 @@ import com.volum.design.components.cornerBrackets
 import com.volum.design.components.hairlineFrame
 import com.volum.design.components.panelDepth
 import com.volum.design.components.volumScrollbar
+import com.volum.design.theme.VFitText
 import com.volum.design.theme.VText
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
+import com.volum.design.theme.withOpacity
 
 internal fun captureName(ui: Ui, p: Param): String {
     val idx = ui.s.param(p).toInt()
@@ -64,6 +75,53 @@ internal object Captures {
 
 internal fun artOf(amp: Amp?): ArtRef = amp?.let { ArtRef.of(it) } ?: ArtRef.factory(13)
 
+/** C's glass over the art, one name per role, all from the `:design` palette. */
+internal object Glass {
+    /** Tabs, tiles and the rail floating on the art. */
+    val Float = VoLumColors.HeroBg.withOpacity(0.8f)
+    /** The title strip and paddles under the PLAY sound name. */
+    val Strip = VoLumColors.WellDark.withOpacity(0.8f)
+    /** The edit readout over the art. */
+    val Readout = VoLumColors.WellDark.withOpacity(0.84f)
+    /** The tuner's veil over the art. */
+    val Veil = VoLumColors.Scrim.withOpacity(0.45f)
+}
+
+/**
+ * The largest factor (at most 1) at which every text of [entries] fits its room
+ * at [style], so a whole list shares one size instead of fitting row by row.
+ */
+@Composable
+internal fun sharedFit(entries: List<Pair<String, Dp>>, style: TextStyle): Float {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(entries, style, density) {
+        entries.minOfOrNull { (text, room) ->
+            val needed = measurer.measure(text, style, softWrap = false, maxLines = 1).size.width
+            val avail = with(density) { room.toPx() }
+            if (needed <= avail || needed == 0) 1f else avail / needed
+        }?.let { floor(it * 50f) / 50f }?.coerceIn(0.5f, 1f) ?: 1f
+    }
+}
+
+/**
+ * Lists built from `VoLumListRow`: the font scale drops by [sharedFit] so the
+ * longest name fits at the row's 13 sp and every row shows the same size.
+ */
+@Composable
+internal fun SharedFitRows(entries: List<Pair<String, Dp>>, content: @Composable () -> Unit) {
+    val k = sharedFit(entries, VoLumType.label(13.sp))
+    val d = LocalDensity.current
+    if (k >= 1f) content() else CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * k)) { content() }
+}
+
+/** The room a `VoLumListRow` of [row] width leaves its title. */
+internal fun rowTitleRoom(row: Dp, art: Boolean, trailing: Dp = 0.dp): Dp =
+    row - 18.dp - (if (art) 30.dp else 0.dp) - (if (trailing > 0.dp) trailing + 8.dp else 0.dp) - 2.dp
+
+/** One cell of [columns] in a snapped list [width] wide (its scrollbar gutter included). */
+internal fun cellWidth(width: Dp, columns: Int): Dp = (width - 8.dp - 6.dp * (columns - 1)) / columns
+
 /**
  * The chrome of every panel: panel depth, a gold hairline and gold corner brackets
  * set inside the padding, so they never touch text. The title is Poiret One as the
@@ -82,18 +140,20 @@ internal fun PanelFrame(
     lead: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val floor = LocalPanelFloor.current
     Column(
         modifier
             .panelDepth(6.dp)
             .hairlineFrame(VoLumColors.Frame, radius = 6.dp)
             .cornerBrackets(VoLumColors.Corner, 10.dp, 5.dp)
-            .padding(start = 18.dp, end = 12.dp, top = 6.dp, bottom = 12.dp),
+            .padding(start = 18.dp, end = 12.dp, top = 6.dp, bottom = 12.dp)
+            .cleanFloor(floor, 18.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(Modifier.fillMaxWidth().height(Metrics.target), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (crumb != null) VText(crumb.uppercase() + "  >", style = VoLumType.label(10.sp, VoLumColors.TealDim))
             lead()
-            if (title.isNotEmpty()) VText(title, Modifier.weight(1f, fill = false), style = VoLumType.display(22.sp, VoLumColors.Gold))
+            if (title.isNotEmpty()) VFitText(title, Modifier.weight(1f, fill = false), style = VoLumType.display(22.sp, VoLumColors.Gold), minSize = 14.sp)
             Fill()
             actions()
             if (closeId != null) CrossButton(onClose, Modifier.ids(closeId.ifEmpty { "nav.back" }), VoLumColors.TextDim)
@@ -101,6 +161,20 @@ internal fun PanelFrame(
         PanelBanner(ui)
         content()
     }
+}
+
+/**
+ * Where a panel may end, given its outer height in px: the hanging placement
+ * provides it so a panel never stops across a row of controls under it.
+ */
+internal val LocalPanelFloor = staticCompositionLocalOf<((Int) -> Int)?> { null }
+
+/** Stretches the panel (content kept at the top) to the height [floor] picks; [chrome] is its vertical padding. */
+private fun Modifier.cleanFloor(floor: ((Int) -> Int)?, chrome: Dp): Modifier = if (floor == null) this else layout { m, c ->
+    val p = m.measure(c)
+    val pad = chrome.roundToPx()
+    val h = (floor(p.height + pad) - pad).coerceIn(p.height, c.maxHeight.coerceAtLeast(p.height))
+    layout(p.width, h) { p.place(0, 0) }
 }
 
 /** Errors and notices in a reserved row, never over a control. */
@@ -199,8 +273,15 @@ internal fun GroupHeader(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** The state-of-the-rig sentence the views share: channel and cab. */
-internal fun chCab(s: VoLumState): String = "CH ${s.rig.channel + 1}  ·  " + if (s.rig.cab == Cab.CUSTOM_IR) (s.library.ir(s.rig.irId)?.name ?: "Custom IR") else cabLabel(s.rig.cab, s.amp)
+/** The state-of-the-rig sentence the views share: channel and cab of MAIN, or of SUPPORT. */
+internal fun chCab(s: VoLumState, support: Boolean = false): String {
+    if (support) {
+        val lane = s.rig.support
+        val amp = s.library.amp(lane.ampId) ?: return "Empty lane"
+        return "CH ${lane.channel + 1}  ·  " + if (lane.cab == Cab.CUSTOM_IR) (s.library.ir(lane.irId)?.name ?: "Custom IR") else cabLabel(lane.cab, amp)
+    }
+    return "CH ${s.rig.channel + 1}  ·  " + if (s.rig.cab == Cab.CUSTOM_IR) (s.library.ir(s.rig.irId)?.name ?: "Custom IR") else cabLabel(s.rig.cab, s.amp)
+}
 
 @Composable
 internal fun Scroll(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {

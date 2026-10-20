@@ -32,6 +32,7 @@ import androidx.compose.runtime.LongState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,13 +71,13 @@ import com.volum.design.components.hairlineFrame
 import com.volum.design.components.lockInk
 import com.volum.design.components.panelDepth
 import com.volum.design.components.preCrosshatch
+import com.volum.design.components.volumGlyph
 import com.volum.design.components.volumSectionFrame
 import com.volum.design.components.volumSelection
 import com.volum.design.theme.VFitText
 import com.volum.design.theme.VText
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
-import com.volum.design.theme.ic
 import com.volum.design.theme.withOpacity
 import com.volum.harness.screen
 import kotlinx.coroutines.delay
@@ -88,6 +89,13 @@ internal val Overlay.fromSheet: Boolean
 /** The overlay stack started at a sheet row (a picker, maybe with a manage panel opened from it). */
 internal fun VoLumState.folded(): Boolean = ui.view == com.volum.core.View.BUILD && ui.overlays.firstOrNull()?.fromSheet == true
 
+/**
+ * The support amp list was opened from the SUPPORT lane on the art (MAIN has the
+ * sheet): it fills the MAIN half, the sheet steps aside and the lane keeps the rest.
+ */
+internal fun VoLumState.supportFromLane(): Boolean =
+    ui.view == com.volum.core.View.BUILD && ui.overlays.lastOrNull() is Overlay.SupportAmpMenu && !supportFocused
+
 @Composable
 internal fun BuildView(ui: Ui, fade: () -> Float, banner: Boolean) {
     val s = ui.s
@@ -97,13 +105,17 @@ internal fun BuildView(ui: Ui, fade: () -> Float, banner: Boolean) {
         Section.POST -> ScreenId.BUILD_POST
     }
     val folded = s.folded()
+    val lane = s.supportFromLane()
     val frames = rememberArtFrames()
-    val sheetH by animateDpAsState(if (folded) Metrics.tray else Metrics.sheet, tween(260), label = "fold")
+    val chained = folded && s.ui.overlays.size > 1
+    val sheetH by animateDpAsState(if (lane || chained) 0.dp else if (folded) Metrics.tray else Metrics.sheet, tween(260), label = "fold")
+    val grow by animateDpAsState(if (lane) Metrics.sheet else 0.dp, tween(260), label = "grow")
+    val blocks by animateFloatAsState(if (s.ui.overlays.any { it !is Overlay.NameDialog }) 0f else 1f, tween(200), label = "blocks")
     BoxWithConstraints(Modifier.fillMaxSize().padding(top = Metrics.top).screen(screen)) {
-        val artH = maxHeight - Metrics.sheet
+        val artH = maxHeight - Metrics.sheet + grow
         ArtWindow(ui, Modifier.fillMaxWidth().height(artH))
-        Box(Modifier.fillMaxWidth().height(artH).graphicsLayer { alpha = fade() }) { Floating(ui, frames, banner) }
-        Sheet(ui, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(sheetH).graphicsLayer { alpha = fade() })
+        Box(Modifier.fillMaxWidth().height(maxHeight - Metrics.sheet).graphicsLayer { alpha = fade() }) { Floating(ui, frames, banner) { blocks } }
+        if (sheetH > 0.dp) Sheet(ui, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(sheetH).graphicsLayer { alpha = fade() })
     }
 }
 
@@ -122,7 +134,7 @@ private fun ArtWindow(ui: Ui, modifier: Modifier) {
                     Lane(ui, false, "MAIN  ·  ${s.amp?.name ?: ""}", Modifier.weight(1f).fillMaxHeight()) {
                         PlayStagePanel(artOf(s.amp), input, Modifier.fillMaxSize(), animate = s.signal.animateArt)
                     }
-                    Lane(ui, true, "SUPPORT  ·  ${support?.name ?: "empty"}", Modifier.weight(1f).fillMaxHeight()) {
+                    Lane(ui, true, "SUPPORT  ·  ${support?.name ?: "empty"}", Modifier.weight(1f).fillMaxHeight(), tab = support != null || s.supportFocused) {
                         if (support != null) PlayStagePanel(artOf(support), input, Modifier.fillMaxSize(), support = true, animate = s.signal.animateArt)
                         else EmptyLane(ui)
                     }
@@ -134,23 +146,24 @@ private fun ArtWindow(ui: Ui, modifier: Modifier) {
 
 /**
  * A Dual Amp lane. Its role tab at the top aims the sheet at it (the floating blocks
- * cover the lower half); the focused lane carries its accent frame and tab.
+ * cover the lower half); the focused lane carries its accent frame and tab. An
+ * empty SUPPORT lane that MAIN still edits has no tab: its chooser is the way in.
  */
 @Composable
-private fun Lane(ui: Ui, support: Boolean, role: String, modifier: Modifier, content: @Composable () -> Unit) {
+private fun Lane(ui: Ui, support: Boolean, role: String, modifier: Modifier, tab: Boolean = true, content: @Composable () -> Unit) {
     val focused = ui.s.supportFocused == support
     val accent = if (support) VoLumColors.Teal else VoLumColors.Amber
     Box(modifier.then(if (focused) Modifier.hairlineFrame(accent, 1.6.dp) else Modifier)) {
         content()
-        Tappable(
+        if (tab) Tappable(
             { ui.d(Action.FocusLane(if (support) Lane.SUPPORT else Lane.MAIN)) },
-            Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 2.dp).height(Metrics.target).widthIn(min = 150.dp, max = 230.dp)
+            Modifier.align(Alignment.TopStart).padding(start = if (support) 8.dp else LaneInset, top = 2.dp).height(Metrics.target).widthIn(min = 150.dp, max = 230.dp)
                 .semantics { contentDescription = if (support) "Edit the SUPPORT amp" else "Edit the MAIN amp" },
             listOf(if (support) "dual.focus.support" else "dual.focus.main"),
             role = Role.Tab,
         ) { pressed ->
             Row(
-                Modifier.fillMaxSize().padding(vertical = 8.dp).background(ic(200, 12, 12, 18), RoundedCornerShape(3.dp))
+                Modifier.fillMaxSize().padding(vertical = 8.dp).background(Glass.Float, RoundedCornerShape(3.dp))
                     .volumSelection(focused, pressed, VoLumSelectionStyle.ListTeal, radius = 3.dp, inset = 0.dp)
                     .hairlineFrame(if (focused || pressed) accent else VoLumColors.Frame, radius = 3.dp).padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -159,11 +172,44 @@ private fun Lane(ui: Ui, support: Boolean, role: String, modifier: Modifier, con
     }
 }
 
+/** The IN meter column on the art's left edge: what sits at the art's top-left starts right of it. */
+private val LaneInset = 44.dp
+
+/**
+ * The empty SUPPORT lane. While MAIN has the sheet, its chooser opens the support
+ * list beside it and stays lit; a second tap closes the list. With SUPPORT
+ * focused, the sheet's amp selector is the chooser and the lane only says so.
+ */
 @Composable
 private fun EmptyLane(ui: Ui) {
+    val s = ui.s
     Box(Modifier.fillMaxSize().panelDepth().hairlineFrame(VoLumColors.TealDim.withOpacity(0.6f)).cornerBrackets(VoLumColors.Teal, 12.dp, 6.dp)) {
-        VText("SUPPORT LANE IS EMPTY", Modifier.align(Alignment.Center), style = VoLumType.label(10.sp, VoLumColors.Teal))
-        Btn("+ Choose support amp", listOf("dual.support.choose"), { ui.d(Action.Open(Overlay.SupportAmpMenu)) }, Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 44.dp), primary = true)
+        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            VText("SUPPORT LANE IS EMPTY", style = VoLumType.label(10.sp, VoLumColors.Teal))
+            if (s.supportFocused) VText("Choose its amp in the sheet below", style = VoLumType.body(11.sp, VoLumColors.Cream))
+        }
+        if (!s.supportFocused) {
+            val open = s.ui.overlays.contains(Overlay.SupportAmpMenu)
+            Tappable(
+                { ui.d(if (open) Action.Back else Action.Open(Overlay.SupportAmpMenu)) },
+                Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 44.dp).height(Metrics.target).semantics { contentDescription = "Choose support amp" },
+                listOf("dual.support.choose"),
+            ) { pressed ->
+                Row(
+                    Modifier.fillMaxHeight().padding(vertical = 6.dp).background(Glass.Float, RoundedCornerShape(4.dp))
+                        .volumSelection(open, pressed, VoLumSelectionStyle.ListTeal, radius = 4.dp, inset = 0.dp)
+                        .hairlineFrame(if (open) VoLumColors.Amber else if (pressed) VoLumColors.Teal else VoLumColors.TealDim, if (open) 1.4.dp else 1.dp, 4.dp)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    VoLumIcon(VoLumGlyph.Plus, color = if (open) VoLumColors.Amber else VoLumColors.Teal)
+                    VText("Choose support amp", style = VoLumType.label(12.sp, if (open) VoLumColors.Amber else VoLumColors.TextBright))
+                    val ink by rememberUpdatedState(if (open) VoLumColors.Amber else VoLumColors.TealDim)
+                    androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp).volumGlyph(if (open) VoLumGlyph.Prev else VoLumGlyph.ChevronDown, { ink }))
+                }
+            }
+        }
     }
 }
 
@@ -182,9 +228,13 @@ private val postPads = listOf(
     Pad(Param.TREM_ON, Motif.TREM, "Trem", "post.card.trem", Action.FocusPost(PostBlock.TREM)) { it.ui.postFocus == PostBlock.TREM },
 )
 
-/** What floats on the art: IN / OUT meters at its edges, the PRE and POST blocks beside the amp, the amp title under it. */
+/**
+ * What floats on the art: IN / OUT meters at its edges, the PRE and POST blocks
+ * beside the amp, the amp title under it. Under a picker or panel the blocks step
+ * back ([blocks] fades them, and they take no touch); the art and meters stay.
+ */
 @Composable
-private fun Floating(ui: Ui, frames: LongState, banner: Boolean) {
+private fun Floating(ui: Ui, frames: LongState, banner: Boolean, blocks: () -> Float) {
     val s = ui.s
     Box(Modifier.fillMaxSize().padding(vertical = 10.dp)) {
         val gateOn = s.on(Param.GATE_ON)
@@ -205,9 +255,10 @@ private fun Floating(ui: Ui, frames: LongState, banner: Boolean) {
                 VText("CLIP", style = VoLumType.label(7.sp, VoLumColors.CreamDim))
             }
         }
-        SectionBlock(ui, Section.PRE, "PRE", prePads, frames, Modifier.align(Alignment.BottomStart).padding(start = 46.dp))
-        SectionBlock(ui, Section.POST, "POST", postPads, frames, Modifier.align(Alignment.BottomEnd).padding(end = 50.dp))
-        AmpBlock(ui, frames, Modifier.align(Alignment.BottomCenter))
+        val step = Modifier.graphicsLayer { alpha = blocks() }.inert(s.ui.overlays.any { it !is Overlay.NameDialog })
+        SectionBlock(ui, Section.PRE, "PRE", prePads, frames, Modifier.align(Alignment.BottomStart).padding(start = 46.dp).then(step))
+        SectionBlock(ui, Section.POST, "POST", postPads, frames, Modifier.align(Alignment.BottomEnd).padding(end = 50.dp).then(step))
+        AmpBlock(ui, frames, Modifier.align(Alignment.BottomCenter).then(step))
         Column(Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (banner) FloatingBanner(ui, Modifier)
             EditReadout(ui)
@@ -268,7 +319,7 @@ private fun AmpBlock(ui: Ui, frames: LongState, modifier: Modifier) {
     val name = if (support) s.library.amp(s.rig.support.ampId)?.name ?: "Support empty" else s.amp?.name ?: "No amp"
     Tappable({ ui.d(Action.SetSection(Section.AMP)) }, modifier.widthIn(min = 220.dp, max = 330.dp).signalGlow(ui.tel, frames, true, selected), listOf("nav.section.amp"), role = Role.Tab) { pressed ->
         Column(
-            Modifier.fillMaxWidth().background(ic(200, 12, 12, 18), RoundedCornerShape(4.dp)).ampCircuitBoard(fill = false)
+            Modifier.fillMaxWidth().background(Glass.Float, RoundedCornerShape(4.dp)).ampCircuitBoard(fill = false)
                 .hairlineFrame(if (selected) VoLumColors.Amber else if (pressed) VoLumColors.GoldDim else VoLumColors.Frame, if (selected) 1.4.dp else 1.dp, 4.dp)
                 .cornerBrackets(VoLumColors.HeroCorner, 8.dp, 4.dp)
                 .padding(horizontal = 16.dp, vertical = 4.dp),
@@ -276,7 +327,10 @@ private fun AmpBlock(ui: Ui, frames: LongState, modifier: Modifier) {
         ) {
             VFitText(name, Modifier.ids("amp.name"), style = if (support) VoLumType.label(21.sp, VoLumColors.Teal) else VoLumType.AmpTitle, minSize = 13.sp, textAlign = TextAlign.Center)
             Box(Modifier.width(110.dp).height(10.dp).diamondRule())
-            VFitText(chCab(s) + if (s.dual) "  ·  DUAL" else "", style = VoLumType.label(9.sp, VoLumColors.CreamDim), minSize = 7.sp, textAlign = TextAlign.Center)
+            VFitText(
+                if (support) "SUPPORT  ·  " + chCab(s, support = true) else chCab(s) + if (s.dual) "  ·  DUAL" else "",
+                style = VoLumType.label(9.sp, if (support) VoLumColors.TealDim else VoLumColors.CreamDim), minSize = 7.sp, textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -301,7 +355,7 @@ private fun EditReadout(ui: Ui) {
     AnimatedVisibility(shown, enter = fadeIn(tween(120)), exit = fadeOut(tween(420))) {
         val p = last ?: return@AnimatedVisibility
         Row(
-            Modifier.background(ic(215, 9, 9, 14), RoundedCornerShape(4.dp)).hairlineFrame(VoLumColors.GoldDim, radius = 4.dp).padding(horizontal = 14.dp, vertical = 2.dp),
+            Modifier.background(Glass.Readout, RoundedCornerShape(4.dp)).hairlineFrame(VoLumColors.GoldDim, radius = 4.dp).padding(horizontal = 14.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
