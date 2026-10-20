@@ -35,13 +35,14 @@ import com.volum.design.components.VoLumBlockHeader
 import com.volum.design.components.VoLumGlyph
 import com.volum.design.components.VoLumIcon
 import com.volum.design.components.VoLumSubModePill
+import com.volum.design.components.insetWell
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
 
 @Composable
 internal fun PreEditor(s: VoLumState, block: PreBlock) {
-    EditorFrame(s, Section.PRE, stompLabel(block.onParam(), s), header = { PreHeader(s, block) }, side = { CaptureColumn(s) }) {
-        KnobRows.forPre(block, s).forEach { p -> ParamKnob(s, p, Ids.preKnob(p, s)) }
+    EditorFrame(s, Section.PRE, stompLabel(block.onParam(), s), header = { PreHeader(s, block) }, side = { CaptureColumn(s) }) { labels ->
+        KnobRows.forPre(block, s).forEach { p -> ParamKnob(s, p, Ids.preKnob(p, s), labels) }
     }
 }
 
@@ -51,14 +52,16 @@ private fun CaptureColumn(s: VoLumState) {
     val st = LocalStage.current
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
         FitText("CAPTURES · the pedals NAM 1 and NAM 2 play", VoLumType.SectionHeader, Modifier.fillMaxWidth().height(14.dp), align = TextAlign.Start)
+        val names = rememberFitGroup()
         listOf(Triple(1, Param.NAM1_CAPTURE, Motif.NAM1), Triple(2, Param.NAM2_CAPTURE, Motif.NAM2)).forEach { (slot, p, motif) ->
             Pad({ st.go(Action.Open(Overlay.CaptureMenu(slot))) }, Modifier.fillMaxWidth().height(48.dp), arrayOf("pre.nam$slot.capture"),
-                selected = s.ui.preFocus.ordinal == slot + 1, style = Sel.ListTeal, description = "NAM $slot capture") { _ ->
+                selected = s.ui.preFocus.ordinal == slot + 1, style = Sel.AmberPicker, description = "NAM $slot capture") { ink ->
                 Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MotifArt(motif, captureName(s, p) != null, Modifier.width(22.dp).height(26.dp))
-                    FitText("NAM $slot", VoLumType.label(10.sp, VoLumColors.GoldDim), Modifier.width(40.dp), align = TextAlign.Start)
-                    FitText(captureName(s, p) ?: "Empty", VoLumType.label(13.sp, VoLumColors.TextBright), Modifier.weight(1f), align = TextAlign.Start)
-                    VoLumIcon(VoLumGlyph.ChevronDown, color = VoLumColors.Gold)
+                    FitText("NAM $slot", VoLumType.label(10.sp, if (ink == VoLumColors.AmberInk) ink else VoLumColors.GoldDim), Modifier.width(40.dp).height(16.dp), align = TextAlign.Start)
+                    FitText(captureName(s, p) ?: "Empty", VoLumType.label(13.sp, if (ink == VoLumColors.AmberInk) ink else VoLumColors.TextBright), Modifier.weight(1f).height(20.dp),
+                        align = TextAlign.Start, group = names)
+                    VoLumIcon(VoLumGlyph.ChevronDown, color = if (ink == VoLumColors.AmberInk) ink else VoLumColors.Gold)
                 }
             }
         }
@@ -72,10 +75,10 @@ internal fun PostEditor(s: VoLumState, block: PostBlock) {
         PostBlock.TREM -> { { SyncColumn(s, Param.TREM_SYNC, Param.TREM_DIVISION, "post.trem", pingPong = false) } }
         else -> null
     }
-    EditorFrame(s, Section.POST, stompLabel(block.onParam(), s), header = { PostHeader(s, block) }, side = side) {
+    EditorFrame(s, Section.POST, stompLabel(block.onParam(), s), header = { PostHeader(s, block) }, side = side) { labels ->
         KnobRows.forPost(block, s).forEach { p ->
             val label = if (p == Param.DELAY_AGE) KnobRows.delayCharacterLabel(s) else p.label
-            ParamKnob(s, p, Ids.postKnob(p, s), label)
+            ParamKnob(s, p, Ids.postKnob(p, s), labels, label)
         }
     }
 }
@@ -92,12 +95,13 @@ private fun EditorFrame(
     title: String,
     header: @Composable RowScope.() -> Unit,
     side: (@Composable () -> Unit)?,
-    knobs: @Composable RowScope.() -> Unit,
+    knobs: @Composable RowScope.(labels: FitGroup) -> Unit,
 ) {
     val st = LocalStage.current
     val locked = (if (section == Section.PRE) s.locks.pre else s.locks.post) != null
     val differs = Reducer.lockDiffers(s, section)
     val key = if (section == Section.PRE) "pre" else "post"
+    val labels = rememberFitGroup()
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             FitText(title, VoLumType.display(22.sp, VoLumColors.TextBright), Modifier.width(112.dp), align = TextAlign.Start)
@@ -111,10 +115,11 @@ private fun EditorFrame(
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (differs) {
-                    FitText("The locked ${section.name} differs from what this amp has saved. The teal arrow stores it into the amp.",
-                        VoLumType.body(11.sp, VoLumColors.Teal), Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
+                    FitText("This amp saved a different ${section.name} · the teal arrow stores the locked one into it",
+                        VoLumType.label(11.sp, VoLumColors.Teal), Modifier.fillMaxWidth().height(20.dp).insetWell(3.dp).padding(horizontal = 8.dp, vertical = 2.dp),
+                        align = TextAlign.Start)
                 }
-                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) { knobs() }
+                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) { knobs(labels) }
             }
             if (side != null) Box(Modifier.width(236.dp).fillMaxHeight()) { side() }
         }
@@ -122,9 +127,9 @@ private fun EditorFrame(
 }
 
 @Composable
-private fun ParamKnob(s: VoLumState, p: Param, ids: Array<String>, label: String = p.label) {
+private fun ParamKnob(s: VoLumState, p: Param, ids: Array<String>, labels: FitGroup, label: String = p.label) {
     val st = LocalStage.current
-    Knob(p, s.param(p), { st.go(Action.SetParam(p, it)) }, Modifier.width(96.dp).fillMaxHeight(), ids, label)
+    Knob(p, s.param(p), { st.go(Action.SetParam(p, it)) }, Modifier.width(96.dp).fillMaxHeight(), ids, label, group = labels)
 }
 
 /** One exclusive group: its name, then the AmberPicker pill. Groups sit apart behind a hairline so it is clear which choices exclude each other. */
@@ -133,7 +138,7 @@ private fun RowScope.ModeGroup(s: VoLumState, caption: String, p: Param, ids: (I
     val st = LocalStage.current
     if (divider) Spacer(Modifier.width(1.dp).height(36.dp).background(VoLumColors.Frame))
     Row(Modifier.weight(weight).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        FitText(caption, VoLumType.label(9.sp, VoLumColors.GoldDim), Modifier.width(62.dp), align = TextAlign.End)
+        FitText(caption, VoLumType.label(10.sp, VoLumColors.GoldDim), Modifier.width(66.dp).height(16.dp), align = TextAlign.End)
         VoLumSubModePill(p.options, s.param(p).toInt(), { st.go(Action.SetParam(p, it.toDouble())) }, Modifier.weight(1f).height(48.dp),
             itemModifier = { i -> Modifier.ids(ids(i)) })
     }
@@ -150,9 +155,9 @@ private fun RowScope.PreHeader(s: VoLumState, block: PreBlock) {
                 ModeGroup(s, "VOICING", Param.PITCH_VOICING, { i -> arrayOf(if (i == 0) "pre.pitch.voicing.vintage" else "pre.pitch.voicing.modern") }, 1f, divider = true)
             }
         }
-        PreBlock.COMP -> FitText("Evens out your picking before the amp.", VoLumType.body(12.sp, VoLumColors.CreamDim), Modifier.weight(1f), align = TextAlign.Start)
-        PreBlock.NAM1, PreBlock.NAM2 -> FitText("A captured pedal in front of the amp. Swap it under CAPTURES.", VoLumType.body(12.sp, VoLumColors.CreamDim),
-            Modifier.weight(1f), align = TextAlign.Start)
+        PreBlock.COMP -> FitText("Evens out your picking before the amp.", hint(), Modifier.weight(1f).height(20.dp), align = TextAlign.Start)
+        PreBlock.NAM1, PreBlock.NAM2 -> FitText("A captured pedal in front of the amp. Swap it under CAPTURES.", hint(),
+            Modifier.weight(1f).height(20.dp), align = TextAlign.Start)
     }
 }
 
@@ -177,21 +182,24 @@ private fun SyncColumn(s: VoLumState, sync: Param, division: Param, key: String,
     val st = LocalStage.current
     val synced = s.on(sync)
     val div = s.param(division).toInt()
+    val labels = rememberFitGroup()
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
         Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (pingPong) Switch("PING-PONG", s.on(Param.DELAY_PING_PONG), { st.go(Action.ToggleParam(Param.DELAY_PING_PONG)) }, Modifier.weight(1f).fillMaxHeight(),
-                arrayOf("post.delay.pingpong"))
-            Switch("TEMPO SYNC", synced, { st.go(Action.ToggleParam(sync)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("$key.sync"))
+                arrayOf("post.delay.pingpong"), group = labels)
+            Switch("TEMPO SYNC", synced, { st.go(Action.ToggleParam(sync)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("$key.sync"), group = labels)
         }
         if (synced) {
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                FitText("DIVISION", VoLumType.label(9.sp, VoLumColors.GoldDim), Modifier.width(62.dp), align = TextAlign.Start)
+                FitText("DIVISION", VoLumType.label(10.sp, VoLumColors.GoldDim), Modifier.width(66.dp).height(16.dp), align = TextAlign.Start)
                 Stepper(DIVISIONS[div.coerceIn(0, DIVISIONS.lastIndex)], { st.go(Action.SetParam(division, ((div - 1 + DIVISIONS.size) % DIVISIONS.size).toDouble())) },
                     { st.go(Action.SetParam(division, ((div + 1) % DIVISIONS.size).toDouble())) }, Modifier.weight(1f).fillMaxHeight(),
                     arrayOf("$key.division"), arrayOf("$key.division"), description = "division")
             }
         } else {
-            FitText("TIME / RATE set the speed; sync locks it to the metronome tempo", VoLumType.body(10.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(16.dp))
+            val lines = rememberFitGroup()
+            FitText("TIME / RATE set the speed.", hint(), Modifier.fillMaxWidth().height(18.dp).padding(horizontal = 6.dp), align = TextAlign.Start, group = lines)
+            FitText("TEMPO SYNC locks it to the metronome.", hint(), Modifier.fillMaxWidth().height(18.dp).padding(horizontal = 6.dp), align = TextAlign.Start, group = lines)
         }
     }
 }

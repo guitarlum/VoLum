@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -75,40 +76,42 @@ internal val HeaderHeight = 64.dp
  * then the desktop cluster (view switch, tuner, metronome, settings).
  */
 @Composable
-internal fun Header(s: VoLumState, middle: @Composable RowScope.() -> Unit) {
+internal fun Header(s: VoLumState, middle: @Composable RowScope.(labels: FitGroup) -> Unit) {
     val st = LocalStage.current
     val inPlay = s.ui.view == View.PLAY
+    val labels = rememberFitGroup()
+    val captions = rememberFitGroup()
     Row(
         Modifier.fillMaxWidth().height(HeaderHeight).volumHeaderPlate().padding(start = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         VoLumLogo(Modifier.padding(end = 4.dp), compact = true)
-        middle()
+        middle(labels)
         TextPad("SAVE PRESET", { st.go(Action.Open(Overlay.NameDialog(NamePurpose.SAVE_PRESET, Reducer.nameSuggestion(s)))) },
-            Modifier.width(108.dp).height(48.dp), arrayOf(if (inPlay) "play.save" else "presets.save.open"), tone = Tone.PRIMARY)
+            Modifier.width(108.dp).height(48.dp), arrayOf(if (inPlay) "play.save" else "presets.save.open"), tone = Tone.PRIMARY, group = labels)
         InputChip(s, Modifier.width(100.dp).height(52.dp))
         if (inPlay && !s.ui.buildTipSeen) VoLumBuildTip({ st.go(Action.SetView(View.BUILD)) }, Modifier.featureId("tip.build"))
         HeaderTool(if (inPlay) "BUILD" else "PLAY", { st.go(Action.SetView(if (inPlay) View.BUILD else View.PLAY)) }, 64.dp,
-            arrayOf(if (inPlay) "nav.view.build" else "nav.view.play"), if (inPlay) "Switch to BUILD" else "Switch to PLAY") { pressed ->
+            arrayOf(if (inPlay) "nav.view.build" else "nav.view.play"), if (inPlay) "Switch to BUILD" else "Switch to PLAY", captions) { pressed ->
             ModeToggleFace(inPlay, pressed, Modifier.fillMaxWidth().height(44.dp))
         }
-        HeaderTool("TUNER", { st.go(Action.Open(Overlay.Tuner)) }, 64.dp, arrayOf("nav.tuner.open"), "Tuner") { pressed ->
+        HeaderTool("TUNER", { st.go(Action.Open(Overlay.Tuner)) }, 64.dp, arrayOf("nav.tuner.open"), "Tuner", captions) { pressed ->
             HeaderToolFace(VoLumGlyph.Tuner, pressed, Modifier.fillMaxWidth().height(44.dp))
         }
-        HeaderTool("METRONOME", { st.go(Action.Open(Overlay.Metronome)) }, 58.dp, arrayOf("nav.metronome.open"), "Metronome") { pressed ->
+        HeaderTool("METRONOME", { st.go(Action.Open(Overlay.Metronome)) }, 64.dp, arrayOf("nav.metronome.open"), "Metronome", captions) { pressed ->
             HeaderToolFace(VoLumGlyph.Metronome, pressed, Modifier.fillMaxWidth().height(44.dp), active = s.metronome.on)
         }
         val update = s.update.available
         HeaderTool(if (update != null) "UPDATE" else "SETTINGS", { st.go(Action.Open(Overlay.Settings(if (update != null) SettingsTab.SYSTEM else SettingsTab.SIGNAL))) },
-            58.dp, if (update != null) arrayOf("nav.settings.open", "system.update.badge") else arrayOf("nav.settings.open"),
-            if (update != null) "Settings: VoLum $update is available" else "Settings", captionInk = if (update != null) VoLumColors.Gold else VoLumColors.CreamDim) { pressed ->
+            64.dp, if (update != null) arrayOf("nav.settings.open", "system.update.badge") else arrayOf("nav.settings.open"),
+            if (update != null) "Settings: VoLum $update is available" else "Settings", captions, captionInk = if (update != null) VoLumColors.Gold else VoLumColors.TextDim) { pressed ->
             HeaderToolFace(VoLumGlyph.Gear, pressed, Modifier.fillMaxWidth().height(44.dp), badge = update != null)
         }
     }
 }
 
-/** A header tool: the `:design` face over a small caption naming it, one [width] x 64 dp target. */
+/** A header tool: the `:design` face over a caption naming it (all captions at one size), one [width] x 64 dp target. */
 @Composable
 private fun HeaderTool(
     caption: String,
@@ -116,7 +119,8 @@ private fun HeaderTool(
     width: Dp,
     ids: Array<String>,
     description: String,
-    captionInk: androidx.compose.ui.graphics.Color = VoLumColors.CreamDim,
+    captions: FitGroup,
+    captionInk: androidx.compose.ui.graphics.Color = VoLumColors.TextDim,
     face: @Composable (pressed: Boolean) -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
@@ -129,7 +133,7 @@ private fun HeaderTool(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         face(pressed)
-        FitText(caption, VoLumType.label(8.sp, if (pressed) VoLumColors.TextBright else captionInk), Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 2.dp))
+        FitText(caption, VoLumType.label(9.sp, if (pressed) VoLumColors.TextBright else captionInk), Modifier.fillMaxWidth().height(16.dp).padding(horizontal = 1.dp), group = captions)
     }
 }
 
@@ -149,7 +153,7 @@ internal fun InputChip(s: VoLumState, modifier: Modifier = Modifier) {
         Column(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 com.volum.design.components.VoLumLed(true, color = if (problem != null) VoLumColors.Danger else VoLumColors.Teal)
-                FitText("INPUT", VoLumType.label(8.sp, if (problem != null) VoLumColors.Danger else VoLumColors.CreamDim), Modifier.weight(1f).height(12.dp), align = TextAlign.Start)
+                FitText("INPUT", VoLumType.label(9.sp, if (problem != null) VoLumColors.Danger else VoLumColors.TextDim), Modifier.weight(1f).height(13.dp), align = TextAlign.Start)
             }
             FitText(problem ?: name, VoLumType.label(11.sp, if (problem != null) VoLumColors.TextBright else VoLumColors.Cream), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
         }
@@ -159,6 +163,8 @@ internal fun InputChip(s: VoLumState, modifier: Modifier = Modifier) {
 /**
  * Every overlay: a framed panel over the dimmed stage (the desktop's modal frame),
  * title and actions on top, a banner under them when one is up, then the body.
+ * A short list passes [bodyHeight]: the panel then fits its content and sits centred
+ * over the stage instead of framing a large empty area.
  */
 @Composable
 internal fun Panel(
@@ -168,13 +174,17 @@ internal fun Panel(
     closeIds: Array<out String>,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    bodyHeight: Dp? = null,
     actions: @Composable RowScope.() -> Unit = {},
     body: @Composable BoxScope.() -> Unit,
 ) {
     val st = LocalStage.current
-    Box(modifier.fillMaxSize().background(VoLumColors.Scrim).swallowTouches().screen(screen)) {
+    val banner = s.ui.top != null && s.screen() == screen && s.ui.banner != null
+    BoxWithConstraints(modifier.fillMaxSize().background(VoLumColors.Scrim).swallowTouches().screen(screen), contentAlignment = Alignment.Center) {
+        val chrome = 8.dp * 2 + 4.dp + 10.dp + 56.dp + 4.dp
+        val fit = bodyHeight?.takeIf { !banner }?.coerceAtMost(maxHeight - chrome)
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 8.dp)
+            Modifier.fillMaxWidth().then(if (fit == null) Modifier.fillMaxHeight() else Modifier).padding(horizontal = 18.dp, vertical = 8.dp)
                 .panelDepth(6.dp).hairlineFrame(VoLumColors.GoldDim.withOpacity(0.45f), radius = 6.dp)
                 .cornerBrackets(VoLumColors.Corner, 16.dp, 6.dp)
                 .padding(start = 18.dp, end = 10.dp, top = 4.dp, bottom = 10.dp),
@@ -182,13 +192,13 @@ internal fun Panel(
             Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f)) {
                     FitText(title, VoLumType.display(24.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(30.dp), align = TextAlign.Start)
-                    if (subtitle != null) FitText(subtitle, VoLumType.body(11.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
+                    if (subtitle != null) FitText(subtitle, hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
                 }
                 actions()
                 CrossButton({ st.go(Action.Back) }, Modifier.size(56.dp, 48.dp).ids(closeIds).semantics { contentDescription = "Close" })
             }
-            if (s.ui.top != null && s.screen() == screen) BannerSlot(s)
-            Box(Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)) { body() }
+            if (banner) BannerSlot(s)
+            Box(Modifier.then(if (fit == null) Modifier.weight(1f) else Modifier.height(fit)).fillMaxWidth().padding(top = 4.dp)) { body() }
         }
     }
 }
@@ -210,7 +220,7 @@ private fun recoveryFor(s: VoLumState): Recovery? {
 
 /** The error / info strip, in the flow under the header or a panel title so it never covers a control; errors stay until dismissed. */
 @Composable
-internal fun BannerSlot(s: VoLumState, modifier: Modifier = Modifier) {
+internal fun BannerSlot(s: VoLumState, modifier: Modifier = Modifier, tight: Boolean = false) {
     val st = LocalStage.current
     val b = s.ui.banner
     val error = b?.kind == BannerKind.ERROR
@@ -218,7 +228,7 @@ internal fun BannerSlot(s: VoLumState, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         VoLumBanner(
             b?.message, if (error) VoLumBannerKind.ERROR else VoLumBannerKind.INFO, { st.go(Action.DismissBanner) },
-            Modifier.weight(1f).padding(vertical = 3.dp).then(if (error) Modifier.featureId("banner.error") else Modifier),
+            Modifier.weight(1f).padding(vertical = if (tight) 0.dp else 3.dp).then(if (error) Modifier.featureId("banner.error") else Modifier),
             dismissModifier = Modifier.featureId("banner.dismiss"),
         )
         if (b != null && recovery != null) {

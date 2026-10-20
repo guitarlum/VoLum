@@ -50,22 +50,24 @@ internal fun PresetMenu(s: VoLumState) {
                 TextPad("SAVE AS NEW PRESET…", { st.go(Action.Open(Overlay.NameDialog(NamePurpose.SAVE_PRESET, "New Preset"))) }, Modifier.fillMaxWidth().height(52.dp),
                     arrayOf("presets.menu.save_new"), tone = Tone.PRIMARY)
                 TextPad("RENAME / DELETE…", { st.go(Action.Open(Overlay.PresetManage)) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("presets.menu.manage"))
-                TextPad("RESET TO DEFAULT", { st.go(Action.ResetToDefault) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("presets.menu.default"),
-                    selected = current == null, style = Sel.ListTeal)
                 TextPad(if (user != null) "OVERWRITE \"${user.name}\"" else "OVERWRITE (load a User preset)", { user?.let { st.go(Action.RequestOverwritePreset(it.id)) } },
                     Modifier.fillMaxWidth().height(52.dp), arrayOf("presets.menu.overwrite"), enabled = user != null)
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SectionTitle("DEFAULT", Modifier.fillMaxWidth())
+                Box(Modifier.fillMaxWidth().height(52.dp)) {
+                    ListRow("Default", current == null, { st.go(Action.ResetToDefault) }, arrayOf("presets.menu.default"), subtitle = "factory settings, no preset")
+                }
                 SectionTitle("FACTORY", Modifier.fillMaxWidth())
                 FitGrid(factory, 1, 52.dp, Modifier.fillMaxWidth().weight(1f), gap = 4.dp, empty = "No Factory presets for this amp.",
-                    shared = SharedText(factory.map { it.name }, presetName, 40.dp)) { p ->
+                    reveal = factory.indexOfFirst { it.id == current?.id }) { p ->
                     PresetRow(s, p, current?.id == p.id, arrayOf("presets.menu.factory")) { st.go(Action.LoadPreset(p.id)) }
                 }
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 SectionTitle("USER", Modifier.fillMaxWidth())
                 FitGrid(users, 1, 52.dp, Modifier.fillMaxWidth().weight(1f), gap = 4.dp, empty = "SAVE AS NEW PRESET keeps this rig as a User preset.",
-                    shared = SharedText(users.map { it.name }, presetName, 40.dp)) { p ->
+                    reveal = users.indexOfFirst { it.id == current?.id }) { p ->
                     PresetRow(s, p, current?.id == p.id, arrayOf("presets.menu.user")) { st.go(Action.LoadPreset(p.id)) }
                 }
             }
@@ -77,16 +79,20 @@ internal fun PresetMenu(s: VoLumState) {
 internal fun PresetManage(s: VoLumState) {
     val st = LocalStage.current
     val users = s.library.presetsFor(s.ampId).filter { !it.factory }
-    Panel(s, ScreenId.PRESETS_MANAGE, "Manage presets", arrayOf("presets.manage.close"), subtitle = "User presets on ${s.amp?.name ?: "this amp"}") {
-        FitGrid(users, 1, 56.dp, Modifier.fillMaxSize(), empty = "No User presets on this amp yet.",
-            shared = SharedText(users.map { it.name }, VoLumType.display(19.sp, VoLumColors.Cream), 440.dp)) { p ->
-            val style = LocalGridText.current ?: VoLumType.display(19.sp, VoLumColors.Cream)
+    Panel(s, ScreenId.PRESETS_MANAGE, "Manage presets", arrayOf("presets.manage.close"), subtitle = "User presets on ${s.amp?.name ?: "this amp"}",
+        bodyHeight = (users.size.coerceIn(2, 5) * 64 + 8).dp) {
+        FitGrid(users, 1, 58.dp, Modifier.fillMaxSize(), empty = "No User presets on this amp yet. SAVE PRESET in the header keeps one.") { p ->
+            val group = LocalGridGroup.current
+            val tools = rememberFitGroup()
             Row(Modifier.fillMaxSize().panelDepth(4.dp).hairlineFrame(VoLumColors.Frame, radius = 4.dp).padding(start = 14.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FitText(p.name, style, Modifier.weight(1f), align = TextAlign.Start)
-                GlyphPad(VoLumGlyph.Store, "OVERWRITE", { st.go(Action.RequestOverwritePreset(p.id)) }, arrayOf("presets.manage.overwrite"), width = 96.dp)
-                GlyphPad(VoLumGlyph.Edit, "RENAME", { st.go(Action.RequestRenamePreset(p.id)) }, arrayOf("presets.manage.rename"), width = 88.dp)
-                GlyphPad(VoLumGlyph.Delete, "DELETE", { st.go(Action.RequestDeletePreset(p.id)) }, arrayOf("presets.manage.delete"), danger = true, width = 88.dp)
+                Column(Modifier.weight(1f)) {
+                    FitText(p.name, VoLumType.display(19.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(26.dp), align = TextAlign.Start, group = group)
+                    FitText(s.library.amp(p.ampId)?.name ?: "", VoLumType.label(10.sp, VoLumColors.TealDim), Modifier.fillMaxWidth().height(14.dp), align = TextAlign.Start)
+                }
+                GlyphPad(VoLumGlyph.Store, "OVERWRITE", { st.go(Action.RequestOverwritePreset(p.id)) }, arrayOf("presets.manage.overwrite"), width = 96.dp, group = tools)
+                GlyphPad(VoLumGlyph.Edit, "RENAME", { st.go(Action.RequestRenamePreset(p.id)) }, arrayOf("presets.manage.rename"), width = 88.dp, group = tools)
+                GlyphPad(VoLumGlyph.Delete, "DELETE", { st.go(Action.RequestDeletePreset(p.id)) }, arrayOf("presets.manage.delete"), danger = true, width = 88.dp, group = tools)
             }
         }
     }
@@ -105,7 +111,7 @@ internal fun NameDialog(s: VoLumState, o: Overlay.NameDialog) {
         NamePurpose.RENAME_IR -> Triple("Rename IR", "Rename", arrayOf("name.rename"))
         NamePurpose.RENAME_PEDAL -> Triple("Rename pedal", "Rename", arrayOf("name.rename"))
     }
-    val hint = when {
+    val note = when {
         updates -> "Same name as the loaded preset: it is updated in place."
         o.purpose == NamePurpose.SAVE_PRESET -> "Saved as a new User preset on ${s.amp?.name ?: "this amp"}."
         o.purpose == NamePurpose.ADD_SOUND -> "Saved as a preset and added to the next free program."
@@ -120,7 +126,7 @@ internal fun NameDialog(s: VoLumState, o: Overlay.NameDialog) {
             FitText(title, VoLumType.display(24.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(30.dp), align = TextAlign.Start)
             Field(o.text, { st.go(Action.SetNameText(it)) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("name.field"), placeholder = "Name",
                 onDone = { st.go(Action.CommitName) })
-            FitText(hint, VoLumType.body(12.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
+            FitText(note, hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
             Row(Modifier.fillMaxWidth().height(56.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 VoLumButton("Cancel", { st.go(Action.Back) }, Modifier.weight(1f).fillMaxHeight().ids(arrayOf("name.cancel")))
                 VoLumButton(verb, { st.go(Action.CommitName) }, Modifier.weight(1f).fillMaxHeight().ids(ids), primary = true, enabled = o.text.isNotBlank())

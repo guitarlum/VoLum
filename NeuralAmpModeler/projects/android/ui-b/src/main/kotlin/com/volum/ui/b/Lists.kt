@@ -14,32 +14,30 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.design.components.volumScrollbar
-import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
-/** The texts of a grid that should all read at one size, the style they start from and the room a cell leaves them. */
-internal data class SharedText(val texts: List<String>, val style: TextStyle, val inset: Dp)
-
-/** The one size [FitGrid] picked for its [SharedText], or null outside a grid. */
-internal val LocalGridText = compositionLocalOf<TextStyle?> { null }
+/** The fit group a [FitGrid] gives its cells, so every name in one grid reads at one size; null outside a grid. */
+internal val LocalGridGroup = compositionLocalOf<FitGroup?> { null }
 
 /**
  * Scrolling catalog whose row height divides the viewport exactly: the rows on
  * screen are always whole, so no list control is ever half clipped at the edge
  * (a clipped row would be a sub-48 dp touch target). Draws the `:design` scrollbar.
+ * [reveal] is the item that must be on screen when the catalog opens (the current one).
  */
 @Composable
 internal fun <T> FitGrid(
@@ -50,13 +48,13 @@ internal fun <T> FitGrid(
     gap: Dp = 6.dp,
     maxRow: Dp = minRow * 1.4f,
     empty: String? = null,
-    shared: SharedText? = null,
+    reveal: Int? = null,
     cell: @Composable (T) -> Unit,
 ) {
     BoxWithConstraints(modifier) {
         if (items.isEmpty() && empty != null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                FitText(empty, VoLumType.body(13.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().padding(16.dp))
+                FitText(empty, hint(size = 13.sp), Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 16.dp))
             }
             return@BoxWithConstraints
         }
@@ -68,9 +66,12 @@ internal fun <T> FitGrid(
         val scroll = rememberScrollState()
         val scrolls = rows > visible
         val bar = if (scrolls) 10.dp else 0.dp
-        val cellW = (maxWidth - bar - gap * (columns - 1)) / columns
-        val gridText = shared?.let { rememberSharedStyle(it.texts, it.style, cellW - it.inset) }
-        CompositionLocalProvider(LocalGridText provides gridText) {
+        val density = LocalDensity.current
+        if (scrolls && reveal != null && reveal >= 0) {
+            val firstRow = (reveal / columns - visible + 1).coerceAtLeast(0)
+            LaunchedEffect(Unit) { scroll.scrollTo(with(density) { ((rowH + gap) * firstRow).roundToPx() }) }
+        }
+        CompositionLocalProvider(LocalGridGroup provides rememberFitGroup()) {
             Column(
                 Modifier.fillMaxSize()
                     .then(if (scrolls) Modifier.volumScrollbar(scroll) else Modifier)

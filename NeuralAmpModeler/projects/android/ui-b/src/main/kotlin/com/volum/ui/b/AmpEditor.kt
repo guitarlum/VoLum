@@ -15,6 +15,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +31,7 @@ import com.volum.design.components.VoLumBrassButton
 import com.volum.design.components.VoLumGlyph
 import com.volum.design.components.VoLumIcon
 import com.volum.design.components.VoLumIrCabButton
+import com.volum.design.components.VoLumLed
 import com.volum.design.theme.VoLumColors
 import com.volum.design.theme.VoLumType
 import com.volum.harness.featureId
@@ -43,10 +46,11 @@ internal fun AmpEditor(s: VoLumState) {
     val lane = if (support) Lane.SUPPORT else Lane.MAIN
     val laneAmp = if (support) s.library.amp(s.rig.support.ampId) else s.amp
     val channel = if (support) s.rig.support.channel else s.rig.channel
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val knobLabels = rememberFitGroup()
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (s.dual) LaneChoice(s, Modifier.width(210.dp).fillMaxHeight())
-            Pad({ st.go(Action.Open(if (support) Overlay.SupportAmpMenu else Overlay.AmpPicker)) }, Modifier.width(172.dp).fillMaxHeight(),
+            if (s.dual) LaneChoice(s, Modifier.width(176.dp).fillMaxHeight())
+            Pad({ st.go(Action.Open(if (support) Overlay.SupportAmpMenu else Overlay.AmpPicker)) }, Modifier.width(164.dp).fillMaxHeight(),
                 if (support) arrayOf("dual.support.choose") else emptyArray(), description = "Choose the ${if (support) "SUPPORT" else ""} amp") { _ ->
                 Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -63,48 +67,53 @@ internal fun AmpEditor(s: VoLumState) {
             val chIds = if (support) arrayOf("dual.support.channel") else arrayOf("amp.channel")
             val pick = { ch: Int -> st.go(if (support) Action.SelectSupportChannel(ch) else Action.SelectChannel(ch)) }
             Column(Modifier.width(112.dp).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
-                FitText("CHANNEL", VoLumType.KnobLabel, Modifier.fillMaxWidth().height(18.dp))
-                Stepper("${channel + 1}", { pick((channel - 1 + n) % n) }, { pick((channel + 1) % n) }, Modifier.fillMaxWidth().height(52.dp),
+                FitText("CHANNEL", VoLumType.KnobLabel, Modifier.fillMaxWidth().height(rememberLineHeight(VoLumType.KnobLabel)), group = knobLabels)
+                Stepper("${channel + 1}", { pick((channel - 1 + n) % n) }, { pick((channel + 1) % n) }, Modifier.fillMaxWidth().height(48.dp),
                     chIds, chIds, prevEnabled = laneAmp != null && n > 1, nextEnabled = laneAmp != null && n > 1, description = "channel")
-                FitText("of $n", VoLumType.label(9.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(14.dp))
+                FitText("of $n", VoLumType.label(10.sp, VoLumColors.TextDim), Modifier.fillMaxWidth().height(14.dp))
             }
             KnobRows.forAmp(lane, s.dual).forEach { p ->
                 Knob(p, s.param(p), { st.go(Action.SetParam(p, it)) }, Modifier.weight(1f).fillMaxHeight(), Ids.ampKnob(p, lane),
-                    support = support || p == Param.SUPPORT_PAN)
+                    support = support || p == Param.SUPPORT_PAN, group = knobLabels)
             }
             AmpSwitches(s, support, Modifier.width(176.dp).fillMaxHeight())
         }
     }
 }
 
-/** MAIN / SUPPORT lane focus, AmberPicker like every exclusive choice, each naming its amp. */
+/** MAIN / SUPPORT lane focus, AmberPicker like every exclusive choice, each lane with its accent lamp. */
 @Composable
 private fun LaneChoice(s: VoLumState, modifier: Modifier) {
     val st = LocalStage.current
     val supportAmp = s.library.amp(s.rig.support.ampId)
+    val lanes = rememberFitGroup()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Pad({ st.go(Action.FocusLane(Lane.MAIN)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("dual.focus.main"), selected = s.ui.lane == Lane.MAIN,
-            style = Sel.AmberPicker, role = Role.Tab) { ink -> LaneLabel("MAIN", s.amp?.name ?: "", ink) }
+            style = Sel.AmberPicker, role = Role.Tab, description = "MAIN lane: ${s.amp?.name ?: ""}") { ink -> LaneLabel("MAIN", null, ink, VoLumColors.Gold, lanes) }
         if (supportAmp == null) {
-            Pad({ st.go(Action.Open(Overlay.SupportAmpMenu)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("dual.support.choose"), style = Sel.AmberPicker) { ink ->
-                LaneLabel("SUPPORT", "+ choose amp", ink)
+            Pad({ st.go(Action.Open(Overlay.SupportAmpMenu)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("dual.support.choose"), style = Sel.AmberPicker,
+                description = "Choose a SUPPORT amp") { ink ->
+                LaneLabel("SUPPORT", "+ choose", ink, VoLumColors.Teal, lanes)
             }
         } else {
             Pad({ st.go(Action.FocusLane(Lane.SUPPORT)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("dual.focus.support"), selected = s.ui.lane == Lane.SUPPORT,
-                style = Sel.AmberPicker, role = Role.Tab) { ink -> LaneLabel("SUPPORT", supportAmp.name, ink) }
+                style = Sel.AmberPicker, role = Role.Tab, description = "SUPPORT lane: ${supportAmp.name}") { ink -> LaneLabel("SUPPORT", null, ink, VoLumColors.Teal, lanes) }
         }
     }
 }
 
 @Composable
-private fun LaneLabel(lane: String, amp: String, ink: androidx.compose.ui.graphics.Color) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.Center) {
-        FitText(lane, VoLumType.label(11.sp, ink), Modifier.fillMaxWidth().height(16.dp))
-        FitText(amp, VoLumType.label(10.sp, if (ink == VoLumColors.AmberInk) ink else VoLumColors.Teal), Modifier.fillMaxWidth().height(16.dp))
+private fun LaneLabel(lane: String, detail: String?, ink: androidx.compose.ui.graphics.Color, accent: androidx.compose.ui.graphics.Color, lanes: FitGroup) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            VoLumLed(true, color = if (ink == VoLumColors.AmberInk) ink else accent, animate = false)
+            FitText(lane, VoLumType.label(12.sp, ink), Modifier.weight(1f, fill = false).height(18.dp), group = lanes)
+        }
+        if (detail != null) FitText(detail, VoLumType.label(10.sp, if (ink == VoLumColors.AmberInk) ink else VoLumColors.Teal), Modifier.fillMaxWidth().height(14.dp))
     }
 }
 
-/** The desktop speaker row: No Cab, three cabs (Brass dialect), then Custom IR or its greyed state with the reason. */
+/** The desktop speaker row: No Cab, three cabs (Brass dialect), then Custom IR (taking the rest of the row) or its greyed state with the reason. */
 @Composable
 private fun CabRow(s: VoLumState, support: Boolean, modifier: Modifier) {
     val st = LocalStage.current
@@ -122,40 +131,46 @@ private fun CabRow(s: VoLumState, support: Boolean, modifier: Modifier) {
         }
         val irKey = if (support) "dual.support.cab.custom_ir" else "amp.cab.custom_ir"
         VoLumIrCabButton(cab == Cab.CUSTOM_IR, { st.go(Action.Open(Overlay.IrMenu)) },
-            Modifier.height(48.dp).featureId(if (irAllowed) irKey else "${irKey}_disabled"), irName = s.library.ir(irId)?.name, enabled = irAllowed, minWidth = 112.dp)
+            Modifier.then(if (irAllowed) Modifier.weight(1f) else Modifier).height(48.dp).featureId(if (irAllowed) irKey else "${irKey}_disabled"),
+            irName = s.library.ir(irId)?.name, enabled = irAllowed, minWidth = 112.dp)
         if (!irAllowed && laneAmp != null) {
-            FitText("needs a No Cab capture on this channel", VoLumType.body(10.sp, VoLumColors.CreamDim), Modifier.weight(1f), align = TextAlign.Start)
+            FitText("Custom IR needs a No Cab capture on this channel", hint(size = 11.sp), Modifier.weight(1f).height(32.dp), align = TextAlign.Start)
         }
     }
 }
 
+/** NOISE GATE, EQ (and Ø PHASE on Dual Amp), at one label size; one row of short names when the editor is short. */
 @Composable
 private fun AmpSwitches(s: VoLumState, support: Boolean, modifier: Modifier) {
     val st = LocalStage.current
     val gate = if (support) Param.SUPPORT_GATE_ON else Param.GATE_ON
     val eq = if (support) Param.SUPPORT_EQ_ON else Param.EQ_ON
-    val gateSwitch: @Composable (Modifier) -> Unit = { m ->
-        Switch("NOISE GATE", s.on(gate), { st.go(Action.ToggleParam(gate)) }, m, arrayOf(if (support) "dual.support.gate.toggle" else "amp.gate.toggle"))
+    val labels = rememberFitGroup()
+    val gateSwitch: @Composable (String, Modifier) -> Unit = { label, m ->
+        Switch(label, s.on(gate), { st.go(Action.ToggleParam(gate)) }, m.semantics { contentDescription = "Noise gate" },
+            arrayOf(if (support) "dual.support.gate.toggle" else "amp.gate.toggle"), group = labels)
     }
     val eqSwitch: @Composable (Modifier) -> Unit = { m ->
-        Switch("EQ", s.on(eq), { st.go(Action.ToggleParam(eq)) }, m, arrayOf(if (support) "dual.support.eq.toggle" else "amp.eq.toggle"))
+        Switch("EQ", s.on(eq), { st.go(Action.ToggleParam(eq)) }, m, arrayOf(if (support) "dual.support.eq.toggle" else "amp.eq.toggle"), group = labels)
+    }
+    val phaseSwitch: @Composable (String, Modifier) -> Unit = { label, m ->
+        Switch(label, s.on(Param.SUPPORT_POLARITY), { st.go(Action.ToggleParam(Param.SUPPORT_POLARITY)) }, m.semantics { contentDescription = "Phase invert" },
+            arrayOf("dual.polarity"), group = labels)
     }
     BoxWithConstraints(modifier) {
         val compact = maxHeight < 100.dp
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
             if (compact) {
                 Row(Modifier.fillMaxWidth().height(48.dp)) {
-                    gateSwitch(Modifier.weight(1.3f).fillMaxHeight())
+                    gateSwitch("GATE", Modifier.weight(1f).fillMaxHeight())
                     eqSwitch(Modifier.weight(1f).fillMaxHeight())
+                    if (s.dual) phaseSwitch("Ø", Modifier.weight(0.8f).fillMaxHeight())
                 }
             } else {
-                gateSwitch(Modifier.fillMaxWidth().height(48.dp))
+                gateSwitch("NOISE GATE", Modifier.fillMaxWidth().height(48.dp))
                 Row(Modifier.fillMaxWidth().height(48.dp)) {
                     eqSwitch(Modifier.weight(1f).fillMaxHeight())
-                    if (s.dual) {
-                        Switch("Ø PHASE", s.on(Param.SUPPORT_POLARITY), { st.go(Action.ToggleParam(Param.SUPPORT_POLARITY)) }, Modifier.weight(1.2f).fillMaxHeight(),
-                            arrayOf("dual.polarity"))
-                    }
+                    if (s.dual) phaseSwitch("Ø PHASE", Modifier.weight(1.2f).fillMaxHeight())
                 }
             }
             if (s.outputSafety) {

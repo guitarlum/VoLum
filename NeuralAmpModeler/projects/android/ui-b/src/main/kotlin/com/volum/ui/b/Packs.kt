@@ -63,17 +63,20 @@ internal fun PackExport(s: VoLumState) {
         }) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(Modifier.width(250.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                val scopes = rememberFitGroup()
+                val details = rememberFitGroup()
                 SectionTitle("WHAT GOES IN", Modifier.fillMaxWidth())
                 listOf(
                     Triple(ExportScope.EVERYTHING, "EVERYTHING", "the whole library and settings"),
                     Triple(ExportScope.SOUNDS, "SOUNDS", "chosen User presets"),
                     Triple(ExportScope.AMP, "ONE CUSTOM AMP", "an amp with its presets"),
-                ).forEach { (scope, label, hint) ->
+                ).forEach { (scope, label, detail) ->
                     Pad({ st.go(Action.SetExportScope(scope)) }, Modifier.fillMaxWidth().height(60.dp), arrayOf("pack.export.scope.${scope.name.lowercase()}"),
                         selected = ex.scope == scope, style = Sel.AmberPicker, tone = Tone.FRAMED, role = Role.RadioButton) { ink ->
                         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.Center) {
-                            FitText(label, VoLumType.label(13.sp, ink), Modifier.fillMaxWidth().height(20.dp), align = TextAlign.Start)
-                            FitText(hint, VoLumType.body(11.sp, if (ex.scope == scope) ink else VoLumColors.CreamDim), Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
+                            FitText(label, VoLumType.label(13.sp, ink), Modifier.fillMaxWidth().height(20.dp), align = TextAlign.Start, group = scopes)
+                            FitText(detail, if (ex.scope == scope) VoLumType.label(11.sp, ink) else hint(size = 11.sp), Modifier.fillMaxWidth().height(17.dp),
+                                align = TextAlign.Start, group = details)
                         }
                     }
                 }
@@ -183,10 +186,10 @@ internal fun PackImport(s: VoLumState) {
                         MergeMode.OVERWRITE -> "Pack items replace yours"
                         MergeMode.ADD -> "Only new items; yours stay"
                         MergeMode.RESET -> "Your library becomes exactly the Pack"
-                    }, VoLumType.body(11.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
+                    }, hint(VoLumColors.Cream), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
                     Switch("RESTORE MACHINE SETTINGS", pi.restoreMachine, { st.go(Action.SetRestoreMachine(!pi.restoreMachine)) }, Modifier.fillMaxWidth().height(48.dp),
                         arrayOf("pack.import.machine"), enabled = pi.everything)
-                    FitText("a backup (.packbak) is kept first", VoLumType.body(10.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(14.dp), align = TextAlign.Start)
+                    FitText("A backup (.packbak) is kept first.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
                 }
             }
         }
@@ -252,7 +255,7 @@ private fun Damaged(modifier: Modifier) {
                 FitText("This Pack is damaged", VoLumType.label(16.sp, VoLumColors.Danger), Modifier.weight(1f).height(24.dp), align = TextAlign.Start)
             }
             FitText("Nothing in your library was changed.", VoLumType.body(13.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(20.dp), align = TextAlign.Start)
-            FitText("Export it again on the device it came from, or pick another file.", VoLumType.body(12.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
+            FitText("Export it again on the device it came from, or pick another file.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
             Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextPad("CLOSE", { st.go(Action.Back) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("pack.import.close"))
                 TextPad("CHOOSE ANOTHER FILE", { st.go(Action.PickFiles(PickKind.PACK_OPEN)) }, Modifier.weight(1.4f).fillMaxHeight(), arrayOf("pack.import.open"), tone = Tone.PRIMARY)

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,8 +44,12 @@ import com.volum.core.PreBlock
 import com.volum.core.Section
 import com.volum.core.View
 import com.volum.core.VoLumState
+import androidx.compose.foundation.layout.size
+import com.volum.design.art.AmpThumbnail
 import com.volum.design.art.ArtRef
 import com.volum.design.components.HeroAmp
+import com.volum.design.components.panelDepth
+import com.volum.design.theme.withOpacity
 import com.volum.design.components.PedalCard
 import com.volum.design.components.PresetBarFace
 import com.volum.design.components.PresetBarPart
@@ -85,12 +90,17 @@ internal fun PostBlock.onParam(): Param = when (this) {
 internal fun BuildSurface(s: VoLumState) {
     val st = LocalStage.current
     Column(Modifier.fillMaxSize().screen(s.screen())) {
-        Header(s) { PresetBar(s) }
-        if (s.ui.top == null) BannerSlot(s, Modifier.padding(horizontal = 12.dp))
+        Header(s) { _ -> PresetBar(s) }
         Row(Modifier.weight(1f).fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             VoLumMeter({ st.level(true) }, "IN", Modifier.width(28.dp).fillMaxHeight().featureId("meters.in"), frame = { st.frames.longValue })
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                PedalBoard(s, Modifier.fillMaxWidth().height(if (s.ui.banner != null) 118.dp else 138.dp))
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                PedalBoard(s, Modifier.fillMaxWidth().height(138.dp))
+                if (s.ui.top == null && s.ui.banner != null) {
+                    BannerSlot(s, Modifier.padding(top = 8.dp), tight = true)
+                    Spacer(Modifier.height(4.dp))
+                } else {
+                    Spacer(Modifier.height(8.dp))
+                }
                 AnimatedContent(
                     targetState = editorKey(s),
                     transitionSpec = {
@@ -113,7 +123,7 @@ internal fun BuildSurface(s: VoLumState) {
                                 Section.AMP -> Modifier.ampCircuitBoard(fill = false)
                                 Section.POST -> Modifier
                             })
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                            .padding(horizontal = 10.dp, vertical = if (s.ui.banner != null) 2.dp else 6.dp),
                     ) {
                         when (key.section) {
                             Section.AMP -> AmpEditor(s)
@@ -181,10 +191,12 @@ private fun RowScope.PresetBar(s: VoLumState) {
 private fun PedalBoard(s: VoLumState, modifier: Modifier) {
     val editingPre = s.ui.view == View.BUILD && s.ui.section == Section.PRE
     val editingPost = s.ui.view == View.BUILD && s.ui.section == Section.POST
+    val names = rememberFitGroup()
+    val switches = rememberFitGroup()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        PreBlock.entries.forEach { b -> BoardPedal(s, b.onParam(), Ids.preCard(b), editingPre && s.ui.preFocus == b) }
-        AmpBlock(s, Modifier.width(168.dp).fillMaxHeight())
-        PostBlock.entries.forEach { b -> BoardPedal(s, b.onParam(), Ids.postCard(b), editingPost && s.ui.postFocus == b) }
+        PreBlock.entries.forEach { b -> BoardPedal(s, b.onParam(), Ids.preCard(b), editingPre && s.ui.preFocus == b, names, switches) }
+        AmpBlock(s, Modifier.width(168.dp).fillMaxHeight(), switches)
+        PostBlock.entries.forEach { b -> BoardPedal(s, b.onParam(), Ids.postCard(b), editingPost && s.ui.postFocus == b, names, switches) }
     }
 }
 
@@ -194,25 +206,24 @@ private fun PedalBoard(s: VoLumState, modifier: Modifier) {
  * out here because the footswitch carries it, so a tap on the card only ever edits.
  */
 @Composable
-private fun RowScope.BoardPedal(s: VoLumState, p: Param, cardIds: Array<String>, focused: Boolean) {
+private fun RowScope.BoardPedal(s: VoLumState, p: Param, cardIds: Array<String>, focused: Boolean, names: FitGroup, switches: FitGroup) {
     val st = LocalStage.current
     val on = s.on(p)
     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        PedalCard(motifOf(p), stompLabel(p, s), on, onClick = { focusOf(st, p) }, onToggle = { st.go(Action.ToggleParam(p)) },
-            Modifier.fillMaxWidth().weight(1f).ids(cardIds).semantics { contentDescription = "Edit ${stompLabel(p, s)}" },
-            focused = focused, ledModifier = Modifier.requiredSize(0.dp))
+        StompCard(p, stompLabel(p, s), on, onClick = { focusOf(st, p) }, onToggle = { st.go(Action.ToggleParam(p)) }, Modifier.fillMaxWidth().weight(1f),
+            Modifier.ids(cardIds).semantics { contentDescription = "Edit ${stompLabel(p, s)}" }, names, focused = focused, lamp = false)
         Footswitch(on, { st.go(Action.ToggleParam(p)) }, Modifier.fillMaxWidth().height(64.dp), Ids.footswitch(p),
-            "${stompLabel(p, s)} ${if (on) "on" else "bypassed"}", if (on) "ON" else "BYPASS")
+            "${stompLabel(p, s)} ${if (on) "on" else "bypassed"}", if (on) "ON" else "BYPASS", switches)
     }
 }
 
 /** A stomp target: brass-selected and lit when the pedal is on, a lamp and its state under the foot. */
 @Composable
-internal fun Footswitch(on: Boolean, onClick: () -> Unit, modifier: Modifier, ids: Array<out String>, description: String, caption: String) {
+internal fun Footswitch(on: Boolean, onClick: () -> Unit, modifier: Modifier, ids: Array<out String>, description: String, caption: String, group: FitGroup? = null) {
     Pad(onClick, modifier, ids, selected = on, role = Role.Switch, style = Sel.Brass, haptic = true, description = description) { ink ->
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             VoLumLed(on)
-            FitText(caption, VoLumType.label(9.sp, if (on) ink else VoLumColors.CreamDim), Modifier.width(64.dp).height(14.dp))
+            FitText(caption, VoLumType.label(10.sp, if (on) ink else VoLumColors.TextDim), Modifier.fillMaxWidth().height(15.dp), group = group)
         }
     }
 }
@@ -222,9 +233,13 @@ private fun focusOf(st: Stage, p: Param) {
     PostBlock.entries.firstOrNull { it.onParam() == p }?.let { st.go(Action.FocusPost(it)) }
 }
 
-/** The amp in the middle of the board: its static hero art (tap to edit), Dual Amp as its footswitch. */
+/**
+ * The amp in the middle of the board: its static hero art (tap to edit), Dual Amp as its
+ * footswitch. With Dual Amp on, the SUPPORT amp's art sits teal-framed in the corner, so
+ * both amps read from the board.
+ */
 @Composable
-private fun AmpBlock(s: VoLumState, modifier: Modifier) {
+private fun AmpBlock(s: VoLumState, modifier: Modifier, switches: FitGroup) {
     val st = LocalStage.current
     val focused = s.ui.section == Section.AMP
     val amp = s.amp
@@ -240,6 +255,12 @@ private fun AmpBlock(s: VoLumState, modifier: Modifier) {
                 .then(if (focused || pressed) Modifier.hairlineFrame(if (focused) VoLumColors.Amber else VoLumColors.GoldDim, 1.6.dp, 4.dp) else Modifier),
         ) {
             VoLumHero(HeroAmp(amp?.name ?: "", amp?.let { ArtRef.of(it) }), Modifier.fillMaxSize().padding(2.dp).featureId("amp.hero"))
+            if (s.dual && support != null) {
+                Box(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp).size(30.dp).panelDepth(3.dp)
+                    .hairlineFrame(VoLumColors.Teal.withOpacity(0.8f), radius = 3.dp).padding(3.dp)) {
+                    AmpThumbnail(ArtRef.of(support), Modifier.fillMaxSize(), true)
+                }
+            }
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp)
                     .drawBehind { drawRect(VoLumColors.HeroBg.copy(alpha = 0.82f)) },
@@ -252,6 +273,6 @@ private fun AmpBlock(s: VoLumState, modifier: Modifier) {
             }
         }
         Footswitch(s.dual, { st.go(Action.ToggleParam(Param.DUAL_ON)) }, Modifier.fillMaxWidth().height(64.dp), arrayOf("dual.toggle"),
-            "Dual Amp ${if (s.dual) "on" else "off"}", if (s.dual) "DUAL AMP ON" else "DUAL AMP")
+            "Dual Amp ${if (s.dual) "on" else "off"}", if (s.dual) "DUAL AMP ON" else "DUAL AMP", switches)
     }
 }

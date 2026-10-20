@@ -27,7 +27,11 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -56,6 +60,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -95,9 +100,44 @@ internal fun Modifier.swallowTouches(): Modifier = pointerInput(Unit) {
     awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
 }
 
-/** One line that shrinks until it fits its box, so no label wraps, clips or ellipsises at font scale 1.3. */
+/**
+ * Labels that sit side by side (a row of knobs, the header tools, a grid of tiles) and so
+ * must read at one size: every [FitText] in the group reports the scale it needs to fit its
+ * own box, and all of them draw at the smallest.
+ */
+@Stable
+internal class FitGroup {
+    private val scales = mutableStateMapOf<Any, Float>()
+    val scale: Float get() = scales.values.minOrNull() ?: 1f
+    fun report(key: Any, scale: Float) { if (scales[key] != scale) scales[key] = scale }
+    fun drop(key: Any) { scales.remove(key) }
+}
+
 @Composable
-internal fun FitText(text: String, style: TextStyle, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Center, fitHeight: Boolean = false) {
+internal fun rememberFitGroup(): FitGroup = remember { FitGroup() }
+
+private fun TextStyle.scaled(k: Float): TextStyle = if (k >= 1f) this else copy(
+    fontSize = if (fontSize.isSpecified) fontSize * k else (12f * k).sp,
+    letterSpacing = if (letterSpacing.isSpecified) letterSpacing * k else letterSpacing,
+)
+
+/** The largest scale (at most 1) at which [text] fits [maxW] x [maxH] px on one line. */
+private fun fitScale(m: TextMeasurer, text: String, style: TextStyle, maxW: Int, maxH: Int): Float {
+    fun size(k: Float) = m.measure(text, style.scaled(k), maxLines = 1, softWrap = false).size
+    val full = size(1f)
+    if (full.width <= maxW && full.height <= maxH) return 1f
+    var k = minOf(maxW.toFloat() / full.width.coerceAtLeast(1), maxH.toFloat() / full.height.coerceAtLeast(1), 1f)
+    var tries = 0
+    while (tries < 14 && size(k).let { it.width > maxW || it.height > maxH }) { k *= 0.96f; tries++ }
+    return k
+}
+
+/**
+ * One line that shrinks until it fits its box in width and height, so no label wraps,
+ * clips or ellipsises at font scale 1.3. With a [group] it reads at the group's size.
+ */
+@Composable
+internal fun FitText(text: String, style: TextStyle, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Center, fitHeight: Boolean = true, group: FitGroup? = null) {
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier, contentAlignment = when (align) {
         TextAlign.Start, TextAlign.Left -> Alignment.CenterStart
@@ -106,36 +146,27 @@ internal fun FitText(text: String, style: TextStyle, modifier: Modifier = Modifi
     }) {
         val maxW = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE
         val maxH = if (fitHeight && constraints.hasBoundedHeight) constraints.maxHeight else Int.MAX_VALUE
-        val fitted = remember(text, style, maxW, maxH) {
-            var s = style
-            var tries = 0
-            while (tries < 16 && measurer.measure(text, s, maxLines = 1, softWrap = false).size.let { it.width > maxW || it.height > maxH }) {
-                s = s.copy(
-                    fontSize = if (s.fontSize.isSpecified) s.fontSize * 0.92f else 12.sp,
-                    letterSpacing = if (s.letterSpacing.isSpecified) s.letterSpacing * 0.8f else s.letterSpacing,
-                )
-                tries++
-            }
-            s
+        val own = remember(text, style, maxW, maxH) { fitScale(measurer, text, style, maxW, maxH) }
+        val k = if (group == null) own else {
+            val key = remember { Any() }
+            DisposableEffect(group, key) { onDispose { group.drop(key) } }
+            SideEffect { group.report(key, own) }
+            minOf(own, group.scale)
         }
-        BasicText(text, style = fitted.copy(textAlign = align), maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
+        BasicText(text, style = style.scaled(k).copy(textAlign = align), maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
     }
 }
 
-/**
- * One type size for a whole grid: the largest at which every one of [texts] fits [width].
- * Neighbouring cells then read at the same size instead of each shrinking on its own.
- */
+/** Height of one line of [style] at the current font scale. */
 @Composable
-internal fun rememberSharedStyle(texts: List<String>, style: TextStyle, width: Dp, floor: Float = 0.55f): TextStyle {
+internal fun rememberLineHeight(style: TextStyle): Dp {
     val measurer = rememberTextMeasurer()
-    val avail = with(LocalDensity.current) { width.toPx() }
-    return remember(texts, style, avail) {
-        val widest = texts.maxOfOrNull { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width } ?: 0
-        if (widest <= avail || widest == 0 || avail <= 0f) style
-        else style.copy(fontSize = style.fontSize * (avail / widest * 0.98f).coerceAtLeast(floor))
-    }
+    val density = LocalDensity.current
+    return remember(style, density) { with(density) { measurer.measure(" ", style, maxLines = 1).size.height.toDp() } }
 }
+
+/** Helper copy the player has to read: Josefin at 12 sp in the bright dim ink, never the faint caption ink. */
+internal fun hint(color: Color = VoLumColors.TextDim, size: TextUnit = 12.sp): TextStyle = VoLumType.body(size, color)
 
 @Composable
 internal fun Caption(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.CreamDim) {
@@ -223,13 +254,14 @@ internal fun TextPad(
     tone: Tone = Tone.FRAMED,
     size: TextUnit = 12.sp,
     role: Role = Role.Button,
+    group: FitGroup? = null,
 ) {
     Pad(onClick, modifier, ids, selected, enabled, role, style, tone) { ink ->
-        FitText(label, VoLumType.label(size, ink), Modifier.fillMaxWidth().padding(horizontal = 10.dp))
+        FitText(label, VoLumType.label(size, ink), Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp), group = group)
     }
 }
 
-/** Mutually exclusive options in one of the shared selection dialects. */
+/** Mutually exclusive options in one of the shared selection dialects, every option label at one size. */
 @Composable
 internal fun Choice(
     options: List<String>,
@@ -241,9 +273,10 @@ internal fun Choice(
     style: Sel = Sel.AmberPicker,
     size: TextUnit = 12.sp,
 ) {
+    val group = rememberFitGroup()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         options.forEachIndexed { i, o ->
-            TextPad(o, { onSelect(i) }, Modifier.weight(1f).fillMaxSize(), ids(i), i == selected, enabled(i), style, size = size, role = Role.RadioButton)
+            TextPad(o, { onSelect(i) }, Modifier.weight(1f).fillMaxSize(), ids(i), i == selected, enabled(i), style, size = size, role = Role.RadioButton, group = group)
         }
     }
 }
@@ -276,7 +309,7 @@ internal fun Stepper(
 
 /** On / off row: the `:design` slide track and a label that fits; the whole row is one toggle target. */
 @Composable
-internal fun Switch(label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, ids: Array<out String> = emptyArray(), enabled: Boolean = true) {
+internal fun Switch(label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, ids: Array<out String> = emptyArray(), enabled: Boolean = true, group: FitGroup? = null) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     Row(
@@ -290,7 +323,7 @@ internal fun Switch(label: String, on: Boolean, onClick: () -> Unit, modifier: M
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         VoLumSwitchTrack(on, pressed = pressed)
-        FitText(label, VoLumType.label(12.sp, if (on) VoLumColors.TextBright else VoLumColors.Cream), Modifier.weight(1f), align = TextAlign.Start)
+        FitText(label, VoLumType.label(12.sp, if (on) VoLumColors.TextBright else VoLumColors.Cream), Modifier.weight(1f), align = TextAlign.Start, group = group)
     }
 }
 
@@ -315,7 +348,9 @@ internal fun parseNumber(text: String): Double? = Regex("-?\\d+(?:[.,]\\d+)?").f
 /**
  * A rig parameter on the shared `:design` dial: drag anywhere on the cell, hold
  * still for fine adjust, double tap resets; SetProgress / SetText / Reset for the
- * harness and accessibility land on the same node as [ids].
+ * harness and accessibility land on the same node as [ids]. The caption is drawn
+ * over the dial's own (empty) label line as fit text, at the size of its [group]
+ * (one size per knob row, never "OUTP…"); the dial takes what height is left.
  */
 @Composable
 internal fun Knob(
@@ -326,20 +361,25 @@ internal fun Knob(
     ids: Array<out String> = emptyArray(),
     label: String = p.label,
     support: Boolean = false,
-    dial: Dp = 46.dp,
+    group: FitGroup? = null,
 ) {
-    VoLumKnob(
-        value = value,
-        onValueChange = onSet,
-        range = p.min..p.max,
-        default = p.default,
-        label = label,
-        valueText = formatValue(value, p.min, p.max, p.unit),
-        modifier = modifier.ids(ids),
-        support = support,
-        dialSize = dial,
-        parseEntry = { t -> parseNumber(t) },
-    )
+    val line = rememberLineHeight(VoLumType.KnobLabel)
+    BoxWithConstraints(modifier) {
+        val dial = if (constraints.hasBoundedHeight) (maxHeight - line * 2 - 12.dp).coerceIn(30.dp, 46.dp) else 46.dp
+        VoLumKnob(
+            value = value,
+            onValueChange = onSet,
+            range = p.min..p.max,
+            default = p.default,
+            label = "",
+            valueText = formatValue(value, p.min, p.max, p.unit),
+            modifier = Modifier.fillMaxSize().semantics { contentDescription = label }.ids(ids),
+            support = support,
+            dialSize = dial,
+            parseEntry = { t -> parseNumber(t) },
+        )
+        FitText(label, VoLumType.KnobLabel, Modifier.align(Alignment.TopCenter).fillMaxWidth().height(line).padding(horizontal = 2.dp), group = group)
+    }
 }
 
 /** Horizontal slider in the desktop's metronome-volume look: drag or tap along the track. */

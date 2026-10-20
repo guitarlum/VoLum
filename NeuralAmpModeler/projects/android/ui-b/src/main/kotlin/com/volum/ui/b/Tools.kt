@@ -97,7 +97,7 @@ internal fun Metronome(s: VoLumState) {
                     TextPad("−", { st.go(Action.SetBpm(m.bpm - 1)) }, Modifier.width(72.dp).fillMaxHeight(), arrayOf("metronome.bpm"), size = 26.sp)
                     Column(Modifier.weight(1f).fillMaxHeight().insetWell(3.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         FitText("${m.bpm.roundToInt()}", VoLumType.value(34.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(44.dp), fitHeight = true)
-                        FitText("BPM", VoLumType.label(10.sp, VoLumColors.CreamDim), Modifier.fillMaxWidth().height(14.dp))
+                        FitText("BPM", VoLumType.label(10.sp, VoLumColors.TextDim), Modifier.fillMaxWidth().height(14.dp))
                     }
                     TextPad("+", { st.go(Action.SetBpm(m.bpm + 1)) }, Modifier.width(72.dp).fillMaxHeight(), arrayOf("metronome.bpm"), size = 26.sp)
                 }
@@ -118,7 +118,7 @@ internal fun Metronome(s: VoLumState) {
                     role = Role.Switch, haptic = true, description = if (m.on) "Stop the click" else "Start the click") { ink ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         FitText(if (m.on) "STOP" else "START", VoLumType.display(38.sp, if (m.on) ink else VoLumColors.Gold), Modifier.width(200.dp).height(48.dp))
-                        FitText(if (m.on) "clicking" else "the click is off", VoLumType.label(10.sp, VoLumColors.CreamDim), Modifier.width(200.dp).height(14.dp))
+                        FitText(if (m.on) "clicking · tap to stop" else "the click is off · tap to start", VoLumType.label(11.sp, if (m.on) ink else VoLumColors.TextDim), Modifier.width(200.dp).height(16.dp))
                     }
                 }
                 Row(Modifier.fillMaxWidth().height(52.dp).featureId("metronome.beat"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
