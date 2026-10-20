@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -87,6 +86,16 @@ private val postStomps = listOf(Param.CHORUS_ON, Param.DELAY_ON, Param.REVERB_ON
 /** Programs per floor page: one bank, as on a MIDI foot controller and on the MIDI settings tab. */
 internal const val BANK = 8
 internal const val BANKS = 128 / BANK
+
+/**
+ * The bank the floor turns to when LIVE moves from [before] to [live] while bank [shown]
+ * is up, or null to stay: a recall on another bank brings its bank up, so LIVE is
+ * always on the floor after a recall.
+ */
+internal fun bankToFollow(before: Int?, live: Int?, shown: Int): Int? {
+    if (live == null || live == before) return null
+    return (live / BANK).takeIf { it != shown }
+}
 
 internal fun stompLabel(p: Param, s: VoLumState): String = if (p == Param.TREM_ON) "TREMOLO" else cardLabel(p, s)
 
@@ -152,8 +161,14 @@ internal fun PlaySurface(s: VoLumState) {
     val st = LocalStage.current
     val stompNames = rememberFitGroup()
     val live = s.library.live
-    var bank by remember { mutableIntStateOf(((live ?: s.library.firstFreeProgram() ?: 0) / BANK)) }
-    LaunchedEffect(live) { if (live != null) bank = live / BANK }
+    val bank = s.midi.bank
+    val opened = remember { s.ui.top == null }
+    var followed by remember { mutableStateOf(if (opened) null else live) }
+    LaunchedEffect(live) {
+        val target = bankToFollow(followed, live, bank)
+        followed = live
+        if (target != null) st.go(Action.SetMidiBank(target))
+    }
     Column(Modifier.fillMaxSize().screen(ScreenId.PLAY)) {
         Header(s) { labels -> SlotTools(s, labels) }
         if (s.ui.top == null) BannerSlot(s, Modifier.padding(horizontal = 12.dp))
@@ -162,7 +177,7 @@ internal fun PlaySurface(s: VoLumState) {
             StompColumn(s, preStomps, editAfter = true, stompNames)
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SoundFloor(s, bank, Modifier.weight(1f).fillMaxWidth())
-                Transport(s, bank, { bank = it }, Modifier.fillMaxWidth().height(64.dp))
+                Transport(s, bank, { st.go(Action.SetMidiBank(it)) }, Modifier.fillMaxWidth().height(64.dp))
             }
             StompColumn(s, postStomps, editAfter = false, stompNames)
             VoLumMeter({ st.level(false) }, "OUT", Modifier.width(28.dp).fillMaxHeight().featureId("play.meters"), out = true, frame = { st.frames.longValue })
@@ -181,18 +196,19 @@ private fun RowScope.SlotTools(s: VoLumState, labels: FitGroup) {
     val live = s.library.live
     val sound = live?.let { s.library.sounds[it] }
     val free = s.library.firstFreeProgram()
+    val details = rememberFitGroup()
     Row(Modifier.weight(1f).height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         HeaderPad("ADD THIS SOUND", if (free != null) "to program ${twoDigit(free)}" else "all 128 programs used", VoLumGlyph.Plus, Tone.PRIMARY,
-            arrayOf("play.add_this", "play.add_this.unnamed", "play.add_this.full"), "Add this sound", labels, Modifier.weight(1.5f).fillMaxHeight()) {
+            arrayOf("play.add_this", "play.add_this.unnamed", "play.add_this.full"), "Add this sound", labels, null, Modifier.weight(1.5f).fillMaxHeight()) {
             st.go(Action.AddThisSound)
         }
         if (live != null && sound != null) {
             HeaderPad("REPLACE", "Sound ${twoDigit(live)}", VoLumGlyph.Edit, Tone.FRAMED, arrayOf("play.sound.replace"),
-                "Replace the Sound on program ${twoDigit(live)}", labels, Modifier.weight(1f).fillMaxHeight()) {
+                "Replace the Sound on program ${twoDigit(live)}", labels, details, Modifier.weight(1f).fillMaxHeight()) {
                 st.go(Action.Open(Overlay.SoundPicker(live, replace = true)))
             }
             HeaderPad("CLEAR", "Sound ${twoDigit(live)}", VoLumGlyph.Delete, Tone.DANGER, arrayOf("play.sound.clear"),
-                "Clear program ${twoDigit(live)}", labels, Modifier.weight(0.85f).fillMaxHeight()) {
+                "Clear program ${twoDigit(live)}", labels, details, Modifier.weight(1f).fillMaxHeight()) {
                 val name = s.library.preset(sound.presetId)?.name ?: "Invalid slot"
                 st.cleared.value = Cleared(live, sound, name)
                 st.go(Action.ClearSound(live))
@@ -201,7 +217,7 @@ private fun RowScope.SlotTools(s: VoLumState, labels: FitGroup) {
     }
 }
 
-/** A header pad: glyph, the action in the row's shared size, and what it acts on under it. */
+/** A header pad: glyph, the action in the row's shared size, and what it acts on under it (at the size of [details] when given). */
 @Composable
 private fun HeaderPad(
     label: String,
@@ -211,6 +227,7 @@ private fun HeaderPad(
     ids: Array<String>,
     description: String,
     labels: FitGroup,
+    details: FitGroup?,
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
@@ -219,7 +236,7 @@ private fun HeaderPad(
             FitText(label, VoLumType.label(12.sp, ink), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = labels)
             Row(Modifier.fillMaxWidth().height(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 VoLumIcon(glyph, color = ink, size = 10.dp)
-                FitText(detail, VoLumType.label(9.sp, VoLumColors.TextDim), Modifier.weight(1f).height(13.dp), align = TextAlign.Start)
+                FitText(detail, VoLumType.label(10.sp, VoLumColors.TextMed), Modifier.weight(1f).height(14.dp), align = TextAlign.Start, group = details)
             }
         }
     }
@@ -249,7 +266,7 @@ private fun ColumnScope.Stomp(s: VoLumState, p: Param, editAfter: Boolean, names
                 description = "Edit ${stompLabel(p, s)} in BUILD") { ink ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     VoLumIcon(VoLumGlyph.Edit, color = ink, size = 16.dp)
-                    FitText("EDIT", VoLumType.label(9.sp, VoLumColors.TextDim), Modifier.width(40.dp).height(13.dp))
+                    FitText("EDIT", VoLumType.label(10.sp, VoLumColors.TextMed), Modifier.width(42.dp).height(15.dp))
                 }
             }
         }
@@ -381,7 +398,9 @@ private fun SoundTile(s: VoLumState, program: Int, sound: Sound, order: List<Int
                 Spacer(Modifier.weight(1f))
                 Column(Modifier.padding(start = 10.dp, end = 8.dp, bottom = 7.dp)) {
                     FitText("Invalid slot", VoLumType.label(14.sp, VoLumColors.Danger), Modifier.fillMaxWidth().height(22.dp), align = TextAlign.Start)
-                    FitText("preset deleted · tap to replace", hint(VoLumColors.Cream, 11.sp), Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
+                    val lines = rememberFitGroup()
+                    FitText("preset deleted", hint(VoLumColors.Cream), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
+                    FitText("tap to replace", hint(VoLumColors.Cream), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
                 }
             }
         }
@@ -406,15 +425,7 @@ private fun EmptyTile(program: Int, adds: FitGroup) {
     Box(
         Modifier.fillMaxSize()
             .clickable(source, null, role = Role.Button) { st.go(Action.Open(Overlay.SoundPicker(program, replace = false))) }
-            .drawWithCache {
-                val px = 1.dp.toPx()
-                val dash = Stroke(1.2f * px, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5 * px, 4 * px)))
-                val cr = CornerRadius(4.dp.toPx())
-                onDrawBehind {
-                    if (pressed) drawRoundRect(VoLumColors.SelBg, cornerRadius = cr)
-                    drawRoundRect(if (pressed) VoLumColors.Gold else VoLumColors.GoldDim.withOpacity(0.55f), Offset(px, px), Size(size.width - 2 * px, size.height - 2 * px), cr, style = dash)
-                }
-            }
+            .dashedAddFrame(pressed)
             .semantics { contentDescription = "Program ${twoDigit(program)} is empty: add a Sound from your presets" }
             .featureId("play.add_sound"),
     ) {
@@ -442,13 +453,13 @@ private fun Transport(s: VoLumState, bank: Int, onBank: (Int) -> Unit, modifier:
     val steps = rememberFitGroup()
     val banks = rememberFitGroup()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Pad({ st.go(Action.StepSound(-1)) }, Modifier.width(96.dp).fillMaxHeight(), arrayOf("play.sound.prev"), haptic = true, description = "Previous Sound") { ink ->
+        Pad({ st.go(Action.StepSound(-1)) }, Modifier.width(StepPadWidth).fillMaxHeight(), arrayOf("play.sound.prev"), haptic = true, description = "Previous Sound") { ink ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 VoLumIcon(VoLumGlyph.Prev, color = VoLumColors.Gold, size = 18.dp)
                 FitText("PREV", VoLumType.label(15.sp, ink), Modifier.width(48.dp).height(22.dp), group = steps)
             }
         }
-        BankPad(VoLumGlyph.Prev, bank - 1, bank > 0, banks) { onBank(bank - 1) }
+        BankPad(VoLumGlyph.Prev, bank - 1, bank > 0, arrayOf("midi.bank.prev"), banks) { onBank(bank - 1) }
         Row(
             Modifier.weight(1f).fillMaxHeight().panelDepth(4.dp).hairlineFrame(VoLumColors.GoldDim.withOpacity(0.5f), radius = 4.dp)
                 .featureId("play.sound.name").padding(horizontal = 12.dp),
@@ -464,8 +475,8 @@ private fun Transport(s: VoLumState, bank: Int, onBank: (Int) -> Unit, modifier:
                 }
             }
         }
-        BankPad(VoLumGlyph.Next, bank + 1, bank < BANKS - 1, banks) { onBank(bank + 1) }
-        Pad({ st.go(Action.StepSound(1)) }, Modifier.width(96.dp).fillMaxHeight(), arrayOf("play.sound.next"), haptic = true, description = "Next Sound") { ink ->
+        BankPad(VoLumGlyph.Next, bank + 1, bank < BANKS - 1, arrayOf("midi.bank.next"), banks) { onBank(bank + 1) }
+        Pad({ st.go(Action.StepSound(1)) }, Modifier.width(StepPadWidth).fillMaxHeight(), arrayOf("play.sound.next"), haptic = true, description = "Next Sound") { ink ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FitText("NEXT", VoLumType.label(15.sp, ink), Modifier.width(48.dp).height(22.dp), group = steps)
                 VoLumIcon(VoLumGlyph.Next, color = VoLumColors.Gold, size = 18.dp)
@@ -474,16 +485,23 @@ private fun Transport(s: VoLumState, bank: Int, onBank: (Int) -> Unit, modifier:
     }
 }
 
-/** Shows bank [target] on the floor (programs ×8); dimmed at either end of the 16 banks. */
+/**
+ * Shows bank [target] on the floor (programs ×8): the MIDI tab's bank arrows, so the
+ * floor and the MIDI tab always page together. Dimmed at either end of the 16 banks.
+ */
 @Composable
-private fun BankPad(glyph: VoLumGlyph, target: Int, enabled: Boolean, labels: FitGroup, onClick: () -> Unit) {
+private fun BankPad(glyph: VoLumGlyph, target: Int, enabled: Boolean, ids: Array<String>, labels: FitGroup, onClick: () -> Unit) {
     val first = target.coerceIn(0, BANKS - 1) * BANK
-    Pad(onClick, Modifier.width(56.dp).fillMaxHeight(), enabled = enabled, tone = Tone.FRAMED,
+    Pad(onClick, Modifier.width(BankPadWidth).fillMaxHeight(), ids, enabled = enabled, tone = Tone.FRAMED,
         description = "Show programs ${twoDigit(first)} to ${twoDigit(first + BANK - 1)}") { ink ->
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
             VoLumIcon(glyph, color = if (enabled) VoLumColors.Gold else ink, size = 14.dp)
-            FitText("BANK", VoLumType.label(9.sp, ink), Modifier.width(48.dp).height(13.dp), group = labels)
-            FitText(if (enabled) "${twoDigit(first)}–${twoDigit(first + BANK - 1)}" else "", VoLumType.label(8.sp, VoLumColors.TextDim), Modifier.width(48.dp).height(12.dp), group = labels)
+            FitText("BANK", VoLumType.label(11.sp, ink), Modifier.width(BankPadWidth - 8.dp).height(16.dp), group = labels)
+            FitText(if (enabled) "${twoDigit(first)}–${twoDigit(first + BANK - 1)}" else "", VoLumType.label(11.sp, VoLumColors.Cream), Modifier.width(BankPadWidth - 8.dp).height(16.dp), group = labels)
         }
     }
 }
+
+/** A bank arrow is a live control: at least 64 dp each way, like PREV / NEXT. */
+internal val BankPadWidth = 68.dp
+internal val StepPadWidth = 84.dp

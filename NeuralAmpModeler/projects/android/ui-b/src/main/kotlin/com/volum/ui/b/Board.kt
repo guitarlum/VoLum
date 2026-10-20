@@ -91,12 +91,13 @@ internal fun BuildSurface(s: VoLumState) {
     val st = LocalStage.current
     Column(Modifier.fillMaxSize().screen(s.screen())) {
         Header(s) { _ -> PresetBar(s) }
-        Row(Modifier.weight(1f).fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val banner = s.ui.top == null && s.ui.banner != null
+        Row(Modifier.weight(1f).fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = if (banner) 4.dp else 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             VoLumMeter({ st.level(true) }, "IN", Modifier.width(28.dp).fillMaxHeight().featureId("meters.in"), frame = { st.frames.longValue })
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 PedalBoard(s, Modifier.fillMaxWidth().height(138.dp))
-                if (s.ui.top == null && s.ui.banner != null) {
-                    BannerSlot(s, Modifier.padding(top = 8.dp), tight = true)
+                if (banner) {
+                    BannerSlot(s, Modifier.padding(top = 5.dp), tight = true)
                     Spacer(Modifier.height(4.dp))
                 } else {
                     Spacer(Modifier.height(8.dp))
@@ -123,7 +124,7 @@ internal fun BuildSurface(s: VoLumState) {
                                 Section.AMP -> Modifier.ampCircuitBoard(fill = false)
                                 Section.POST -> Modifier
                             })
-                            .padding(horizontal = 10.dp, vertical = if (s.ui.banner != null) 2.dp else 6.dp),
+                            .padding(horizontal = 10.dp, vertical = if (banner) 2.dp else 6.dp),
                     ) {
                         when (key.section) {
                             Section.AMP -> AmpEditor(s)

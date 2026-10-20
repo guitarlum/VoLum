@@ -189,48 +189,64 @@ private fun SystemTab(s: VoLumState) {
     val st = LocalStage.current
     val lib = s.library
     val buttons = rememberFitGroup()
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Card(Modifier.weight(1f).fillMaxHeight(), "ABOUT") {
-            Column(Modifier.fillMaxWidth().featureId("system.about.version")) {
+    val lines = rememberFitGroup()
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Card(Modifier.weight(1f).fillMaxHeight(), "MODEL INFORMATION") {
+                Column(Modifier.fillMaxWidth().featureId("system.model_info"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    FitText("${s.amp?.name ?: "—"} · CH ${s.rig.channel + 1} · ${s.rig.cab.label}", VoLumType.label(15.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(22.dp), align = TextAlign.Start)
+                    FitText("Model rate ${s.audio.sampleRate} Hz · ${if (s.signal.lite) "LITE" else "FULL"} models", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
+                    FitText("Buffer ${s.audio.bufferFrames} samples · ${String.format("%.1f", s.audio.bufferFrames * 1000.0 / s.audio.sampleRate)} ms", hint(),
+                        Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
+                }
+                Box(Modifier.weight(1f))
+                TextPad("SHARE LOG", { st.go(Action.ShareLog) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("system.share_log"), group = buttons)
+            }
+            Card(Modifier.weight(1.25f).fillMaxHeight(), "BACK UP YOUR LIBRARY") {
+                FitText("Move custom amps, presets, IRs and pedals", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
+                FitText("to another phone, or share part of it.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
+                FitText("${count(lib.amps.count { it.custom }, "custom amp")} · ${count(lib.presets.count { !it.factory }, "User preset")} · ${count(lib.irs.size, "IR")}",
+                    VoLumType.label(12.sp, VoLumColors.Teal), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
+                Box(Modifier.weight(1f))
+                Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextPad("EXPORT A PACK…", { st.go(Action.Open(Overlay.PackExport)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("pack.export.open"), group = buttons)
+                    TextPad("IMPORT A PACK…", { st.go(Action.PickFiles(PickKind.PACK_OPEN)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("pack.import.open"), group = buttons)
+                }
+            }
+        }
+        AboutCard(s, buttons, Modifier.fillMaxWidth())
+    }
+}
+
+/** The desktop's VoLum · By Lum block: version and manual on the left, the update check on the right. */
+@Composable
+private fun AboutCard(s: VoLumState, buttons: FitGroup, modifier: Modifier) {
+    val st = LocalStage.current
+    val available = s.update.available
+    Card(modifier) {
+        Row(Modifier.fillMaxWidth().height(50.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).featureId("system.about.version")) {
                 FitText("VoLum · By Lum", VoLumType.display(22.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(30.dp), align = TextAlign.Start)
                 FitText("Version 0.1-shootout · Android", VoLumType.label(12.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
             }
-            Column(Modifier.fillMaxWidth().padding(top = 6.dp).featureId("system.model_info"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                FitText("MODEL INFORMATION", VoLumType.SectionHeader, Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
-                FitText("${s.amp?.name ?: "—"} · CH ${s.rig.channel + 1} · ${s.rig.cab.label}", VoLumType.label(13.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(20.dp), align = TextAlign.Start)
-                val lines = rememberFitGroup()
-                FitText("Model rate ${s.audio.sampleRate} Hz · ${if (s.signal.lite) "LITE" else "FULL"} models", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
-                FitText("Buffer ${s.audio.bufferFrames} samples · ${String.format("%.1f", s.audio.bufferFrames * 1000.0 / s.audio.sampleRate)} ms", hint(),
-                    Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
-            }
-            Box(Modifier.weight(1f))
-            TextPad("READ THE MANUAL  ↗", { st.go(Action.OpenLink(MANUAL)) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("system.about.manual"), group = buttons)
-        }
-        Card(Modifier.weight(1f).fillMaxHeight(), "UPDATES") {
-            Switch("CHECK AUTOMATICALLY", s.update.auto, { st.go(Action.SetAutoUpdate(!s.update.auto)) }, Modifier.fillMaxWidth().height(48.dp), arrayOf("system.update.auto"))
-            FitText("VoLum looks for a new release when it starts.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
-            val available = s.update.available
-            Column(Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.weight(1f)) {
                 if (available != null) {
                     FitText("VoLum $available is available", VoLumType.display(19.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(26.dp), align = TextAlign.Start)
-                    TextPad("GET $available  ↗", { st.go(Action.OpenLink(RELEASES)) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("system.update.link"), tone = Tone.PRIMARY, group = buttons)
                 } else {
                     Status(if (s.update.checks > 0) "You have the latest version" else "Not checked yet", Modifier.fillMaxWidth().height(22.dp),
-                        if (s.update.checks > 0) VoLumColors.Teal else VoLumColors.TextDim)
+                        if (s.update.checks > 0) VoLumColors.Teal else VoLumColors.TextMed)
                 }
             }
-            TextPad("CHECK NOW", { st.go(Action.CheckUpdatesNow) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("system.update.check_now"), group = buttons)
+            TextPad("READ THE MANUAL  ↗", { st.go(Action.OpenLink(MANUAL)) }, Modifier.width(220.dp).fillMaxHeight(), arrayOf("system.about.manual"), group = buttons)
         }
-        Card(Modifier.weight(1f).fillMaxHeight(), "BACK UP YOUR LIBRARY") {
-            val lines = rememberFitGroup()
-            FitText("Move custom amps, presets, IRs and pedals", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
-            FitText("to another phone, or share part of it.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
-            FitText("${count(lib.amps.count { it.custom }, "custom amp")} · ${count(lib.presets.count { !it.factory }, "User preset")} · ${count(lib.irs.size, "IR")}",
-                VoLumType.label(11.sp, VoLumColors.Teal), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
-            TextPad("EXPORT A PACK…", { st.go(Action.Open(Overlay.PackExport)) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("pack.export.open"), group = buttons)
-            TextPad("IMPORT A PACK…", { st.go(Action.PickFiles(PickKind.PACK_OPEN)) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("pack.import.open"), group = buttons)
-            Box(Modifier.weight(1f))
-            TextPad("SHARE LOG", { st.go(Action.ShareLog) }, Modifier.fillMaxWidth().height(52.dp), arrayOf("system.share_log"), group = buttons)
+        Row(Modifier.fillMaxWidth().height(50.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Switch("CHECK AUTOMATICALLY", s.update.auto, { st.go(Action.SetAutoUpdate(!s.update.auto)) }, Modifier.weight(1f).height(48.dp), arrayOf("system.update.auto"))
+            if (available != null) {
+                TextPad("GET $available  ↗", { st.go(Action.OpenLink(RELEASES)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("system.update.link"), tone = Tone.PRIMARY, group = buttons)
+            } else {
+                FitText("VoLum looks for a new release when it starts.", hint(), Modifier.weight(1f).height(18.dp), align = TextAlign.Start)
+            }
+            TextPad("CHECK NOW", { st.go(Action.CheckUpdatesNow) }, Modifier.width(220.dp).fillMaxHeight(), arrayOf("system.update.check_now"), group = buttons)
         }
     }
 }

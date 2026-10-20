@@ -27,4 +27,5 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":design"))
     implementation(project(":harness"))
+    testImplementation(libs.junit)
 }

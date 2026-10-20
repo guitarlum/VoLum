@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volum.core.Action
 import com.volum.core.BuilderFile
+import com.volum.core.Ir
 import com.volum.core.PickKind
 import com.volum.core.ScreenId
 import com.volum.core.VoLumState
@@ -75,13 +76,13 @@ internal fun AmpBuilder(s: VoLumState) {
                     }
                 }
                 Box(Modifier.weight(1f))
-                FitText("Sparse coverage is fine. Your files are never renamed.", hint(size = 11.sp), Modifier.fillMaxWidth().height(17.dp), align = TextAlign.Start)
+                FitText("Sparse coverage is fine. Your files are never renamed.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         SectionTitle("FILES", Modifier.fillMaxWidth())
-                        FitText("named CAB-NAME-CHANNEL.nam, e.g. V30-MyAmp-2.nam", hint(size = 11.sp), Modifier.fillMaxWidth().height(17.dp), align = TextAlign.Start)
+                        FitText("named CAB-NAME-CHANNEL.nam, e.g. V30-MyAmp-2.nam", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
                     }
                     Pad({ st.go(Action.PickFiles(PickKind.NAM_AMP_FILES)) }, Modifier.width(176.dp).fillMaxHeight(), arrayOf("builder.add_files"), tone = Tone.PRIMARY) { ink ->
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -114,10 +115,11 @@ private fun Coverage(files: List<BuilderFile>, cabNames: List<String>, modifier:
     val channels = (files.maxOfOrNull { it.channel } ?: 1).coerceAtLeast(2)
     val names = rememberFitGroup()
     Column(modifier.insetWell(3.dp).padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(Modifier.fillMaxWidth().height(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(18.dp), verticalAlignment = Alignment.CenterVertically) {
             FitText("COVERAGE · which cab has a capture on which channel", VoLumType.SectionHeader, Modifier.weight(1f).height(16.dp), align = TextAlign.Start)
-            (1..channels).forEach { c -> FitText("CH $c", VoLumType.label(9.sp, VoLumColors.TextDim), Modifier.width(36.dp).height(14.dp)) }
+            (1..channels).forEach { c -> FitText("CH $c", VoLumType.label(10.sp, VoLumColors.TextMed), Modifier.width(36.dp).height(15.dp)) }
         }
+        Spacer(Modifier.height(3.dp))
         cabNames.forEachIndexed { slot, name ->
             Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
                 FitText(name, VoLumType.label(11.sp, VoLumColors.Cream), Modifier.weight(1f).height(16.dp), align = TextAlign.Start, group = names)
@@ -148,6 +150,7 @@ internal fun IrManage(s: VoLumState) {
     val st = LocalStage.current
     val open = s.library.ir(s.ui.irConfigOpen)
     Panel(s, ScreenId.CUSTOM_IR_MANAGE, "Custom IRs", arrayOf("ir.manage.close"), subtitle = "WAV impulse responses for the Custom IR cab",
+        bodyHeight = ((s.library.irs.size + 1).coerceIn(4, 6) * 60 + 20).dp,
         actions = {
             Pad({ st.go(Action.PickFiles(PickKind.IR_FILES)) }, Modifier.width(150.dp).height(48.dp), arrayOf("ir.import", "ir.import.invalid"), tone = Tone.PRIMARY) { ink ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -157,16 +160,21 @@ internal fun IrManage(s: VoLumState) {
             }
         }) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            FitGrid(s.library.irs, 1, 56.dp, Modifier.weight(1f).fillMaxHeight(), gap = 4.dp, empty = "No IRs yet. IMPORT WAV adds your cabinet files.") { ir ->
-                val tools = rememberFitGroup()
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                        ListRow(ir.name, open?.id == ir.id, { st.go(Action.OpenIrConfig(ir.id)) }, arrayOf("ir.config.open"),
-                            subtitle = String.format("%+.1f dB · %d Hz – %.1f kHz · tap to adjust", ir.levelDb, ir.lowCutHz.toInt(), ir.highCutHz / 1000),
-                            trailing = { VoLumIcon(VoLumGlyph.IrBars, color = VoLumColors.BtnIrOnBorder, size = 18.dp) })
+            val rows: List<Ir?> = if (s.library.irs.isEmpty()) emptyList() else s.library.irs + null
+            FitGrid(rows, 1, 56.dp, Modifier.weight(1f).fillMaxHeight(), gap = 4.dp, maxRow = 60.dp, empty = "No IRs yet. IMPORT WAV adds your cabinet files.") { ir ->
+                if (ir == null) {
+                    AddCell("IMPORT ANOTHER WAV", arrayOf("ir.import"), { st.go(Action.PickFiles(PickKind.IR_FILES)) }, Modifier.fillMaxSize())
+                } else {
+                    val tools = rememberFitGroup()
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(Modifier.weight(1f).fillMaxHeight()) {
+                            ListRow(ir.name, open?.id == ir.id, { st.go(Action.OpenIrConfig(ir.id)) }, arrayOf("ir.config.open"),
+                                subtitle = String.format("%+.1f dB · %d Hz – %.1f kHz · tap to adjust", ir.levelDb, ir.lowCutHz.toInt(), ir.highCutHz / 1000),
+                                trailing = { VoLumIcon(VoLumGlyph.IrBars, color = VoLumColors.BtnIrOnBorder, size = 18.dp) })
+                        }
+                        GlyphPad(VoLumGlyph.Edit, "RENAME", { st.go(Action.RequestRenameIr(ir.id)) }, arrayOf("ir.rename"), width = 76.dp, group = tools)
+                        GlyphPad(VoLumGlyph.Delete, "DELETE", { st.go(Action.RequestDeleteIr(ir.id)) }, arrayOf("ir.delete"), danger = true, width = 76.dp, group = tools)
                     }
-                    GlyphPad(VoLumGlyph.Edit, "RENAME", { st.go(Action.RequestRenameIr(ir.id)) }, arrayOf("ir.rename"), width = 76.dp, group = tools)
-                    GlyphPad(VoLumGlyph.Delete, "DELETE", { st.go(Action.RequestDeleteIr(ir.id)) }, arrayOf("ir.delete"), danger = true, width = 76.dp, group = tools)
                 }
             }
             Card(Modifier.width(370.dp).fillMaxHeight(), if (open != null) "LEVEL AND CUTS" else "ADJUST") {

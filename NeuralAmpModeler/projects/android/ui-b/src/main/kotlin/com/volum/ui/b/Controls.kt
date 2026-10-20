@@ -165,8 +165,8 @@ internal fun rememberLineHeight(style: TextStyle): Dp {
     return remember(style, density) { with(density) { measurer.measure(" ", style, maxLines = 1).size.height.toDp() } }
 }
 
-/** Helper copy the player has to read: Josefin at 12 sp in the bright dim ink, never the faint caption ink. */
-internal fun hint(color: Color = VoLumColors.TextDim, size: TextUnit = 12.sp): TextStyle = VoLumType.body(size, color)
+/** Helper copy the player has to read from the mic stand: Josefin SemiBold at 12 sp in the medium text ink; the thin cut read faint. */
+internal fun hint(color: Color = VoLumColors.TextMed, size: TextUnit = 12.sp): TextStyle = VoLumType.label(size, color)
 
 @Composable
 internal fun Caption(text: String, modifier: Modifier = Modifier, color: Color = VoLumColors.CreamDim) {
@@ -281,7 +281,18 @@ internal fun Choice(
     }
 }
 
-/** `<  value  >` stepper with the desktop's gold Josefin arrows; each arrow is its own target with its own ids. */
+/** Each arrow glyph of a [Stepper] sits this far in from its edge; the rest of the width is the value's. */
+internal val StepperGlyphLane = 26.dp
+
+/** The width a [Stepper] [total] wide gives its value: all but the two glyph lanes, whatever the arrow targets measure. */
+internal fun stepperValueWidth(total: Dp): Dp = (total - StepperGlyphLane * 2).coerceAtLeast(0.dp)
+
+/**
+ * `<  value  >` stepper with the desktop's gold Josefin arrows; each arrow is its own
+ * [arrow]-wide target with its own ids. The glyphs sit at the outer edges and the value
+ * is drawn over the inner part of both targets, so a narrow stepper (the amp CHANNEL)
+ * still reads "< 3 >" with 48 dp targets.
+ */
 @Composable
 internal fun Stepper(
     value: String,
@@ -296,14 +307,17 @@ internal fun Stepper(
     description: String = "",
     arrow: Dp = 48.dp,
 ) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Pad(onPrev, Modifier.width(arrow).fillMaxHeight(), prevIds, enabled = prevEnabled, tone = Tone.BARE, description = "previous $description") { ink ->
-            BasicText("<", style = VoLumType.label(17.sp, if (ink == VoLumColors.CreamDim) ink else VoLumColors.Gold))
+    BoxWithConstraints(modifier) {
+        Row(Modifier.fillMaxSize()) {
+            Pad(onPrev, Modifier.width(arrow).fillMaxHeight(), prevIds, enabled = prevEnabled, tone = Tone.BARE, description = "previous $description") { ink ->
+                BasicText("<", Modifier.align(Alignment.CenterStart).padding(start = 10.dp), VoLumType.label(17.sp, if (ink == VoLumColors.CreamDim) ink else VoLumColors.Gold))
+            }
+            Box(Modifier.weight(1f))
+            Pad(onNext, Modifier.width(arrow).fillMaxHeight(), nextIds, enabled = nextEnabled, tone = Tone.BARE, description = "next $description") { ink ->
+                BasicText(">", Modifier.align(Alignment.CenterEnd).padding(end = 10.dp), VoLumType.label(17.sp, if (ink == VoLumColors.CreamDim) ink else VoLumColors.Gold))
+            }
         }
-        FitText(value, valueStyle, Modifier.weight(1f).padding(horizontal = 4.dp))
-        Pad(onNext, Modifier.width(arrow).fillMaxHeight(), nextIds, enabled = nextEnabled, tone = Tone.BARE, description = "next $description") { ink ->
-            BasicText(">", style = VoLumType.label(17.sp, if (ink == VoLumColors.CreamDim) ink else VoLumColors.Gold))
-        }
+        FitText(value, valueStyle, Modifier.align(Alignment.Center).width(stepperValueWidth(maxWidth)).fillMaxHeight())
     }
 }
 
@@ -365,7 +379,7 @@ internal fun Knob(
 ) {
     val line = rememberLineHeight(VoLumType.KnobLabel)
     BoxWithConstraints(modifier) {
-        val dial = if (constraints.hasBoundedHeight) (maxHeight - line * 2 - 12.dp).coerceIn(30.dp, 46.dp) else 46.dp
+        val dial = if (constraints.hasBoundedHeight) (maxHeight - line * 2 - 9.dp).coerceIn(30.dp, 46.dp) else 46.dp
         VoLumKnob(
             value = value,
             onValueChange = onSet,

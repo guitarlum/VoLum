@@ -38,6 +38,9 @@ import com.volum.harness.featureId
 
 private val stockCabs = listOf(Cab.NONE, Cab.G12, Cab.G65, Cab.V30)
 
+/** Width of the CHANNEL stepper beside the amp knobs. */
+internal val ChannelColumn = 104.dp
+
 /** AMP: lane (Dual Amp), amp and cab row on top; channel, the knob row and the switches of the focused lane below. */
 @Composable
 internal fun AmpEditor(s: VoLumState) {
@@ -52,7 +55,7 @@ internal fun AmpEditor(s: VoLumState) {
             if (s.dual) LaneChoice(s, Modifier.width(176.dp).fillMaxHeight())
             Pad({ st.go(Action.Open(if (support) Overlay.SupportAmpMenu else Overlay.AmpPicker)) }, Modifier.width(if (s.dual) 164.dp else 200.dp).fillMaxHeight(),
                 if (support) arrayOf("dual.support.choose") else emptyArray(), description = "Choose the ${if (support) "SUPPORT" else ""} amp") { _ ->
-                Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Column(Modifier.weight(1f)) {
                         FitText(if (support) "SUPPORT AMP" else "AMP", VoLumType.label(9.sp, if (support) VoLumColors.Teal else VoLumColors.GoldDim), Modifier.fillMaxWidth().height(13.dp), align = TextAlign.Start)
                         FitText(laneAmp?.name ?: "choose an amp", VoLumType.label(13.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(20.dp), align = TextAlign.Start)
@@ -62,21 +65,24 @@ internal fun AmpEditor(s: VoLumState) {
             }
             CabRow(s, support, Modifier.weight(1f).fillMaxHeight())
         }
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            val n = laneAmp?.channels ?: 1
-            val chIds = if (support) arrayOf("dual.support.channel") else arrayOf("amp.channel")
-            val pick = { ch: Int -> st.go(if (support) Action.SelectSupportChannel(ch) else Action.SelectChannel(ch)) }
-            Column(Modifier.width(104.dp).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
-                FitText("CHANNEL", VoLumType.KnobLabel, Modifier.fillMaxWidth().height(rememberLineHeight(VoLumType.KnobLabel)), group = knobLabels)
-                Stepper("${channel + 1}", { pick((channel - 1 + n) % n) }, { pick((channel + 1) % n) }, Modifier.fillMaxWidth().height(48.dp),
-                    chIds, chIds, prevEnabled = laneAmp != null && n > 1, nextEnabled = laneAmp != null && n > 1, description = "channel")
-                FitText("of $n", VoLumType.label(10.sp, VoLumColors.TextDim), Modifier.fillMaxWidth().height(14.dp))
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+            val compact = maxHeight < 100.dp
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                val n = laneAmp?.channels ?: 1
+                val chIds = if (support) arrayOf("dual.support.channel") else arrayOf("amp.channel")
+                val pick = { ch: Int -> st.go(if (support) Action.SelectSupportChannel(ch) else Action.SelectChannel(ch)) }
+                Column(Modifier.width(ChannelColumn).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
+                    FitText("CHANNEL", VoLumType.KnobLabel, Modifier.fillMaxWidth().height(rememberLineHeight(VoLumType.KnobLabel)), group = knobLabels)
+                    Stepper(if (laneAmp != null) "${channel + 1}" else "–", { pick((channel - 1 + n) % n) }, { pick((channel + 1) % n) }, Modifier.fillMaxWidth().height(48.dp),
+                        chIds, chIds, prevEnabled = laneAmp != null && n > 1, nextEnabled = laneAmp != null && n > 1, description = "channel")
+                    FitText("of $n", VoLumType.label(11.sp, VoLumColors.TextMed), Modifier.fillMaxWidth().height(15.dp))
+                }
+                KnobRows.forAmp(lane, s.dual).forEach { p ->
+                    Knob(p, s.param(p), { st.go(Action.SetParam(p, it)) }, Modifier.weight(1f).fillMaxHeight(), Ids.ampKnob(p, lane),
+                        support = support || p == Param.SUPPORT_PAN, group = knobLabels)
+                }
+                AmpSwitches(s, support, compact, Modifier.width(if (compact) 232.dp else 184.dp).fillMaxHeight())
             }
-            KnobRows.forAmp(lane, s.dual).forEach { p ->
-                Knob(p, s.param(p), { st.go(Action.SetParam(p, it)) }, Modifier.weight(1f).fillMaxHeight(), Ids.ampKnob(p, lane),
-                    support = support || p == Param.SUPPORT_PAN, group = knobLabels)
-            }
-            AmpSwitches(s, support, Modifier.width(184.dp).fillMaxHeight())
         }
     }
 }
@@ -144,9 +150,12 @@ private fun CabRow(s: VoLumState, support: Boolean, modifier: Modifier) {
     }
 }
 
-/** NOISE GATE, EQ (and Ø PHASE on Dual Amp), at one label size; one row of short names when the editor is short. */
+/**
+ * NOISE GATE, EQ (and Ø PHASE on Dual Amp), at one label size. When the editor is short
+ * they share one row and NOISE GATE keeps its name, so it never reads like the GATE knob.
+ */
 @Composable
-private fun AmpSwitches(s: VoLumState, support: Boolean, modifier: Modifier) {
+private fun AmpSwitches(s: VoLumState, support: Boolean, compact: Boolean, modifier: Modifier) {
     val st = LocalStage.current
     val gate = if (support) Param.SUPPORT_GATE_ON else Param.GATE_ON
     val eq = if (support) Param.SUPPORT_EQ_ON else Param.EQ_ON
@@ -162,14 +171,13 @@ private fun AmpSwitches(s: VoLumState, support: Boolean, modifier: Modifier) {
         Switch(label, s.on(Param.SUPPORT_POLARITY), { st.go(Action.ToggleParam(Param.SUPPORT_POLARITY)) }, m.semantics { contentDescription = "Phase invert" },
             arrayOf("dual.polarity"), group = labels)
     }
-    BoxWithConstraints(modifier) {
-        val compact = maxHeight < 100.dp
+    Box(modifier) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
             if (compact) {
                 Row(Modifier.fillMaxWidth().height(48.dp)) {
-                    gateSwitch("GATE", Modifier.weight(1f).fillMaxHeight())
-                    eqSwitch(Modifier.weight(1f).fillMaxHeight())
-                    if (s.dual) phaseSwitch("Ø", Modifier.weight(0.8f).fillMaxHeight())
+                    gateSwitch("NOISE GATE", Modifier.weight(1.45f).fillMaxHeight())
+                    eqSwitch(Modifier.weight(0.8f).fillMaxHeight())
+                    if (s.dual) phaseSwitch("Ø", Modifier.weight(0.7f).fillMaxHeight())
                 }
             } else {
                 gateSwitch("NOISE GATE", Modifier.fillMaxWidth().height(48.dp))

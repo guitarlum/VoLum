@@ -71,8 +71,8 @@ private fun CaptureColumn(s: VoLumState) {
 @Composable
 internal fun PostEditor(s: VoLumState, block: PostBlock) {
     val side: (@Composable () -> Unit)? = when (block) {
-        PostBlock.DELAY -> { { SyncColumn(s, Param.DELAY_SYNC, Param.DELAY_DIVISION, "post.delay", pingPong = true) } }
-        PostBlock.TREM -> { { SyncColumn(s, Param.TREM_SYNC, Param.TREM_DIVISION, "post.trem", pingPong = false) } }
+        PostBlock.DELAY -> { { SyncColumn(s, Param.DELAY_SYNC, Param.DELAY_DIVISION, "post.delay", pingPong = true, speedHint = "TIME sets the echo spacing.") } }
+        PostBlock.TREM -> { { SyncColumn(s, Param.TREM_SYNC, Param.TREM_DIVISION, "post.trem", pingPong = false, speedHint = "RATE sets the pulse speed.") } }
         else -> null
     }
     EditorFrame(s, Section.POST, stompLabel(block.onParam(), s), header = { PostHeader(s, block) }, side = side) { labels ->
@@ -176,9 +176,9 @@ private fun RowScope.PostHeader(s: VoLumState, block: PostBlock) {
     }
 }
 
-/** Tempo sync (and Ping-Pong for the delay) with the note division it locks to. */
+/** Tempo sync (and Ping-Pong for the delay) with the note division it locks to; unsynced, [speedHint] names the knob that sets the speed. */
 @Composable
-private fun SyncColumn(s: VoLumState, sync: Param, division: Param, key: String, pingPong: Boolean) {
+private fun SyncColumn(s: VoLumState, sync: Param, division: Param, key: String, pingPong: Boolean, speedHint: String) {
     val st = LocalStage.current
     val synced = s.on(sync)
     val div = s.param(division).toInt()
@@ -198,7 +198,7 @@ private fun SyncColumn(s: VoLumState, sync: Param, division: Param, key: String,
             }
         } else {
             val lines = rememberFitGroup()
-            FitText("TIME / RATE set the speed.", hint(), Modifier.fillMaxWidth().height(18.dp).padding(horizontal = 6.dp), align = TextAlign.Start, group = lines)
+            FitText(speedHint, hint(), Modifier.fillMaxWidth().height(18.dp).padding(horizontal = 6.dp), align = TextAlign.Start, group = lines)
             FitText("TEMPO SYNC locks it to the metronome.", hint(), Modifier.fillMaxWidth().height(18.dp).padding(horizontal = 6.dp), align = TextAlign.Start, group = lines)
         }
     }

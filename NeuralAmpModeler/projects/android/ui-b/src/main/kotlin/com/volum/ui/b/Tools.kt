@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -82,6 +84,19 @@ internal fun Tuner(s: VoLumState) {
     }
 }
 
+/** A 72 dp BPM step whose − and + are drawn with one stroke, so both read at the same weight (the font's two glyphs do not). */
+@Composable
+private fun RowScope.BpmStep(up: Boolean, onClick: () -> Unit) {
+    Pad(onClick, Modifier.width(72.dp).fillMaxHeight(), arrayOf("metronome.bpm"), description = if (up) "Tempo up" else "Tempo down") { ink ->
+        Spacer(Modifier.size(22.dp).drawBehind {
+            val w = 2.6.dp.toPx()
+            val c = size.width / 2
+            drawLine(ink, Offset(0f, c), Offset(size.width, c), w, StrokeCap.Round)
+            if (up) drawLine(ink, Offset(c, 0f), Offset(c, size.height), w, StrokeCap.Round)
+        })
+    }
+}
+
 private val sigIds = mapOf(TimeSig.S1_4 to "1_4", TimeSig.S2_4 to "2_4", TimeSig.S3_4 to "3_4", TimeSig.S4_4 to "4_4", TimeSig.S6_8 to "6_8")
 
 @Composable
@@ -94,12 +109,12 @@ internal fun Metronome(s: VoLumState) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth().height(72.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TextPad("−", { st.go(Action.SetBpm(m.bpm - 1)) }, Modifier.width(72.dp).fillMaxHeight(), arrayOf("metronome.bpm"), size = 26.sp)
+                    BpmStep(false, { st.go(Action.SetBpm(m.bpm - 1)) })
                     Column(Modifier.weight(1f).fillMaxHeight().insetWell(3.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         FitText("${m.bpm.roundToInt()}", VoLumType.value(34.sp, VoLumColors.Gold), Modifier.fillMaxWidth().height(44.dp), fitHeight = true)
                         FitText("BPM", VoLumType.label(10.sp, VoLumColors.TextDim), Modifier.fillMaxWidth().height(14.dp))
                     }
-                    TextPad("+", { st.go(Action.SetBpm(m.bpm + 1)) }, Modifier.width(72.dp).fillMaxHeight(), arrayOf("metronome.bpm"), size = 26.sp)
+                    BpmStep(true, { st.go(Action.SetBpm(m.bpm + 1)) })
                 }
                 Fader("TEMPO", m.bpm, 30.0, 300.0, { "${it.roundToInt()} BPM" }, { st.go(Action.SetBpm(it.roundToInt().toDouble())) },
                     Modifier.fillMaxWidth().height(52.dp), arrayOf("metronome.bpm"))
@@ -118,7 +133,7 @@ internal fun Metronome(s: VoLumState) {
                     role = Role.Switch, haptic = true, description = if (m.on) "Stop the click" else "Start the click") { ink ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         FitText(if (m.on) "STOP" else "START", VoLumType.display(38.sp, if (m.on) ink else VoLumColors.Gold), Modifier.width(200.dp).height(48.dp))
-                        FitText(if (m.on) "clicking · tap to stop" else "the click is off · tap to start", VoLumType.label(11.sp, if (m.on) ink else VoLumColors.TextDim), Modifier.width(200.dp).height(16.dp))
+                        FitText(if (m.on) "clicking · tap to stop" else "the click is off · tap to start", VoLumType.label(11.sp, if (m.on) ink else VoLumColors.TextMed), Modifier.width(200.dp).height(16.dp))
                     }
                 }
                 Row(Modifier.fillMaxWidth().height(52.dp).featureId("metronome.beat"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
