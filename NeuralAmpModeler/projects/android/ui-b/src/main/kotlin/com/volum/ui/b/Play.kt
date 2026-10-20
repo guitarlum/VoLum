@@ -88,10 +88,12 @@ private val postStomps = listOf(Param.CHORUS_ON, Param.DELAY_ON, Param.REVERB_ON
 internal const val BANK = 8
 internal const val BANKS = 128 / BANK
 
-internal fun stompLabel(p: Param, s: VoLumState): String = when (p) {
+internal fun stompLabel(p: Param, s: VoLumState): String = if (p == Param.TREM_ON) "TREMOLO" else cardLabel(p, s)
+
+/** The name on a pedal card's footer, as the desktop board writes it (TREM, the capture's name). */
+internal fun cardLabel(p: Param, s: VoLumState): String = when (p) {
     Param.NAM1_ON -> captureName(s, Param.NAM1_CAPTURE) ?: "NAM 1"
     Param.NAM2_ON -> captureName(s, Param.NAM2_CAPTURE) ?: "NAM 2"
-    Param.TREM_ON -> "TREMOLO"
     else -> p.label
 }
 
@@ -134,7 +136,7 @@ internal fun StompCard(
         PedalCard(motifOf(p), "", on, onClick = onClick, onToggle = { onToggle() }, card.fillMaxSize(), focused = focused,
             ledModifier = if (lamp) Modifier else Modifier.requiredSize(0.dp))
         FitText(name, VoLumType.label(11.5.sp, if (on) VoLumColors.Cream else VoLumColors.CreamDim),
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(22.dp).padding(start = 10.dp, end = 24.dp),
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(22.dp).padding(start = 8.dp, end = 20.dp),
             align = TextAlign.Start, group = names)
     }
 }
@@ -239,7 +241,7 @@ private fun ColumnScope.Stomp(s: VoLumState, p: Param, editAfter: Boolean, names
     val toggle = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); st.go(Action.ToggleParam(p)) }
     Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         val card: @Composable RowScope.() -> Unit = {
-            StompCard(p, stompLabel(p, s), on, onClick = toggle, onToggle = toggle, Modifier.weight(1f).fillMaxHeight(),
+            StompCard(p, cardLabel(p, s), on, onClick = toggle, onToggle = toggle, Modifier.weight(1f).fillMaxHeight(),
                 Modifier.ids(Ids.stomp(p)).semantics { contentDescription = "${stompLabel(p, s)} ${if (on) "on" else "bypassed"}" }, names)
         }
         val edit: @Composable RowScope.() -> Unit = {

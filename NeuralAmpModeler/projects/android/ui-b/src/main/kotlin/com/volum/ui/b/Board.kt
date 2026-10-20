@@ -210,7 +210,7 @@ private fun RowScope.BoardPedal(s: VoLumState, p: Param, cardIds: Array<String>,
     val st = LocalStage.current
     val on = s.on(p)
     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        StompCard(p, stompLabel(p, s), on, onClick = { focusOf(st, p) }, onToggle = { st.go(Action.ToggleParam(p)) }, Modifier.fillMaxWidth().weight(1f),
+        StompCard(p, cardLabel(p, s), on, onClick = { focusOf(st, p) }, onToggle = { st.go(Action.ToggleParam(p)) }, Modifier.fillMaxWidth().weight(1f),
             Modifier.ids(cardIds).semantics { contentDescription = "Edit ${stompLabel(p, s)}" }, names, focused = focused, lamp = false)
         Footswitch(on, { st.go(Action.ToggleParam(p)) }, Modifier.fillMaxWidth().height(64.dp), Ids.footswitch(p),
             "${stompLabel(p, s)} ${if (on) "on" else "bypassed"}", if (on) "ON" else "BYPASS", switches)
