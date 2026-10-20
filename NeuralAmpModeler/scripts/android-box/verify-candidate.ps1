@@ -64,7 +64,7 @@ function Read-Result([string] $name, [string] $whenMissing) {
 }
 
 $skipped = [pscustomobject]@{ pass = $true; skipped = "the design system has no feature surfaces" }
-$notRun = "not run: the build failed"
+$notRun = "no result: the build failed or the step stopped early"
 $build = Read-Result "build.json" "no build result"
 $unit = Read-Result "unit.json" "no unit result"
 if ($isDesign) {
