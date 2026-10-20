@@ -1,7 +1,7 @@
 # 07 Gallery
 
 Status: blocked
-Blocked by: 02, 03, 04, 05, 06 (or the 07:30 cut-off, whichever comes first)
+Blocked by: 02, 03, 04, 05, 06 (or the 18:00 cut-off, whichever comes first)
 Worker: claude-opus-5-5-high
 
 ## Goal

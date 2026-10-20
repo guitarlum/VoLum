@@ -3,7 +3,7 @@
 Status: blocked
 Blocked by: 01 (start), 02 (review only counts once `feature/android-design` is merged in)
 Branch: `feature/android-ui-c` off `feature/android-shootout`
-Worker: grok-4.7-high (with `/frontend-design` and `android-native-dev`)
+Worker: claude-opus-5-5-high (with `/frontend-design` and `android-native-dev`)
 
 ## Direction
 

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Three VoLum-identity Android phone-landscape UI/UX candidates (A Signal Flow, B Stage Floor, C Studio Instrument) each cover every desktop feature against a shared fake engine and carry a cold Opus `pass` pinned to their head commit, the engine spike report is accepted, and `gallery/index.html` lets the owner pick — by the 07:30 cut-off.
+Three VoLum-identity Android phone-landscape UI/UX candidates (A Signal Flow, B Stage Floor, C Studio Instrument) each cover every desktop feature against a shared fake engine and carry a cold Opus `pass` pinned to their head commit, the engine spike report is accepted, and `gallery/index.html` lets the owner pick — by the 18:00 cut-off on 2026-10-20.
 
 ## Predicate
 
@@ -11,7 +11,7 @@ Three VoLum-identity Android phone-landscape UI/UX candidates (A Signal Flow, B 
 ## Wake prompt
 
 First tool call: `pwsh NeuralAmpModeler/scripts/conductor-status.ps1 -Effort android-shootout`, then `pwsh .scratch/android-shootout/verify.ps1`.
-Do not trust chat memory. Continue until every Predicate line passes or the 07:30 cut-off (then run ticket 07 and stop).
+Do not trust chat memory. Continue until every Predicate line passes or the 18:00 cut-off (then run ticket 07 and stop).
 Escalate and stop on new product, new sound / golden retune, irreversible git, or a real dead end.
 
 ## Verifier
@@ -27,7 +27,7 @@ none — units are tickets in `issues/`.
 
 ## Budget and schedule
 
-- Cut-off **07:30** local. No new review round starts after 07:15. Ticket 07 starts at the latest at 07:30 and must finish by 08:00.
+- Cut-off **18:00** local on 2026-10-20 (the overnight start was missed; the run started ~10:00). No new review round starts after 17:45. Ticket 07 starts at the latest at 18:00 and must finish by 18:30.
 - At most **8 review rounds** per candidate and 4 for the design system. A unit that runs out is reported in the gallery with its last verdict. Never lower the bar.
 - Box: at most 2 Gradle builds (`locks/build1|2.lock`) and 1 emulator user (`locks/emu.lock`). Laptop: at most 5 workers at once.
 - Coordinator stays cheap: run this chat on a cheap model at low effort; it dispatches, records and routes. It does not read worker source files.
@@ -47,9 +47,10 @@ none — units are tickets in `issues/`.
 | Role | Model | Mode |
 |------|-------|------|
 | Coordinator (this chat) | cheap (owner's choice) | agent |
-| 01 Foundation, 02 Design, 03 Candidate A, 07 Gallery | `claude-opus-5-5-high` | agent, local |
-| 04 Candidate B, 06 Engine spike | `gpt-5.6-sol-high` | agent, local |
-| 05 Candidate C | `grok-4.7-high` | agent, local |
+| 01 Foundation, 02 Design, 03/04/05 Candidates A/B/C, 07 Gallery | `claude-opus-5-5-high` | agent, local |
+| 06 Engine spike | `gpt-5.6-sol-high` | agent, local |
+
+All UI work runs on Opus (owner's call: it is the strongest UI model here). The candidates differ by direction, not by model. GPT-5.6 stays the second reviewer, so a different model family still reviews every UI.
 | Gate reviewer (02–05) | `claude-opus-5-5-high` | readonly, fresh, cold |
 | Second reviewer (02–05, 07 ranking) | `gpt-5.6-sol-high` | readonly, fresh, cold |
 | Spike verifier | `claude-opus-5-5-high` | readonly, fresh, cold |
@@ -103,3 +104,4 @@ Write the question to `reports/escalations.md`, mark only the affected ticket `S
 <!-- append-only: timestamp | unit | what changed | predicate moved yes/no -->
 - 2026-10-20 00:55 | setup | effort written, box provisioned, PoC deleted, pstack unbanned (a3b2124e) | no
 - 2026-10-20 00:50 | setup | box smoke: NDK 29.0.14206865, AVD volum_phone boots in 12 s, screencap fetched; provision.sh on feature/android-shootout 412fae13 | no
+- 2026-10-20 09:55 | setup | overnight start missed; cut-off moved to 18:00, candidates B and C moved to Opus (owner) | no

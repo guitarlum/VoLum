@@ -2,7 +2,7 @@
 
 ## Destination
 
-By the morning of 2026-10-20 the owner can pick one of three Android phone-landscape
+By 18:00 on 2026-10-20 the owner can pick one of three Android phone-landscape
 UI/UX prototypes. Each covers the desktop app's full feature set against a shared
 fake engine and carries a cold Opus approval pinned to its final commit. An engine
 spike report says whether the current-dev DSP builds and matches on Android.
@@ -73,10 +73,10 @@ Same identity, different layout and interaction model:
 
 - **A, Signal Flow** (`feature/android-ui-a`, Opus): desktop-faithful BUILD
   chain strip (PRE / AMP / POST) with a focus editor, PLAY as a second surface.
-- **B, Stage Floor** (`feature/android-ui-b`, GPT-5.6): performance first. PLAY
+- **B, Stage Floor** (`feature/android-ui-b`, Opus): performance first. PLAY
   sounds as big tiles, BUILD as a pedalboard. Designed for a phone on a mic stand,
   hit from arm's length.
-- **C, Studio Instrument** (`feature/android-ui-c`, Grok 4.7): the hero art
+- **C, Studio Instrument** (`feature/android-ui-c`, Opus): the hero art
   dominates the screen; blocks are overlays on it, editing happens in contextual
   bottom sheets, metering is rich.
 
