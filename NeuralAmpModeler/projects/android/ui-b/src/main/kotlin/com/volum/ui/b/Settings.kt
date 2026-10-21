@@ -244,7 +244,7 @@ private fun AboutCard(s: VoLumState, buttons: FitGroup, modifier: Modifier) {
             if (available != null) {
                 TextPad("GET $available  ↗", { st.go(Action.OpenLink(RELEASES)) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("system.update.link"), tone = Tone.PRIMARY, group = buttons)
             } else {
-                FitText("VoLum looks for a new release when it starts.", hint(), Modifier.weight(1f).height(18.dp), align = TextAlign.Start)
+                FitText("VoLum checks for updates at start.", hint(), Modifier.weight(1f).height(18.dp), align = TextAlign.Start)
             }
             TextPad("CHECK NOW", { st.go(Action.CheckUpdatesNow) }, Modifier.width(220.dp).fillMaxHeight(), arrayOf("system.update.check_now"), group = buttons)
         }

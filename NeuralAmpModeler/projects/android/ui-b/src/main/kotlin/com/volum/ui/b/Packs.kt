@@ -254,7 +254,7 @@ private fun Damaged(modifier: Modifier) {
                 WarnGlyph(VoLumColors.Danger)
                 FitText("This Pack is damaged", VoLumType.label(16.sp, VoLumColors.Danger), Modifier.weight(1f).height(24.dp), align = TextAlign.Start)
             }
-            FitText("Nothing in your library was changed.", VoLumType.body(13.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(20.dp), align = TextAlign.Start)
+            FitText("Nothing in your library was changed.", hint(VoLumColors.Cream, 13.sp), Modifier.fillMaxWidth().height(20.dp), align = TextAlign.Start)
             FitText("Export it again on the device it came from, or pick another file.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start)
             Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextPad("CLOSE", { st.go(Action.Back) }, Modifier.weight(1f).fillMaxHeight(), arrayOf("pack.import.close"))
@@ -272,6 +272,7 @@ private fun Notice(modifier: Modifier, id: String, title: String, lines: List<St
             WarnGlyph(VoLumColors.Danger)
             FitText(title, VoLumType.label(14.sp, VoLumColors.Danger), Modifier.weight(1f).height(22.dp), align = TextAlign.Start)
         }
-        lines.forEach { FitText(it, VoLumType.body(12.sp, VoLumColors.Cream), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start) }
+        val fit = rememberFitGroup()
+        lines.forEach { FitText(it, hint(VoLumColors.Cream), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = fit) }
     }
 }

@@ -50,7 +50,8 @@ internal fun AmpEditor(s: VoLumState) {
     val laneAmp = if (support) s.library.amp(s.rig.support.ampId) else s.amp
     val channel = if (support) s.rig.support.channel else s.rig.channel
     val knobLabels = rememberFitGroup()
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val banner = s.ui.top == null && s.ui.banner != null
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (banner) 2.dp else 4.dp)) {
         Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (s.dual) LaneChoice(s, Modifier.width(176.dp).fillMaxHeight())
             Pad({ st.go(Action.Open(if (support) Overlay.SupportAmpMenu else Overlay.AmpPicker)) }, Modifier.width(if (s.dual) 164.dp else 200.dp).fillMaxHeight(),

@@ -160,23 +160,7 @@ internal fun IrManage(s: VoLumState) {
             }
         }) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            val rows: List<Ir?> = if (s.library.irs.isEmpty()) emptyList() else s.library.irs + null
-            FitGrid(rows, 1, 56.dp, Modifier.weight(1f).fillMaxHeight(), gap = 4.dp, maxRow = 60.dp, empty = "No IRs yet. IMPORT WAV adds your cabinet files.") { ir ->
-                if (ir == null) {
-                    AddCell("IMPORT ANOTHER WAV", arrayOf("ir.import"), { st.go(Action.PickFiles(PickKind.IR_FILES)) }, Modifier.fillMaxSize())
-                } else {
-                    val tools = rememberFitGroup()
-                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box(Modifier.weight(1f).fillMaxHeight()) {
-                            ListRow(ir.name, open?.id == ir.id, { st.go(Action.OpenIrConfig(ir.id)) }, arrayOf("ir.config.open"),
-                                subtitle = String.format("%+.1f dB · %d Hz – %.1f kHz · tap to adjust", ir.levelDb, ir.lowCutHz.toInt(), ir.highCutHz / 1000),
-                                trailing = { VoLumIcon(VoLumGlyph.IrBars, color = VoLumColors.BtnIrOnBorder, size = 18.dp) })
-                        }
-                        GlyphPad(VoLumGlyph.Edit, "RENAME", { st.go(Action.RequestRenameIr(ir.id)) }, arrayOf("ir.rename"), width = 76.dp, group = tools)
-                        GlyphPad(VoLumGlyph.Delete, "DELETE", { st.go(Action.RequestDeleteIr(ir.id)) }, arrayOf("ir.delete"), danger = true, width = 76.dp, group = tools)
-                    }
-                }
-            }
+            IrList(s, open, Modifier.weight(1f).fillMaxHeight())
             Card(Modifier.width(370.dp).fillMaxHeight(), if (open != null) "LEVEL AND CUTS" else "ADJUST") {
                 if (open == null) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -192,6 +176,37 @@ internal fun IrManage(s: VoLumState) {
                         Modifier.fillMaxWidth().height(52.dp), arrayOf("ir.config.highcut"))
                 }
             }
+        }
+    }
+}
+
+/** The IR catalog, ending in a dashed add cell, over a note on where an IR plays. */
+@Composable
+private fun IrList(s: VoLumState, open: Ir?, modifier: Modifier) {
+    val st = LocalStage.current
+    val rows: List<Ir?> = if (s.library.irs.isEmpty()) emptyList() else s.library.irs + null
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FitGrid(rows, 1, 56.dp, Modifier.fillMaxWidth().weight(1f), gap = 4.dp, maxRow = 60.dp, empty = "No IRs yet. IMPORT WAV adds your cabinet files.") { ir ->
+            if (ir == null) {
+                AddCell("IMPORT ANOTHER WAV", arrayOf("ir.import"), { st.go(Action.PickFiles(PickKind.IR_FILES)) }, Modifier.fillMaxSize())
+            } else {
+                val tools = rememberFitGroup()
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        ListRow(ir.name, open?.id == ir.id, { st.go(Action.OpenIrConfig(ir.id)) }, arrayOf("ir.config.open"),
+                            subtitle = String.format("%+.1f dB · %d Hz – %.1f kHz · tap to adjust", ir.levelDb, ir.lowCutHz.toInt(), ir.highCutHz / 1000),
+                            trailing = { VoLumIcon(VoLumGlyph.IrBars, color = VoLumColors.BtnIrOnBorder, size = 18.dp) })
+                    }
+                    GlyphPad(VoLumGlyph.Edit, "RENAME", { st.go(Action.RequestRenameIr(ir.id)) }, arrayOf("ir.rename"), width = 76.dp, group = tools)
+                    GlyphPad(VoLumGlyph.Delete, "DELETE", { st.go(Action.RequestDeleteIr(ir.id)) }, arrayOf("ir.delete"), danger = true, width = 76.dp, group = tools)
+                }
+            }
+        }
+        val lines = rememberFitGroup()
+        Column(Modifier.fillMaxWidth().insetWell(3.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            FitText("WHERE AN IR PLAYS", VoLumType.SectionHeader, Modifier.fillMaxWidth().height(16.dp), align = TextAlign.Start)
+            FitText("In place of the cab, on channels with a No Cab capture.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
+            FitText("Pick it with Custom IR on the AMP cab row.", hint(), Modifier.fillMaxWidth().height(18.dp), align = TextAlign.Start, group = lines)
         }
     }
 }
