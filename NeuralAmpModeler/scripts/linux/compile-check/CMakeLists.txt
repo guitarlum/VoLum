@@ -60,5 +60,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     COMPILE_OPTIONS "-Wno-unused-parameter;-Wno-sequence-point;-Wno-maybe-uninitialized")
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set_source_files_properties(${IPLUG}/IGraphics/Drawing/IGraphicsNanoVG.cpp PROPERTIES
-    COMPILE_OPTIONS "-Wno-unused-parameter;-Wno-unsequenced")
+    COMPILE_OPTIONS "-Wno-unused-parameter;-Wno-unsequenced;-Wno-unused-private-field")
+  set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/include_leaf.cpp PROPERTIES
+    COMPILE_OPTIONS "-Wno-unused-private-field")
 endif()
