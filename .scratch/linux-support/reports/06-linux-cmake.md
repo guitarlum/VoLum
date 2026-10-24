@@ -1,12 +1,14 @@
 # 06 Linux CMake for the VST3 and the app
 
-Status: pass. The box (GCC 15.2), Ubuntu 22.04 (GCC 12.3, glibc 2.35), Windows tests, and CI (Windows and macOS) are green.
+Status: pass, pending the single CI dispatch of this commit. The box (GCC 15.2), Ubuntu 22.04 (g++-12 12.3, glibc 2.35) and Windows tests are green. The review merge is in.
 
 ## Heads
 
-- Superproject code under this report: `feature/linux-06-cmake` `35239678615a680af52ab0f2fe0299496ed6a78c`.
-- iPlug2 `volum/linux`: `863f2850686392a12b8195501ac2f4c535d7a86b`.
-- CI: [run 40075268411](https://github.com/guitarlum/VoLum/actions/runs/40075268411) dispatched on `35239678615a680af52ab0f2fe0299496ed6a78c`. An earlier run failed in `parse_config.py` because the `PLUG_HAS_UI` lines were indented; that script slices from column 0. The defines stay in column 0 (`0` on Linux, `1` otherwise, last value `1`) inside a `clang-format off` block so the formatter does not indent them.
+- Superproject: `feature/linux-06-cmake` at the commit that contains this report. Code before the report was `d4c1ac0befe54f83cc8897ebef65ee72a4d47d2f`.
+- iPlug2 `volum/linux`: `8eb3b8968f92195abf5bf025b4961b64c7767e95`.
+- AudioDSPTools `volum/linux`: `f2cfd018fb0dc009fff0e41845a83e96ae6eaab5` (from the merge of `origin/feature/linux-support`).
+- `git diff origin/feature/linux-support -- NeuralAmpModeler/config.h NeuralAmpModeler/VoLumPaths.h` is empty.
+- Pre-review CI [run 40075268411](https://github.com/guitarlum/VoLum/actions/runs/40075268411) is green on `35239678615a680af52ab0f2fe0299496ed6a78c` and does not contain this review. One new dispatch covers this commit. It is not cancelled.
 
 ## Targets
 
@@ -20,15 +22,17 @@ Module entry is the SDK's `public.sdk/source/main/linuxmain.cpp` (`ModuleEntry` 
 
 `BUILD_DIR` overrides the build directory (default `build-linux`) so a second compiler can keep its own tree.
 
+`build-linux.sh` exports `CC=gcc-12` and `CXX=g++-12` when both exist and neither variable is already set. The box has no `g++-12` and keeps the default GCC 15. An explicit `CC`/`CXX` wins.
+
 ## Flags and linking
 
 Defines: `IGRAPHICS_NANOVG`, `IGRAPHICS_GL2`, `NAM_ENABLE_A2_FAST`, `GRAYED_ALPHA=0.5f`, `IPLUG_EDITOR=1`, `IPLUG_DSP=1`, `NOMINMAX`, plus `VST3_API` or `APP_API`.
 
 RtAudio is compiled with `__LINUX_ALSA__`, `__UNIX_JACK__`, `__LINUX_PULSE__`. RtMidi is compiled with `__LINUX_ALSA__` only.
 
-Link line: `-static-libstdc++ -static-libgcc`. ALSA (`-lasound`, app only), X11, GL, fontconfig and freetype are linked with `--no-as-needed` so they are `DT_NEEDED` even where the leaf only dlopens fontconfig. libatomic is linked because GCC 15 emits `__atomic_*` for the 16-byte atomics in the tuner.
+Link line: `-static-libstdc++ -static-libgcc` and `${CMAKE_DL_LIBS}`. ALSA (`-lasound`, app only), X11, GL, fontconfig and freetype are linked with `--no-as-needed` so they are `DT_NEEDED` even where the leaf only dlopens fontconfig. libatomic is linked because GCC 15 emits `__atomic_*` for the 16-byte atomics in the tuner. libcurl is not linked.
 
-GCC older than 13 also gets `-fpermissive`. Ubuntu 22.04's GCC 12 rejects a using-declaration in AudioDSPTools that changes the meaning of `LanczosResampler`. GCC 13 made that a warning. The box GCC 15 does not get the flag.
+There is no `-fpermissive`. AudioDSPTools `f2cfd018` writes the alias as `dsp::LanczosResampler<...>`, which is what GCC 12 needed. The Ubuntu 22.04 rebuild with g++-12 produced no other GCC 12 error.
 
 ## Resource layout
 
@@ -37,9 +41,15 @@ Fonts and images are files on disk, not a Windows `.rc`. Ticket 05's `LocateReso
 - VST3: `Contents/Resources/ttf|png|jpg|svg/` and `Contents/Resources/VoLumRigs/`. The `.so` is in `Contents/x86_64-linux/`, so `../Resources/<type>/<file>` is the hit.
 - App: `standalone/resources/ttf|png|jpg|svg/` and `standalone/VoLumRigs/` next to the binary.
 
-`JosefinSans-Bold.ttf` is copied from `resources/fonts-win` because that is the file `JOSEFINSANS_BOLD_HEAVY_FN` names. `VoLumPaths.h` gained a `__linux__` rig search (next to the module, then `../Resources/VoLumRigs`, then `$XDG_DATA_HOME/VoLum/VoLumRigs`, then `/usr/share/VoLum/VoLumRigs`) and the same XDG data dir for settings, content and the log.
+`JosefinSans-Bold.ttf` is copied from `resources/fonts-win` because that is the file `JOSEFINSANS_BOLD_HEAVY_FN` names.
 
-`config.h` sets `PLUG_HAS_UI` to 0 on `__linux__`, so `createView` returns null and the validator covers processing and state with no editor. `IGraphicsLinux.cpp` is still the link stub: `OpenWindow` returns null. Ticket 07 replaces that file.
+Paths are ticket 03's. This branch no longer has `LinuxDataDir`. Rigs use `LinuxRigsCandidates(LinuxModuleFile(), LinuxVoLumDataDir())`: beside the module, then `../Resources/VoLumRigs`, then the XDG data dir, then `/usr/share/VoLum/VoLumRigs`. That is the layout the copy step writes. Nothing in the resource layout needed a second implementation.
+
+`config.h` is the single `#define PLUG_HAS_UI 1`. `parse_config.py` reads `PLUG_HAS_UI` as 1. The temporary no-editor behaviour is iPlug2 `IPLUG_LINUX_EDITOR_STUB` (defined on the Linux VST3 target). `createView` returns null, `isPlatformTypeSupported` returns `kResultFalse`, and `attached` returns `kNotImplemented`. Ticket 07 deletes the macro. `IGraphicsLinux.cpp` is still the link stub.
+
+`VoLumHttpGetLinux.cpp` is in the DSP object list. `VoLumHttpGet.cpp` does not define `VolumHttpGetString` on Linux. The loader is `dlopen` of libcurl, so the `.so` has no libcurl `NEEDED`.
+
+`IPlugLogger.h` `CurrentTime()` now passes the remaining bytes of its 32-byte buffer to `snprintf`. That change is on every platform. The formatted text is the same; the old length told fortify the destination was still 32 bytes while the pointer was already past the start. GCC killed the process in the plug-in constructor.
 
 ## JACK and Pulse
 
@@ -49,7 +59,7 @@ The standalone preferences combo lists ALSA, JACK, PulseAudio in that order (`kD
 
 ## Validator (box, GCC 15.2)
 
-`build-linux.sh Release` on `117866ff` (same C++ as the final head except the later clang-format of the stub and the GCC-12-only `-fpermissive`, which GCC 15 does not use):
+`build-linux.sh Release` on `d4c1ac0b` (GCC 15, no `g++-12` on the box):
 
 ```
 build_exit:0
@@ -74,27 +84,24 @@ validator_exit:0
  0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
 ```
 
-No `libjack`, `libpulse`, or `libstdc++`. The app adds `libasound.so.2` and nothing else from that set.
+No `libjack`, `libpulse`, `libstdc++`, or `libcurl`. The app adds `libasound.so.2` and nothing else from that set.
 
 ## Ubuntu 22.04
 
-`docker run --rm --name volum-linux06-u2204-gcc12d` on a fresh `ubuntu:22.04`. No other container was stopped. The stock `g++` is GCC 11, which cannot compile `std::atomic<std::shared_ptr<...>>` in NAMCore. The image installs `g++-12` (12.3.0) and the build sets `CC`/`CXX` to it. The binary is still glibc 2.35.
+`docker run --rm --name volum-linux06-u2204-review` on a fresh `ubuntu:22.04`. No other container was stopped. The image installs `g++-12` (12.3.0). `CMAKE_CXX_COMPILER` in `build-linux-2204-gcc12/CMakeCache.txt` is `/usr/bin/g++-12`. The script selects that compiler when it is installed. The binary is still glibc 2.35. `-fpermissive` is not in the cache and not on the command line.
 
-GCC 12 also rejects `std::fmodf` and `std::expf` (they are not in namespace `std` in that libstdc++). The Linux branch calls `::fmodf` and `::expf`.
-
-`build-linux-2204-gcc12` produced `VoLum-vst3`, `VoLum-app` and `validator`. On the box, that validator against that bundle:
+GCC 12 still rejects `std::fmodf` and `std::expf` (they are not in namespace `std` in that libstdc++). The Linux branch calls `::fmodf` and `::expf`. No further GCC 12 error appeared.
 
 ```
-Result: 47 tests passed, 0 tests failed
-validator_exit:0
-help_exit:0
+gcc12_build_ok
+docker_build_exit:0
 ```
 
-`readelf -d` of the 22.04 `VoLum.so` is the same NEEDED list as the box build (no jack, pulse, or libstdc++).
+`readelf -d` of that `VoLum.so` matches the box list above (no jack, pulse, libstdc++, or libcurl).
 
 ## Windows tests
 
-`run-tests-win.ps1` exited 0 on `117866ff` (every Windows-compiled change, including the `CurrentTime` fix and the `__linux__` math branch). doctest: 1470 passed, 0 failed, 1 skipped; 30254727 assertions. The two commits after that only add the GCC 12 `-fpermissive` flag and clang-format of `IGraphicsLinux.cpp`, which the Windows projects do not compile.
+`run-tests-win.ps1` exited 0 on the review head. doctest: 1470 passed, 0 failed, 1 skipped; 30255183 assertions.
 
 ## Apt packages
 
@@ -104,4 +111,4 @@ Inside the throwaway Ubuntu 22.04 container: `build-essential`, `g++-12`, `cmake
 
 ## CI
 
-[Run 40075268411](https://github.com/guitarlum/VoLum/actions/runs/40075268411) on `35239678615a680af52ab0f2fe0299496ed6a78c` succeeded. Windows (tests, installer, portable zip, plugin validation) and macOS (tests, full distribution, plugin validation) both completed success, as did formatting, NAMCore, both installer upgrades, and macOS standalone e2e.
+The pre-review head `35239678` is [run 40075268411](https://github.com/guitarlum/VoLum/actions/runs/40075268411) (Windows and macOS success). This review changes product and iPlug sources, so that run does not cover it. One `ci-watch.ps1 -Ref feature/linux-06-cmake -Dispatch` runs on the commit that contains this report.
