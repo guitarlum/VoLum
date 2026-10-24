@@ -10,7 +10,7 @@
 # JACK and Pulse are not linked. projects/linux/VoLumJackPulseDlopen.cpp
 # defines the symbols RtAudio calls and dlopens libjack / libpulse-simple.
 # ALSA, X11, GL, fontconfig and freetype are linked normally.
-# libstdc++ and libgcc are static.
+# libstdc++ and libgcc are static, except in a VOLUM_SANITIZE build.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -39,6 +39,16 @@ if(NOT EXISTS "${VST3_SDK}/public.sdk/source/main/linuxmain.cpp")
 endif()
 
 option(VOLUM_BUILD_VALIDATOR "Build the Steinberg VST3 validator from the vendored SDK" ON)
+# ASan + UBSan for every target, linked against the shared libstdc++/libgcc
+# (static ones are skipped below). A host that is not sanitized itself (REAPER,
+# pluginval) still needs LD_PRELOAD="$(gcc -print-file-name=libasan.so)":
+# without it the ASan runtime is not first in the library list and the
+# plug-in fails to load.
+option(VOLUM_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+if(VOLUM_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+  add_link_options(-fsanitize=address,undefined)
+endif()
 
 set(VOLUM_DSP_SOURCES
   "${VOLUM_ROOT}/AudioDSPTools/dsp/dsp.cpp"
@@ -75,6 +85,7 @@ set(VOLUM_GFX_SOURCES
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinux.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxFont.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxGL.cpp"
+  "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxKeys.cpp"
   "${IPLUG}/IPlug/IPlugAPIBase.cpp"
   "${IPLUG}/IPlug/IPlugParameter.cpp"
   "${IPLUG}/IPlug/IPlugPluginBase.cpp"
@@ -177,9 +188,15 @@ add_library(volum_dsp OBJECT ${VOLUM_DSP_SOURCES})
 volum_includes(volum_dsp)
 target_compile_definitions(volum_dsp PRIVATE NAM_ENABLE_A2_FAST)
 
-add_library(volum_gfx OBJECT ${VOLUM_GFX_SOURCES})
-volum_includes(volum_gfx)
-volum_common_defs(volum_gfx)
+# IControl derives from Steinberg::FObject only under VST3_API, so these
+# sources are compiled once per plug-in API. Sharing one object set between the
+# VST3 and the app gives the two sides different IControl vtables.
+foreach(api VST3_API APP_API)
+  add_library(volum_gfx_${api} OBJECT ${VOLUM_GFX_SOURCES})
+  volum_includes(volum_gfx_${api})
+  volum_common_defs(volum_gfx_${api})
+  target_compile_definitions(volum_gfx_${api} PRIVATE ${api})
+endforeach()
 set_source_files_properties(
   "${IPLUG}/Dependencies/IGraphics/glad_GL2/src/glad.c"
   "${IPLUG}/Dependencies/IGraphics/NanoVG/src/nanovg.c"
@@ -203,11 +220,11 @@ add_library(VoLum-vst3 SHARED
   "${IPLUG}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp"
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
-  $<TARGET_OBJECTS:volum_gfx>
+  $<TARGET_OBJECTS:volum_gfx_VST3_API>
 )
 volum_includes(VoLum-vst3)
 volum_common_defs(VoLum-vst3)
-target_compile_definitions(VoLum-vst3 PRIVATE VST3_API IPLUG_LINUX_EDITOR_STUB)
+target_compile_definitions(VoLum-vst3 PRIVATE VST3_API)
 set_target_properties(VoLum-vst3 PROPERTIES
   PREFIX ""
   OUTPUT_NAME "VoLum"
@@ -226,11 +243,12 @@ target_link_libraries(VoLum-vst3 PRIVATE
   atomic
 )
 target_link_options(VoLum-vst3 PRIVATE
-  -static-libstdc++
-  -static-libgcc
   -pthread
   -Wl,--no-undefined
 )
+if(NOT VOLUM_SANITIZE)
+  target_link_options(VoLum-vst3 PRIVATE -static-libstdc++ -static-libgcc)
+endif()
 
 add_executable(VoLum-app
   "${IPLUG}/IPlug/APP/IPlugAPP.cpp"
@@ -245,7 +263,7 @@ add_executable(VoLum-app
   ${VOLUM_SWELL_SOURCES}
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
-  $<TARGET_OBJECTS:volum_gfx>
+  $<TARGET_OBJECTS:volum_gfx_APP_API>
 )
 volum_includes(VoLum-app)
 volum_common_defs(VoLum-app)
@@ -273,11 +291,12 @@ target_link_libraries(VoLum-app PRIVATE
   atomic
 )
 target_link_options(VoLum-app PRIVATE
-  -static-libstdc++
-  -static-libgcc
   -pthread
   -Wl,--no-undefined
 )
+if(NOT VOLUM_SANITIZE)
+  target_link_options(VoLum-app PRIVATE -static-libstdc++ -static-libgcc)
+endif()
 
 set(VOLUM_COPY_RESOURCES "${CMAKE_CURRENT_LIST_DIR}/copy-resources.cmake")
 add_custom_command(TARGET VoLum-vst3 POST_BUILD
