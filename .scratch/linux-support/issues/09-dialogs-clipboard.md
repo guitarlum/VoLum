@@ -21,6 +21,14 @@ May write:
 - **`ShowMessageBox`:** drawn by IGraphics, or `zenity`. It must never deadlock
   inside a host.
 
+## Carried from ticket 07 (coordinator, 2026-10-24)
+
+- `iPlug2/IPlug/VST3/IPlugVST3.cpp:162` has a blank line with trailing spaces
+  from 07; remove it in your iPlug2 commit.
+- 07 left `CreatePlatformTextEntry` / popup menus as they are in
+  `IGraphicsLinux.cpp`; check that text entry and the VoLum popup menus work
+  in REAPER while you are there, and file what does not under 13.
+
 ## Acceptance
 
 - Doctest or scripted tests with fake `zenity`/`gdbus` on `PATH` (return path,

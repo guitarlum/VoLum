@@ -41,6 +41,12 @@ All runs are headless under `xvfb-run -a`:
   remote job to the session (for example `ssh -tt`, or a remote pid file the
   next run kills), and show it with a killed client.
 - Add `gdb` to `provision-linux.sh`.
+- **UI-thread call sites (07 cold verifier):** the doctest only covers the
+  `IPlugLinuxIsUIThread` predicate. Make the gate prove the four
+  `IPlugLinuxCheckUIThread` sites in `IGraphicsLinux.cpp` (OpenWindow,
+  CloseWindow, ProcessX11Events, OnDisplayTimer) report an off-thread call,
+  for example a Debug harness that calls one from a second thread and expects
+  the count to rise; red with the check removed.
 
 ## Acceptance
 
