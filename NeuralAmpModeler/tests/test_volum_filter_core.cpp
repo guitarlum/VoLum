@@ -80,7 +80,8 @@ public:
 #if defined(__GNUC__) && !defined(__clang__)
   __attribute__((optimize("no-tree-vectorize,no-unroll-loops")))
 #endif
-  DSP_SAMPLE** ProcessGenericScalar(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
+  DSP_SAMPLE**
+  ProcessGenericScalar(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
   {
     this->_PrepareBuffers(numChannels, numFrames);
     long inputStart = 0;
@@ -99,8 +100,8 @@ public:
           inputStart = static_cast<long>(inputDegree) - 1;
         this->mInputHistory[c][static_cast<size_t>(inputStart)] = inputs[c][s];
         for (size_t i = 0; i < inputDegree; i++)
-          out += this->mInputCoefficients[i]
-                 * this->mInputHistory[c][(static_cast<size_t>(inputStart) + i) % inputDegree];
+          out +=
+            this->mInputCoefficients[i] * this->mInputHistory[c][(static_cast<size_t>(inputStart) + i) % inputDegree];
         outputStart -= 1;
         if (outputStart < 0)
           outputStart = static_cast<long>(outputDegree) - 1;
