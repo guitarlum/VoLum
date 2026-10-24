@@ -102,11 +102,11 @@ The new file adds no Windows cases. Case count matches the ticket 02 Windows run
 
 ## CI
 
-`ci-watch.ps1 -Ref feature/linux-03-platform -Dispatch` on `a468a56b`:
+https://github.com/guitarlum/VoLum/actions/runs/40071813906
 
-https://github.com/guitarlum/VoLum/actions/runs/40070382969
+That run is `7e822cbb`, the commit that added this report. Windows (tests + installer + portable zip + plugin validation) and macOS (tests + full distribution + plugin validation) both finished success.
 
-Windows and macOS jobs were in progress when this report was written. The worker waits for them.
+An earlier dispatch, https://github.com/guitarlum/VoLum/actions/runs/40070382969 on `a468a56b`, had Windows success and was then cancelled when `7e822cbb` was pushed.
 
 ## Ticket 06
 
