@@ -118,7 +118,10 @@ fi
 preload=()
 if [[ "$ASAN" == 1 ]]; then
   # The host is not instrumented; leaks in REAPER itself are not ours.
-  preload=(env "LD_PRELOAD=$(gcc -print-file-name=libasan.so)"
+  # ASAN_PRELOAD=none runs without LD_PRELOAD, to show whether it is needed.
+  lib=""
+  [[ "${ASAN_PRELOAD:-asan}" == none ]] || lib="$(gcc -print-file-name=libasan.so)"
+  preload=(env "LD_PRELOAD=$lib"
     "ASAN_OPTIONS=detect_leaks=0:log_path=$WORK/asan"
     "UBSAN_OPTIONS=print_stacktrace=1:log_path=$WORK/ubsan:suppressions=$HERE/ubsan.supp")
 fi

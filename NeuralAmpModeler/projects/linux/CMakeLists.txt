@@ -10,7 +10,7 @@
 # JACK and Pulse are not linked. projects/linux/VoLumJackPulseDlopen.cpp
 # defines the symbols RtAudio calls and dlopens libjack / libpulse-simple.
 # ALSA, X11, GL, fontconfig and freetype are linked normally.
-# libstdc++ and libgcc are static.
+# libstdc++ and libgcc are static, except in a VOLUM_SANITIZE build.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -241,11 +241,12 @@ target_link_libraries(VoLum-vst3 PRIVATE
   atomic
 )
 target_link_options(VoLum-vst3 PRIVATE
-  -static-libstdc++
-  -static-libgcc
   -pthread
   -Wl,--no-undefined
 )
+if(NOT VOLUM_SANITIZE)
+  target_link_options(VoLum-vst3 PRIVATE -static-libstdc++ -static-libgcc)
+endif()
 
 add_executable(VoLum-app
   "${IPLUG}/IPlug/APP/IPlugAPP.cpp"
@@ -288,11 +289,12 @@ target_link_libraries(VoLum-app PRIVATE
   atomic
 )
 target_link_options(VoLum-app PRIVATE
-  -static-libstdc++
-  -static-libgcc
   -pthread
   -Wl,--no-undefined
 )
+if(NOT VOLUM_SANITIZE)
+  target_link_options(VoLum-app PRIVATE -static-libstdc++ -static-libgcc)
+endif()
 
 set(VOLUM_COPY_RESOURCES "${CMAKE_CURRENT_LIST_DIR}/copy-resources.cmake")
 add_custom_command(TARGET VoLum-vst3 POST_BUILD

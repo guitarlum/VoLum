@@ -5,6 +5,8 @@
   // The registry is iPlug2 code the Linux plug-in compiles; the test binary
   // does not link iPlug2, so the translation unit is included here.
   #include "../../iPlug2/IPlug/Linux/IPlugLinuxRunLoop.cpp"
+  // IGraphicsLinux's GL nesting, kept free of X and GL so it is testable here.
+  #include "../../iPlug2/IGraphics/Platforms/IGraphicsLinuxGLNesting.h"
 
   #include <chrono>
   #include <thread>
@@ -195,6 +197,33 @@ TEST_CASE("IPlugLinuxRunLoop: binding is UI-thread only")
   std::thread([&otherIsUIThread] { otherIsUIThread = iplug::IPlugLinuxIsUIThread(); }).join();
   CHECK_FALSE(otherIsUIThread);
   CHECK(iplug::IPlugLinuxOffThreadCalls() == 0);
+}
+
+TEST_CASE("IGraphicsLinuxGLNesting: a scope whose context was destroyed inside it still balances")
+{
+  iplug::igraphics::IGraphicsLinuxGLNesting nesting;
+  CHECK(nesting.Enter(true)); // X event dispatch: save the host's context
+  CHECK_FALSE(nesting.Enter(true)); // CloseWindow from an event handler opens its own scope
+  CHECK_FALSE(nesting.Leave());
+  // CloseWindow destroyed the context; the dispatch scope still has to close.
+  CHECK(nesting.Leave());
+  CHECK(nesting.Depth() == 0);
+
+  CHECK(nesting.Enter(true)); // the reopened editor saves the host's context again
+  CHECK(nesting.Leave());
+  CHECK_FALSE(nesting.Leave()); // an unmatched Leave changes nothing
+  CHECK(nesting.Depth() == 0);
+}
+
+TEST_CASE("IGraphicsLinuxGLNesting: a scope with no context balances and restores nothing")
+{
+  // DrawResize or a bitmap load while the editor is closed.
+  iplug::igraphics::IGraphicsLinuxGLNesting nesting;
+  CHECK_FALSE(nesting.Enter(false));
+  CHECK_FALSE(nesting.Leave());
+  CHECK(nesting.Depth() == 0);
+  CHECK(nesting.Enter(true));
+  CHECK(nesting.Leave());
 }
 
 TEST_CASE("IPlugLinuxPollRunLoop dispatches a readable fd and timerfd timers")

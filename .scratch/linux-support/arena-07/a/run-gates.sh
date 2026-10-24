@@ -41,10 +41,15 @@ clean_log() {
 run_pluginval() {
   local bundle="$1" log="$2" preload=() home
   home="$(throwaway_home)"
-  # With only libasan preloaded, Mesa's libLLVM crashes in its static
-  # initialisers (pthread_once on a null function) while libGLX loads the
-  # driver inside pluginval. Preloading the system libstdc++ as well avoids it.
-  [[ "${3:-}" == asan ]] && preload=(env "LD_PRELOAD=$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)"
+  # ASAN_PRELOAD: none | asan (default) | asan+stdc++. See the 07 report for
+  # which one each host needs.
+  local lib=""
+  case "${ASAN_PRELOAD:-asan}" in
+    none) ;;
+    asan) lib="$(gcc -print-file-name=libasan.so)" ;;
+    asan+stdc++) lib="$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)" ;;
+  esac
+  [[ "${3:-}" == asan ]] && preload=(env "LD_PRELOAD=$lib"
     "ASAN_OPTIONS=detect_leaks=0" "UBSAN_OPTIONS=print_stacktrace=1:suppressions=$HERE/ubsan.supp")
   set +e
   HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" IGRAPHICS_LINUX_TRACE=1 \
@@ -67,15 +72,19 @@ run_step() {
     tests)
       # run-tests-linux.sh builds with -j 14; the arena caps the box at 10, so
       # the same configuration is built here first and the script finds it current.
+      # Same compiler choice as run-tests-linux.sh, so it keeps this cache.
+      local cc cxx
+      cc="$(command -v gcc-12 || command -v gcc-11 || command -v gcc)"
+      cxx="$(command -v g++-12 || command -v g++-11 || command -v g++)"
       cmake -S NeuralAmpModeler/tests -B NeuralAmpModeler/build-tests-linux -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CXX_COMPILER=g++ -DVOLUM_ENABLE_SANITIZERS=0 > "$OUT/tests-build.log" 2>&1
+        -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" -DVOLUM_ENABLE_SANITIZERS=0 > "$OUT/tests-build.log" 2>&1
       cmake --build NeuralAmpModeler/build-tests-linux -j "$JOBS" >> "$OUT/tests-build.log" 2>&1 || { tail -40 "$OUT/tests-build.log"; return 1; }
       set +e
       bash NeuralAmpModeler/scripts/run-tests-linux.sh > "$OUT/tests.log" 2>&1
       rc=$?
       set -e
       grep -a -E "^\[doctest\] (test cases|assertions|Status)" "$OUT/tests.log" | tail -3
-      NeuralAmpModeler/build-tests-linux/NeuralAmpModeler-Tests --test-case="IPlugLinux*" --success=false | tail -4
+      NeuralAmpModeler/build-tests-linux/NeuralAmpModeler-Tests --test-case="*IPlugLinux*,*IGraphicsLinuxGLNesting*" --success=false | tail -4
       echo "run-tests-linux.sh exit $rc"
       [[ "$rc" == 0 ]]
       ;;
