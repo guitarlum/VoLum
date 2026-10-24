@@ -1,12 +1,12 @@
 # 08 Plugin gates (box + CI)
 
-Status: **PASS** after the coordinator review (jackd lifetime, the stdio locale fix kept and `-fno-gnu-unique` dropped, UI-thread red from `redproof-plugin-gates.sh`). The CI run is the dispatch of this commit.
+Status: **PASS** after hiding static libstdc++. The shared headers are back to the ostream code. The CI run is the dispatch of this commit.
 
 ## Heads
 
 | | Branch | Head |
 | --- | --- | --- |
-| Superproject | `feature/linux-08-plugin-gates` | this commit. The code is `482b0ce9` (lock fds 7–9 closed, `-fno-gnu-unique` removed) on `6bdc74ab` (jackd EXIT/HUP/INT/TERM traps and `PR_SET_PDEATHSIG`). Run 40117645281 was `d13168d1` and is not this head. |
+| Superproject | `feature/linux-08-plugin-gates` | this commit. The code is `1781e04f` (version script + `--exclude-libs,ALL`; `VoLumDiagLog.h` and `VoLumSettingsFileIO.h` match `43ecf015`). Jackd traps are `6bdc74ab`. Run 40127615876 was `22b190e6` (stdio forks) and is not this head. |
 | iPlug2 | `volum/linux` | `72593f1683be9baf2bc287af9d854e829750a152` (unchanged) |
 | AudioDSPTools | from `feature/linux-support` | `3f28127e3125adb8befbdb56e26e986aaf9c0e55` |
 
@@ -35,9 +35,19 @@ Product scripts, from the ticket 07 arena harness (those scratch copies are dele
 
 **Render null.** The bar is peak residual ≤ -100 dBFS, the same number as `platform_null.h`, with 0 dBFS = amplitude 1. It is not a bit-exact compare: the box is GCC 15 / glibc 2.43 and CI is g++-12 / glibc 2.35. The live render must also peak above -40 dBFS, so silence cannot pass. On the box the two takes and the committed file were bit-identical (`-inf`).
 
-**Carla and iostream.** Static libstdc++ plus a host that sets the global C++ locale crashes `num_put` in `codecvt`. `-fno-gnu-unique` does not stop it: with that flag still on and the Linux stdio paths reverted to the shared ostream code, Carla segfaults (exit 139) while constructing the plug-in. With the stdio paths kept and the flag removed, Carla loads and processes (`transport frame 96000`, exit 0) and the REAPER render still nulls at -inf dBFS. The flag is gone. The Linux branches in `VoLumDiagLog.h` and `VoLumSettingsFileIO.h` stay. Windows in those headers is the original ostream code.
+**Carla and iostream.** Static libstdc++ (`-static-libstdc++`, still skipped when `VOLUM_SANITIZE`) puts GNU-unique facet ids in the plug-in's dynamic table, and a host locale then binds `num_put` to the host's `codecvt`. `-fno-gnu-unique` does not apply to the prebuilt `libstdc++.a`. The stdio forks only avoided two call sites. They are gone: both headers match `43ecf015`. The link hides the runtime with `--exclude-libs,ALL` and a version script (`local: *`, plus `GetPluginFactory`, `ModuleEntry`, `ModuleExit`, and the six symbols the UI-thread gate links). `ld` ignored `extern "C++"` patterns, so those six are mangled names.
 
-Other `ostream << number` sites in the plug-in, not on this Carla load/process path: `NeuralAmpModeler::_ProcessInput` throws if `nChansOut != 1` (`ss << nChansOut`; the gate's process ran and did not throw), and the editor formatters in `NeuralAmpModelerControls.h` (`p.value`, `naturalValue << " dBu"`). `std::to_string` is not one of these.
+`nm -D --defined-only` / `readelf --dyn-syms` on the box, same reverted sources:
+
+| Build | Defined dynamic symbols | `std::` / `__gnu_cxx` | GNU-unique |
+| --- | --- | --- | --- |
+| Before (no version script, no `--exclude-libs`) | 12952 | 4461 | 256, including `std::num_put<char>::id` |
+| After `1781e04f` | 9 (factory, entry, exit, six gate symbols) | 0 | 0 |
+| Red: those two link options removed, static libstdc++ kept | 12953 | 4462 | 256, `num_put::id` back |
+
+Green, forks reverted and the link options on: symbol check PASS, UI-thread PASS, validator `47 tests passed`, pluginval exit 0 (editor 5/5), Carla `transport frame 96256` exit 0, REAPER null `-inf` dBFS (editors 3/3). Red, link options removed: `check-stdlib-exports.sh` exit 1 (`4619 bad symbols`), Carla `Segmentation fault` / `carla-single exit 139`. The good link was restored afterwards and the check passed again.
+
+ASan keeps shared libstdc++ (`NEEDED libstdc++` 1, plus `libasan.so.8` and `libubsan.so.1`). The same symbol check passed on that `.so`. Host smoke: REAPER 2×20 PASS, pluginval exit 0. GCC tests 1487 passed (30251363 assertions). Clang ASan/UBSan 1452 passed, 36 skipped. Windows tests 1471 passed (30255204 assertions).
 
 **box.ps1 and jackd.** A killed local client SIGHUPs the remote session (`REMOTE_GONE` on the `sleep 90` check). jackd ignores SIGHUP. The old gate only had `trap cleanup_jack RETURN`, so a kill left the server with ppid 1. The gate now traps EXIT, HUP, INT and TERM, closes inherited lock fds 7–9, and starts jackd with `PR_SET_PDEATHSIG` so the kernel sends SIGTERM when that shell dies.
 
@@ -96,7 +106,7 @@ The same invocation also re-failed the other gates: validator exit 255, pluginva
 
 ## CI
 
-Earlier run [40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) on `d13168d1` was green, including Linux plugin gates (null `-inf` dBFS on ubuntu-22.04). It does not contain the jackd trap, the lock-fd close, or the dropped `-fno-gnu-unique`. The run for this commit is dispatched with `ci-watch.ps1 -Dispatch` and is the one that has to be green. The numeric id is the run whose `headSha` is this commit; it is not written back into a later commit, because that would move the branch tip off the green run.
+[Run 40127615876](https://github.com/guitarlum/VoLum/actions/runs/40127615876) on `22b190e6` was green, including Linux plugin gates and macOS. That head still had the stdio forks and did not hide libstdc++. The run for this commit is dispatched with `ci-watch.ps1 -Dispatch` and is the one that has to be green. The numeric id is the run whose `headSha` is this commit; it is not written back into a later commit.
 
 [Run 40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) jobs, for the record:
 
@@ -129,7 +139,7 @@ Artifact `VoLum-linux-vst3` (35 MB) on that earlier run. The `/g` redproof above
 
 ## Laptop
 
-An earlier `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1` on this branch exited 0 (doctest 1470 passed, 0 failed, 1 skipped; 30255184 assertions). A retry was required after MSVC `C1060` while the box was also building. This review does not start another local MSVC build: the laptop is short on RAM, and the Windows job on the CI run for this commit is the evidence. `run-tests-win.ps1` on `feature/linux-support` (`bf5ce757`) serializes MSBuild with a named mutex; that commit is not merged here.
+`pwsh NeuralAmpModeler/scripts/run-tests-win.ps1` on this commit's parent exited 0 after the header revert: doctest 1471 passed, 0 failed, 1 skipped; 30255204 assertions. It ran alone. `bf5ce757` (the MSBuild mutex on `feature/linux-support`) is not merged.
 
 ## Not in this ticket
 
