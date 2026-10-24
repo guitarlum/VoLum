@@ -554,7 +554,13 @@ TEST_CASE("Linux test binary does not DT_NEEDED libcurl")
     return;
   }
 
-  FILE* pipe = ::popen("readelf -d /proc/self/exe", "r");
+  char selfPath[4096];
+  const ssize_t selfLen = ::readlink("/proc/self/exe", selfPath, sizeof(selfPath) - 1);
+  REQUIRE(selfLen > 0);
+  selfPath[selfLen] = '\0';
+  // popen runs a shell, so /proc/self/exe inside that command is the shell.
+  const std::string command = std::string("readelf -d \"") + selfPath + "\"";
+  FILE* pipe = ::popen(command.c_str(), "r");
   REQUIRE(pipe);
   std::string text;
   char buf[512];
