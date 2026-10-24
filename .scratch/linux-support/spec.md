@@ -129,15 +129,14 @@ macOS golden hash sets must not change.
     (no `speed_matrix`, `bench/run`, `fetch_models`, `build_llama` or pytest
     processes, and `llama-server` under 10% of a core over 5 s).
     - If it fails, the job exits 3 (`BOX_BUSY_LOCALAI`). The ticket defers box
-      work and continues with cloud and CI.
+      work and continues with CI.
     - Never stop, kill or reconfigure anything of `~/localai-platform`,
       `llama-server`, Ollama or docker.
   - PowerShell to ssh traps: pipe scripts to `bash -s` with CRs stripped and a
     sacrificial trailing `#` line. Never inline `$` in a double-quoted ssh
     argument. Upload files with `scp` of LF-only content.
-- **Cloud agents** (Cursor, Linux VMs): build-only work, arena candidates, and
-  CI-like Xvfb gates. They clone `guitarlum/VoLum` with submodules; the fork
-  branch `volum/linux` is on GitHub.
+- **Cloud agents:** not used. The owner declined them (E1, closed). All workers
+  are local Cursor subagents. Arena candidates share the box's two build locks.
 - **Local WSL:** optional and no sudo. Doctest only if its deps are already there.
 - **Laptop:** Windows tests (`run-tests-win.ps1`), `ci-watch.ps1`, merges,
   coordinator.
