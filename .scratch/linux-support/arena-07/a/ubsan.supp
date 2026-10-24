@@ -1,0 +1,9 @@
+# UBSan findings that are not Linux-specific and are outside ticket 07's scope.
+# Each one is listed in the 07a report.
+#
+# IPlugProcessor::InitLatencyDelay calls NChanDelayLine::SetDelayTime(0), which
+# memsets an empty WDL buffer (memset(nullptr, 0, 0)).
+nonnull-attribute:NChanDelay.h
+# NanoVG's vendored stb_image.h JPEG decoder left-shifts negative coefficients
+# (stbi__build_fast_ac, stbi__extend_receive, the IDCT), loading VoLum's .jpg art.
+shift-base:stb_image.h
