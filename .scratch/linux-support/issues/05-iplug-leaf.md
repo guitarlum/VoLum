@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: 01
 
 # 05 iPlug2 Linux leaf pieces (compile-level)

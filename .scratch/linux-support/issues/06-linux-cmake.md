@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 Blocked by: 05
 
 # 06 Linux CMake for the VST3 and the app

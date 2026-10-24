@@ -41,6 +41,21 @@ verify on `feature/linux-07-graphics`.
 - **Standalone:** the loop provider is a simple poll/timerfd loop. Ticket 10 wires
   it into the app main.
 
+## Carried from the ticket 05 review (coordinator, 2026-10-24)
+
+- **One loop per process today:** `IPlug/Linux/IPlugLinuxRunLoop.cpp` keeps a
+  single process-wide `IPlugLinuxRunLoop*`, and every timer re-binds when it
+  changes.
+  - With two VoLum editors in one host, closing one must not detach the other
+    editor's timers. Use reference counts or a per-editor loop stack, and add a
+    test with two instances where one closes.
+- **No lock:** the binding table has no lock. Either prove that every
+  `Timer::Create`/`Stop` runs on the UI thread in VST3 and APP (assert it in
+  Debug), or add a mutex. Never call into the host loop while holding it.
+- **`WDL/wdlendian.h`:** its float-endian check now also errors on non-Linux
+  compilers that lack `__FLOAT_WORD_ORDER__`. Windows and macOS CI are green,
+  but narrow it to Linux if you touch that file.
+
 ## Acceptance
 
 - Under `xvfb-run -a` on the box or a cloud VM:
