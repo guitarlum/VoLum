@@ -184,9 +184,17 @@ add_library(volum_dsp OBJECT ${VOLUM_DSP_SOURCES})
 volum_includes(volum_dsp)
 target_compile_definitions(volum_dsp PRIVATE NAM_ENABLE_A2_FAST)
 
-add_library(volum_gfx OBJECT ${VOLUM_GFX_SOURCES})
-volum_includes(volum_gfx)
-volum_common_defs(volum_gfx)
+# IControl gains Steinberg bases when VST3_API is set, so the graphics
+# translation units must be compiled with the same API define as the plug-in
+# or AttachControl calls the wrong virtual.
+function(volum_add_gfx name api_define)
+  add_library(${name} OBJECT ${VOLUM_GFX_SOURCES})
+  volum_includes(${name})
+  volum_common_defs(${name})
+  target_compile_definitions(${name} PRIVATE ${api_define})
+endfunction()
+volum_add_gfx(volum_gfx_vst3 VST3_API)
+volum_add_gfx(volum_gfx_app APP_API)
 set_source_files_properties(
   "${IPLUG}/Dependencies/IGraphics/glad_GL2/src/glad.c"
   "${IPLUG}/Dependencies/IGraphics/NanoVG/src/nanovg.c"
@@ -222,7 +230,7 @@ add_library(VoLum-vst3 SHARED
   "${IPLUG}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp"
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
-  $<TARGET_OBJECTS:volum_gfx>
+  $<TARGET_OBJECTS:volum_gfx_vst3>
 )
 volum_includes(VoLum-vst3)
 volum_common_defs(VoLum-vst3)
@@ -263,7 +271,7 @@ add_executable(VoLum-app
   ${VOLUM_SWELL_SOURCES}
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
-  $<TARGET_OBJECTS:volum_gfx>
+  $<TARGET_OBJECTS:volum_gfx_app>
 )
 volum_includes(VoLum-app)
 volum_common_defs(VoLum-app)
@@ -301,7 +309,7 @@ if(NOT VOLUM_SANITIZE)
     target_link_options(${volum_target} PRIVATE -static-libstdc++ -static-libgcc)
   endforeach()
 else()
-  foreach(volum_target volum_dsp volum_gfx VoLum-vst3 VoLum-app)
+  foreach(volum_target volum_dsp volum_gfx_vst3 volum_gfx_app VoLum-vst3 VoLum-app)
     target_compile_options(${volum_target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
   endforeach()
   foreach(volum_target VoLum-vst3 VoLum-app)
