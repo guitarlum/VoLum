@@ -137,6 +137,7 @@ function(volum_includes target)
     "${VOLUM_NAM}/third_party/signalsmith"
     "${IPLUG}/IPlug"
     "${IPLUG}/IPlug/APP"
+    "${IPLUG}/IPlug/Extras"
     "${IPLUG}/IPlug/VST3"
     "${IPLUG}/IGraphics"
     "${IPLUG}/IGraphics/Controls"
@@ -151,6 +152,8 @@ function(volum_includes target)
     "${IPLUG}/Dependencies/IGraphics/STB"
     "${IPLUG}/Dependencies/Extras"
     "${IPLUG}/Dependencies/Extras/nlohmann"
+    "${IPLUG}/Dependencies/IPlug/RTAudio"
+    "${IPLUG}/Dependencies/IPlug/RTMidi"
     "${VST3_SDK}"
   )
 endfunction()
