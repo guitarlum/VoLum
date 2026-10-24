@@ -71,6 +71,11 @@ macOS golden hash sets must not change.
   peak, unless an escalation sets otherwise).
   - `test_golden_dsp.cpp` `PlatformExpected` gains a Linux branch.
   - Never edit the Windows or macOS sets.
+  - The Linux set binds to one reference environment: the CI `Linux tests`
+    job on ubuntu-22.04, identified by glibc version plus compiler `__VERSION__`.
+    It is required there, and CI fails if that identity drifts. Everywhere else
+    (box, users) the null test is the gate. Bits differ between libm and
+    compiler builds even at the same GCC version (decision D1, ticket 04).
 - **Package:** `VoLum-<version>-linux-x86_64.tar.gz` containing `VoLum.vst3/`,
   `VoLum` (standalone), `VoLumRigs/`, `install.sh`, `LICENSE`,
   `THIRD_PARTY_LICENSES.md`.
