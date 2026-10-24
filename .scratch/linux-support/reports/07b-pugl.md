@@ -1,12 +1,13 @@
 # 07b pugl editor
 
-Status: issues. The release editor gates pass. The sanitizer build aborts in a pre-existing constructor path before REAPER can open the editor.
+Status: issues. Release validator and pluginval pass on the merge. The sanitizer REAPER smoke now opens the editor and stops in shared NanoVG `stb_image`, outside the adapter and pugl.
 
 ## Heads
 
-- Superproject `feature/linux-07b-pugl` code: `4f68b34ec6e9c144cc1818ff344ae329a606635f`.
-- iPlug2 `volum/linux-07b`: `db0dc6b8e24b3868b73aff98f4b2e7da4cf947f8` (from `8eb3b8968`, not `volum/linux` and not `volum/linux-07a`).
-- CI: [run 40089826109](https://github.com/guitarlum/VoLum/actions/runs/40089826109) on that code head. Windows tests job succeeded. Formatting succeeded. macOS was still running when this report was written.
+- Superproject `feature/linux-07b-pugl`: `ea161dc28b62988921a1ddedc131110976b5cbeb`.
+- iPlug2 `volum/linux-07b`: `9362b06b212f4e2102af9d83aa78ee45c728fc44` (`--no-ff` merge of `volum/linux` `56a660461`). Not `volum/linux-07a`.
+- CI on that head: [run 40094896390](https://github.com/guitarlum/VoLum/actions/runs/40094896390).
+- Earlier [run 40089826109](https://github.com/guitarlum/VoLum/actions/runs/40089826109) on `4f68b34e`: Windows succeeded. macOS was cancelled (concurrency `cancel-in-progress` when the next dispatch on this ref started). That run's Windows job had already finished green.
 
 ## What this candidate is
 
@@ -18,27 +19,38 @@ pugl is upstream `6cba2b564a7a767cefbd9259c87c0284b0e2acb8` (2026-10-17). Local 
 
 ### 1. Gates
 
-Release build on the box, Xvfb `1920x1080x24`.
+Release build on the box at `ea161dc2`, Xvfb `1920x1080x24`.
 
-Steinberg validator:
+| Gate | Result |
+| --- | --- |
+| Steinberg validator | `Result: 47 tests passed, 0 tests failed` (`validator_exit:0`) |
+| pluginval 10 in-process | `SUCCESS` (`pluginval_exit:0`). No `IPlugLinux X error`. |
+| REAPER release, 2×20 | `PASS` on the pre-merge editor. No `IPlugLinux X error`. |
+| REAPER `VOLUM_SANITIZE`, 2×20 | Stopped. UBSan in shared `stb_image.h:1578`. No `IPlugLinux X error`. No AddressSanitizer report. |
+| Windows CI `40089826109` | success |
+| macOS CI `40089826109` | cancelled (concurrency) |
+| Windows + macOS CI `40094896390` | success on `ea161dc2` (Windows, macOS, both installer upgrades, macOS standalone e2e) |
+
+`VOLUM_SANITIZE=ON` rebuilt `build-linux-asan/VoLum.vst3` after the `NChanDelay` merge. REAPER found the plug-in and opened an editor. UBSan then aborted. The hit is `(-1 << magbits)` in vendored NanoVG, reached from layout bitmap load. It is not in `IGraphicsLinux` and not in pugl. Not patched here.
 
 ```
-Result: 47 tests passed, 0 tests failed
+runtime error: left shift of negative value -1
+#0 stbi__process_marker.cold  iPlug2/Dependencies/IGraphics/NanoVG/src/stb_image.h:1578
+#1 stbi__jpeg_load
+#2 stbi__load_flip
+#3 stbi_load_from_file
+#4 stbi_load
+#5 nvgCreateImage
+#6 iplug::igraphics::IGraphicsNanoVG::LoadAPIBitmap
+#7 iplug::igraphics::IGraphicsNanoVG::LoadBitmap
+#8 NeuralAmpModeler::_BuildVoLumLayout
+#9 iplug::igraphics::IGraphicsLinux::OpenWindow
+#10 iplug::igraphics::IGEditorDelegate::OpenWindow
+#11 IPlugVST3View::attached
+#12 REAPER
 ```
 
-pluginval `--strictness-level 10 --validate-in-process` reached `SUCCESS`, including the editor tests. After the handler was limited to this editor's `Display`, that log has no `IPlugLinux X error` line.
-
-REAPER 7.82, throwaway `HOME`, `__startup.lua`: two instances (`VST3: VoLum (Lum)`), each editor opened and closed 20 times, then `PASS`. No `IPlugLinux X error` in that log.
-
-`VOLUM_SANITIZE=ON` produced `build-linux-asan/VoLum.vst3`. REAPER's scan did not list it (`FAIL VoLum is not installed; scanned 249`). Loading that `.so` in-process under UBSan aborts first:
-
-```
-runtime error: null pointer passed as argument 1, which is declared to never be null
-iplug::IPlugProcessor::InitLatencyDelay()
-NChanDelay.h:36
-```
-
-That runs from the VST3 constructor, before `OpenWindow`. It is not an editor-path ASan hit. The release REAPER smoke is the one that completed.
+Smoke progress before the abort: `STEP fx VST3: VoLum (Lum)` then `STEP inserted 2`. No `PASS` line.
 
 Screenshots of the real UI: `reports/07b-scale1.png` (900x600) and `reports/07b-scale2.png` (1800x1200), via `setContentScaleFactor`. `import` was already installed. No extra apt packages.
 
