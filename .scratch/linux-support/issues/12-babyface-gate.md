@@ -27,3 +27,13 @@ May write: `NeuralAmpModeler/scripts/linux/real-device-gate.sh`, `reports/`.
 - **If the device is not the Windows default, or loopback is off:** escalate,
   because that is an owner prerequisite. Keep the ticket `escalated` and continue
   the others; do not block.
+
+## Carried from ticket 10
+
+- The JACK-dummy smoke gates xruns only in a 60 s window after a 5 s warm-up.
+  Single xruns were seen at launch, at quit and while Preferences was open, at
+  6–49 % DSP load. On the Babyface, count xruns from stream open to close,
+  including launch, opening Preferences and quit. Each xrun outside a device
+  open or close needs a root cause in the report, for example a JACK probe
+  client from the device list, or a lock the audio callback waits on. Fix any
+  cause that is VoLum's, and show the fix with a red run.
