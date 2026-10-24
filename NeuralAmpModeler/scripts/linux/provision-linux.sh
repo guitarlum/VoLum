@@ -198,6 +198,7 @@ pkgs=(
   jackd2
   libpulse-dev
   pulseaudio-utils
+  pulseaudio
   libfontconfig-dev
   libfreetype-dev
   libgtk-3-dev

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: escalated
 Blocked by: 10
 
 # 12 Real-device gate: Babyface through WSLg (box only)
