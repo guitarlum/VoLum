@@ -4,9 +4,10 @@
 #   bash NeuralAmpModeler/scripts/run-tests-linux.sh
 #   bash NeuralAmpModeler/scripts/run-tests-linux.sh --clang --sanitize
 #
-# Default is GCC Release. --clang selects Clang. --sanitize (implies --clang)
-# is Debug with ASan and UBSan, and it excludes the same cases as
-# run-tests-mac.sh. At most 14 compile jobs: the box shares two build slots.
+# Default is GCC 15 Release (g++-15). --clang selects Clang 21 (clang++-21).
+# --sanitize (implies --clang) is Debug with ASan and UBSan, and it excludes
+# the same cases as run-tests-mac.sh. At most 14 compile jobs: the box shares
+# two build slots. provision-linux.sh installs these compilers.
 
 set -euo pipefail
 
@@ -138,21 +139,45 @@ fi
 # Prebuilt iPlug libs and the WAM SDK are for the app/VST3 package, which
 # run-tests-mac.sh also does not build. This target does not link them.
 
+# GCC 15 Release owns the Linux golden hashes. Clang 21 is the sanitizer
+# compiler. Both names are what provision-linux.sh installs on 22.04 and what
+# 26.04 already ships, so the box and CI use the same major.
 BUILD_DIR="$PROJECT_DIR/build-tests-linux"
 BUILD_TYPE=Release
-CXX=g++
+CC=gcc-15
+CXX=g++-15
 if [[ "$CLANG" == "1" ]]; then
   BUILD_DIR="$PROJECT_DIR/build-tests-linux-clang"
-  CXX=clang++
+  CC=clang-21
+  CXX=clang++-21
 fi
 if [[ "$SANITIZE" == "1" ]]; then
   BUILD_DIR="$PROJECT_DIR/build-tests-linux-sanitized"
   BUILD_TYPE=Debug
 fi
+if ! command -v "$CC" >/dev/null 2>&1 || ! command -v "$CXX" >/dev/null 2>&1; then
+  echo "missing $CC or $CXX. Run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci" >&2
+  exit 1
+fi
+export CC CXX
+echo "CC=$CC ($("$CC" --version | head -n 1))"
+echo "CXX=$CXX ($("$CXX" --version | head -n 1))"
+
+# A build directory configured with /usr/bin/g++ does not accept g++-15 even
+# when both resolve to GCC 15. Drop it and configure again.
+if [[ -f "$BUILD_DIR/CMakeCache.txt" ]]; then
+  cached_cxx="$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$BUILD_DIR/CMakeCache.txt" | head -n 1)"
+  want_cxx="$(command -v "$CXX")"
+  if [[ "$cached_cxx" != "$want_cxx" ]]; then
+    echo "clearing $BUILD_DIR (cached compiler '$cached_cxx', want '$want_cxx')"
+    rm -rf "$BUILD_DIR"
+  fi
+fi
 
 cmake -S "$PROJECT_DIR/tests" -B "$BUILD_DIR" \
   -G Ninja \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+  -DCMAKE_C_COMPILER="$CC" \
   -DCMAKE_CXX_COMPILER="$CXX" \
   -DVOLUM_ENABLE_SANITIZERS="$SANITIZE"
 
