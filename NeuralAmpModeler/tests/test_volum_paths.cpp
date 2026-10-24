@@ -7,6 +7,9 @@
 
 #ifdef _WIN32
   #include <stdlib.h>
+#elif defined(__linux__)
+  #include <stdlib.h>
+  #include <unistd.h>
 #endif
 
 TEST_CASE("DiscoverChannels sorts by label and matches speaker prefix")
@@ -229,5 +232,174 @@ TEST_CASE("VolumUserSettingsFilePath is under Application Support on macOS")
   const auto p = volum::VolumUserSettingsFilePath();
   CHECK(p == std::filesystem::path(home) / "Library" / "Application Support" / "VoLum" / "volum-settings.json");
   CHECK(p.generic_string().find('\\') == std::string::npos);
+}
+#endif
+
+#ifdef __linux__
+
+namespace
+{
+
+class EnvGuard
+{
+public:
+  explicit EnvGuard(const char* name)
+  : mName(name)
+  {
+    if (const char* value = std::getenv(name))
+    {
+      mHad = true;
+      mValue = value;
+    }
+  }
+
+  ~EnvGuard()
+  {
+    if (mHad)
+      ::setenv(mName, mValue.c_str(), 1);
+    else
+      ::unsetenv(mName);
+  }
+
+  void Set(const std::string& value) { ::setenv(mName, value.c_str(), 1); }
+  void Unset() { ::unsetenv(mName); }
+
+private:
+  const char* mName;
+  bool mHad = false;
+  std::string mValue;
+};
+
+} // namespace
+
+TEST_CASE("Linux user paths sit under XDG_DATA_HOME/VoLum")
+{
+  namespace fs = std::filesystem;
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_xdg_data_home";
+  fs::remove_all(tmp);
+  fs::create_directories(tmp);
+  EnvGuard xdg("XDG_DATA_HOME");
+  xdg.Set(tmp.string());
+
+  const fs::path root = tmp / "VoLum";
+  const fs::path settings = volum::VolumUserSettingsFilePath();
+  const fs::path update = volum::VolumUpdateStateFilePath();
+  const fs::path content = volum::VolumContentDir();
+  const fs::path dual = volum::VolumDualAmpSettingsFilePath();
+  const fs::path log = volum::VolumDiagLogFilePath();
+  CHECK_FALSE(settings.empty());
+  CHECK_FALSE(update.empty());
+  CHECK_FALSE(content.empty());
+  CHECK_FALSE(dual.empty());
+  CHECK_FALSE(log.empty());
+  CHECK(settings == root / "volum-settings.json");
+  CHECK(update == root / "volum-update-state.json");
+  CHECK(content == root / "content");
+  CHECK(dual == root / "volum-dual-amp-settings.json");
+  CHECK(log == root / "volum.log");
+  fs::remove_all(tmp);
+}
+
+TEST_CASE("Linux user paths fall back to HOME/.local/share when XDG_DATA_HOME is unset or relative")
+{
+  namespace fs = std::filesystem;
+  const fs::path home = volum_test::ProcessTempRoot() / "volum_xdg_home_fallback";
+  fs::remove_all(home);
+  fs::create_directories(home);
+  EnvGuard xdg("XDG_DATA_HOME");
+  EnvGuard homeEnv("HOME");
+  homeEnv.Set(home.string());
+
+  xdg.Unset();
+  const fs::path root = home / ".local" / "share" / "VoLum";
+  CHECK(volum::VolumUserSettingsFilePath() == root / "volum-settings.json");
+  CHECK(volum::VolumContentDir() == root / "content");
+  CHECK(volum::VolumDiagLogFilePath() == root / "volum.log");
+
+  xdg.Set("");
+  CHECK(volum::VolumUpdateStateFilePath() == root / "volum-update-state.json");
+
+  xdg.Set("relative/not-absolute");
+  CHECK(volum::VolumDualAmpSettingsFilePath() == root / "volum-dual-amp-settings.json");
+
+  xdg.Unset();
+  homeEnv.Unset();
+  CHECK(volum::VolumUserSettingsFilePath().empty());
+  fs::remove_all(home);
+}
+
+TEST_CASE("Linux module path uses dladdr for a plugin .so and /proc/self/exe for the app")
+{
+  namespace fs = std::filesystem;
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_linux_module";
+  fs::remove_all(tmp);
+  fs::create_directories(tmp);
+  const fs::path soFile = tmp / "VoLum.so";
+  const fs::path exeFile = tmp / "VoLum";
+  const fs::path exeLink = tmp / "VoLum-link";
+  std::ofstream(soFile.string()).close();
+  std::ofstream(exeFile.string()).close();
+  std::error_code ec;
+  fs::create_symlink(exeFile, exeLink, ec);
+  REQUIRE_FALSE(ec);
+
+  CHECK(volum::LinuxChooseModuleFile(soFile, exeFile) == soFile);
+  CHECK(volum::LinuxChooseModuleFile(exeLink, exeFile) == exeFile);
+  CHECK(volum::LinuxChooseModuleFile({}, exeFile) == exeFile);
+  CHECK(volum::LinuxChooseModuleFile(soFile, {}) == soFile);
+
+  const fs::path live = volum::LinuxModuleFile();
+  char buf[4096];
+  const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  REQUIRE(n > 0);
+  buf[n] = '\0';
+  CHECK(fs::equivalent(live, fs::path(buf), ec));
+  fs::remove_all(tmp);
+}
+
+TEST_CASE("Linux rigs search order is beside the binary, bundle Resources, XDG, then /usr/share")
+{
+  namespace fs = std::filesystem;
+  const fs::path tmp = volum_test::ProcessTempRoot() / "volum_linux_rigs_order";
+  fs::remove_all(tmp);
+  const fs::path module = tmp / "VoLum.vst3" / "Contents" / "x86_64-linux" / "VoLum.so";
+  const fs::path data = tmp / "xdg" / "VoLum";
+  const fs::path system = tmp / "usr" / "share" / "VoLum" / "VoLumRigs";
+  fs::create_directories(module.parent_path());
+  fs::create_directories(module.parent_path().parent_path() / "Resources" / "VoLumRigs" / "PrePedals");
+  fs::create_directories(data / "VoLumRigs");
+  fs::create_directories(system);
+  std::ofstream(module.string()).close();
+
+  const auto candidates = volum::LinuxRigsCandidates(module, data, system);
+  REQUIRE(candidates.size() == 4);
+  CHECK(candidates[0] == module.parent_path() / "VoLumRigs");
+  CHECK(candidates[1] == module.parent_path().parent_path() / "Resources" / "VoLumRigs");
+  CHECK(candidates[2] == data / "VoLumRigs");
+  CHECK(candidates[3] == system);
+
+  std::error_code ec;
+  fs::create_directories(candidates[0]);
+  std::ofstream((candidates[0] / "readme.txt").string()).close();
+  std::ofstream((candidates[1] / "PrePedals" / "FX-Minotaur-Klon-1.nam").string()).close();
+  CHECK(volum::PickRigsRoot(candidates) == fs::weakly_canonical(candidates[1], ec));
+
+  std::ofstream((candidates[0] / "factory-presets.json").string()).close();
+  CHECK(volum::PickRigsRoot(candidates) == fs::weakly_canonical(candidates[0], ec));
+
+  EnvGuard xdg("XDG_DATA_HOME");
+  const fs::path xdgRoot = tmp / "live-xdg";
+  fs::create_directories(xdgRoot);
+  xdg.Set(xdgRoot.string());
+  const auto live = volum::RigsRootCandidates();
+  REQUIRE(live.size() >= 6);
+  const fs::path moduleFile = volum::LinuxModuleFile();
+  CHECK(live[0] == moduleFile.parent_path() / "VoLumRigs");
+  CHECK(live[1] == moduleFile.parent_path().parent_path() / "Resources" / "VoLumRigs");
+  CHECK(live[2] == xdgRoot / "VoLum" / "VoLumRigs");
+  CHECK(live[3] == fs::path("/usr/share/VoLum/VoLumRigs"));
+  CHECK(live[live.size() - 2] == fs::path("VoLumRigs"));
+  CHECK(live.back() == fs::path("rigs"));
+  fs::remove_all(tmp);
 }
 #endif

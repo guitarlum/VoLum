@@ -103,7 +103,8 @@ bool VolumHttpGetString(const char* url, std::string& out, int timeoutMs)
   }
 }
 
-#else
+#elif !defined(__linux__)
+// Linux defines VolumHttpGetString in VoLumHttpGetLinux.cpp (dlopen of libcurl.so.4).
 
 bool VolumHttpGetString(const char*, std::string& out, int)
 {
