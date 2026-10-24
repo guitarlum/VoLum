@@ -4,9 +4,9 @@ Status: pass on the box (GCC 15.2) and on Ubuntu 22.04 (GCC 12.3, glibc 2.35). C
 
 ## Heads
 
-- Superproject code this report sits on: `feature/linux-06-cmake` `eb92ed3b23dfd82d995ec41177af65b7efc913fd`.
+- Superproject code under this report: `feature/linux-06-cmake` `b514c2e9044c77ce2a1f07e44c75bc19d06373e0`.
 - iPlug2 `volum/linux`: `863f2850686392a12b8195501ac2f4c535d7a86b`.
-- CI: [run 40071324979](https://github.com/guitarlum/VoLum/actions/runs/40071324979) dispatched on `eb92ed3b23dfd82d995ec41177af65b7efc913fd`.
+- CI: [run 40075141616](https://github.com/guitarlum/VoLum/actions/runs/40075141616) dispatched on `b514c2e9044c77ce2a1f07e44c75bc19d06373e0`. An earlier run failed in `parse_config.py` because the `PLUG_HAS_UI` lines were indented; that script slices from column 0. The defines are back in column 0 (`0` on Linux, `1` otherwise, and the script keeps the last value, `1`).
 
 ## Targets
 
@@ -104,4 +104,4 @@ Inside the throwaway Ubuntu 22.04 container: `build-essential`, `g++-12`, `cmake
 
 ## CI
 
-[Run 40071324979](https://github.com/guitarlum/VoLum/actions/runs/40071324979) on `eb92ed3b23dfd82d995ec41177af65b7efc913fd`. Watching for Windows and macOS green.
+[Run 40075141616](https://github.com/guitarlum/VoLum/actions/runs/40075141616) on `b514c2e9044c77ce2a1f07e44c75bc19d06373e0`. Watching for Windows and macOS green.
