@@ -68,7 +68,7 @@ if [[ "$INNER" == 0 ]]; then
   [[ -n "$REFERENCE" ]] || REFERENCE="$REAPER_REFERENCE"
   WORK="$(mktemp -d "$OUT/reaper-$MODE.XXXXXX")"
   export WORK BUNDLE REFERENCE WRITE_REF
-  args=(--inner --mode "$MODE" --cycles "$CYCLES" --instances "$INSTANCES" --screen "$SCREEN")
+  args=(--inner --bundle "$BUNDLE" --mode "$MODE" --cycles "$CYCLES" --instances "$INSTANCES" --screen "$SCREEN")
   [[ "$ASAN" == 1 ]] && args+=(--asan)
   set +e
   xvfb-run -a -s "-screen 0 $SCREEN -noreset" bash "$SCRIPT_DIR/smoke-reaper-linux.sh" "${args[@]}"
@@ -79,8 +79,14 @@ if [[ "$INNER" == 0 ]]; then
   grep -qx PASS "$WORK/result.txt" 2>/dev/null || verdict="FAIL ($(tail -1 "$WORK/result.txt" 2>/dev/null || echo 'no result'))"
   ! grep -q "^FAIL" "$WORK/result.txt" 2>/dev/null || verdict="$(grep "^FAIL" "$WORK/result.txt" | head -1)"
   [[ "$rc" == 0 ]] || verdict="FAIL (runner exit $rc)"
-  xerrors=$(grep -a -c "IGraphicsLinux: X error" "$WORK/reaper.log" || true)
-  offthread=$(grep -a -c "off the UI thread" "$WORK/reaper.log" || true)
+  xerrors=0
+  offthread=0
+  if [[ -f "$WORK/reaper.log" ]]; then
+    xerrors=$(grep -a -c "IGraphicsLinux: X error" "$WORK/reaper.log" || true)
+    offthread=$(grep -a -c "off the UI thread" "$WORK/reaper.log" || true)
+  fi
+  [[ -n "$xerrors" ]] || xerrors=0
+  [[ -n "$offthread" ]] || offthread=0
   sanitizer=$( (grep -a -h "ERROR: AddressSanitizer:\|runtime error:" "$WORK"/asan.* "$WORK"/ubsan.* "$WORK/reaper.log" 2>/dev/null || true) | wc -l)
   [[ "$xerrors" == 0 ]] || verdict="FAIL ($xerrors X errors)"
   [[ "$offthread" == 0 ]] || verdict="FAIL ($offthread off-UI-thread calls)"
