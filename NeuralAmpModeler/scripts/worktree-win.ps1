@@ -3,7 +3,8 @@
 #   -Add     One branch per call (a comma list once became a single branch named
 #            "a b"). Runs `git submodule update --init --recursive` inside the new
 #            worktree (never junction the main checkout's submodules into one),
-#            and copies the local vendor-denylist.txt the commit hooks need.
+#            and copies the local vendor-denylist.txt the commit hooks need and the
+#            downloaded VST3 SDK the Windows test build needs.
 #   -Remove  `git worktree remove` refuses a worktree with submodules, and its
 #            --force follows junctions: on 2026-09-23 that emptied the main
 #            checkout. This unlinks every junction and directory symlink first
@@ -100,6 +101,13 @@ if ($Add) {
   # Local-only and untracked: without it the commit-msg hook refuses every commit.
   $deny = "NeuralAmpModeler\scripts\vendor-denylist.txt"
   if (Test-Path -LiteralPath (Join-Path $main $deny)) { Copy-Item -LiteralPath (Join-Path $main $deny) -Destination (Join-Path $Path $deny) }
+  # Downloaded and git-ignored inside iPlug2, so the submodule update leaves it empty and the
+  # Windows test build cannot find pluginterfaces/. Copied, never junctioned (see -Remove).
+  $sdk = "iPlug2\Dependencies\IPlug\VST3_SDK"
+  if (-not $NoSubmodules -and (Test-Path -LiteralPath (Join-Path $main "$sdk\pluginterfaces"))) {
+    & robocopy (Join-Path $main $sdk) (Join-Path $Path $sdk) /E /XD .git /XF README.md /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "copying $sdk into $Path failed (robocopy exit $LASTEXITCODE)" }
+  }
   Write-Host "Worktree $Path on $Add" -ForegroundColor Green
   exit 0
 }
