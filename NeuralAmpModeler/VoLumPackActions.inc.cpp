@@ -51,9 +51,42 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   else
   {
     fileName.Set(plan.job == volum::pack::Job::Everything ? "VoLum library.volumpack" : "VoLum pack.volumpack");
+#if defined(OS_LINUX)
+    // The dialog returns before the user picks a file. An empty return hides the
+    // overlay; a write failure is reported by a message box.
+    const auto planCopy = plan;
+    const auto settingsCopy = settingsJson;
+    GetUI()->ReleaseMouseCapture();
+    GetUI()->PromptForFile(fileName, dir, EFileAction::Save, "volumpack",
+                           [this, planCopy, settingsCopy](const WDL_String& chosen, const WDL_String&) {
+                             if (!chosen.GetLength())
+                               return;
+                             std::string error;
+                             auto out = volum::content::PathFromUtf8(chosen.Get());
+                             if (out.extension() != ".volumpack")
+                               out += ".volumpack";
+                             auto& live = volum::content::GlobalContentStore();
+                             if (!volum::pack::WritePack(live, planCopy, settingsCopy, out, &error))
+                             {
+                               if (error.empty())
+                                 error = "Could not write the Pack.";
+                               VOLUM_LOG("pack", "export failed: " + error);
+                               if (auto* gfx = GetUI())
+                                 _ShowMessageBox(gfx, error.c_str(), "VoLum", EMsgBoxType::kMB_OK);
+                               return;
+                             }
+                             VOLUM_LOG("pack", std::string("export wrote ") + volum::pack::JobName(planCopy.job)
+                                                 + " Pack: " + std::to_string(planCopy.ampIds.size()) + " amps, "
+                                                 + std::to_string(planCopy.irIds.size()) + " IRs, "
+                                                 + std::to_string(planCopy.pedalIds.size()) + " pedals, "
+                                                 + std::to_string(planCopy.presetIds.size()) + " presets");
+                           });
+    return {};
+#else
     // The macOS panel swallows the mouse-up, which would leave this press captured.
     GetUI()->ReleaseMouseCapture();
     GetUI()->PromptForFile(fileName, dir, EFileAction::Save, "volumpack");
+#endif
   }
   if (fileName.GetLength() == 0)
     return {}; // cancelled: not a failure
@@ -84,9 +117,35 @@ volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
     fileName.Set(harnessPath.c_str());
   else
   {
+#if defined(OS_LINUX)
+    // ShowImport treats an empty pack as a cancel and hides. OpenPickedPack
+    // brings the overlay back once the file is chosen.
+    GetUI()->ReleaseMouseCapture();
+    GetUI()->PromptForFile(
+      fileName, dir, EFileAction::Open, "volumpack", [this](const WDL_String& chosen, const WDL_String&) {
+        if (!chosen.GetLength())
+          return;
+        auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(chosen.Get()));
+        if (pack.ok)
+        {
+          mVolumOpenedPackDualAmp.Open(pack.settingsJson);
+          VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
+          for (const auto& skipped : pack.skipped)
+            VOLUM_LOG("pack", "skipped on open: " + skipped);
+        }
+        else
+          VOLUM_LOG("pack", std::string("open refused: ") + pack.error
+                              + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
+        if (auto* gfx = GetUI())
+          if (auto* overlay = static_cast<VoLumPackOverlayControl*>(gfx->GetControlWithTag(kCtrlTagVoLumPackOverlay)))
+            overlay->OpenPickedPack(std::move(pack));
+      });
+    return {};
+#else
     // The macOS panel swallows the mouse-up, which would leave this press captured.
     GetUI()->ReleaseMouseCapture();
     GetUI()->PromptForFile(fileName, dir, EFileAction::Open, "volumpack");
+#endif
   }
   if (fileName.GetLength() == 0)
     return volum::pack::PackContents{}; // cancelled: empty error, so the modal closes quietly

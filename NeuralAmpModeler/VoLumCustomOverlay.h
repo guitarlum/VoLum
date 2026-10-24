@@ -746,7 +746,29 @@ private:
     {
       // The macOS panel swallows the mouse-up, which would leave this press captured.
       ui->ReleaseMouseCapture();
+#if defined(OS_LINUX)
+      if (!mLinuxPendingManage.empty())
+      {
+        for (const auto& pending : mLinuxPendingManage)
+          files.emplace_back(pending.c_str());
+        mLinuxPendingManage.clear();
+      }
+      else
+      {
+        ui->ReleaseMouseCapture();
+        static_cast<iplug::igraphics::IGraphicsLinux*>(ui)->PromptForOpenFiles(
+          ext, [this](const std::vector<std::string>& paths) {
+            if (paths.empty())
+              return;
+            mLinuxPendingManage = paths;
+            StartImport();
+          });
+        return;
+      }
+#else
+      ui->ReleaseMouseCapture();
       ui->PromptForFiles(path, files, ext); // multi-select; each entry is a full path
+#endif
     }
     if (files.empty())
       return;
@@ -1125,7 +1147,29 @@ private:
       std::vector<WDL_String> files;
       // The macOS panel swallows the mouse-up, which would leave this press captured.
       ui->ReleaseMouseCapture();
+#if defined(OS_LINUX)
+      if (!mLinuxPendingBuilder.empty())
+      {
+        for (const auto& pending : mLinuxPendingBuilder)
+          files.emplace_back(pending.c_str());
+        mLinuxPendingBuilder.clear();
+      }
+      else
+      {
+        static_cast<iplug::igraphics::IGraphicsLinux*>(ui)->PromptForOpenFiles(
+          "nam", [this, rect](const std::vector<std::string>& paths) {
+            if (paths.empty())
+              return;
+            mLinuxPendingBuilder = paths;
+            HandleBuilderAction(kAddFile, rect);
+          });
+        return;
+      }
+#else
+      // The macOS panel swallows the mouse-up, which would leave this press captured.
+      ui->ReleaseMouseCapture();
       ui->PromptForFiles(path, files, "nam"); // multi-select .nam captures
+#endif
       int added = 0;
       for (const auto& fn : files)
       {
@@ -2083,6 +2127,12 @@ private:
   std::vector<std::string> mItems;
   int mSel = -1;
   std::string mError; // transient validation/name banner (Manage + Builder)
+#if defined(OS_LINUX)
+  // PromptForOpenFiles finishes after StartImport / HandleBuilderAction returned.
+  // The completion stashes the paths and re-enters the same function.
+  std::vector<std::string> mLinuxPendingManage;
+  std::vector<std::string> mLinuxPendingBuilder;
+#endif
   volum::custom::CustomAmp mBuilderAmp;
   std::vector<std::pair<IRECT, int>> mHotspots;
   std::vector<std::string> mHotspotTips; // parallel to mHotspots; hover tooltip text
