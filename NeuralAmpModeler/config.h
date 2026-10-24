@@ -31,9 +31,9 @@
 // Steinberg validator then skips the view (createView returns null) and still
 // covers processing and state.
 #if defined(__linux__)
-  #define PLUG_HAS_UI 0
+#define PLUG_HAS_UI 0
 #else
-  #define PLUG_HAS_UI 1
+#define PLUG_HAS_UI 1
 #endif
 #define PLUG_WIDTH 900
 #define PLUG_HEIGHT 600
