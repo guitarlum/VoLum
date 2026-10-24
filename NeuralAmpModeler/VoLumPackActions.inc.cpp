@@ -44,6 +44,31 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   }
 #endif
 
+  // One writer for the synchronous dialog and the Linux completion, so the
+  // extension rule and the log lines cannot drift.
+  auto writeChosen = [](const volum::pack::ExportPlan& planIn, const std::string& settingsIn,
+                        const char* chosen) -> std::string {
+    if (!chosen || !chosen[0])
+      return {};
+    std::string error;
+    auto out = volum::content::PathFromUtf8(chosen);
+    if (out.extension() != ".volumpack")
+      out += ".volumpack";
+    auto& live = volum::content::GlobalContentStore();
+    if (!volum::pack::WritePack(live, planIn, settingsIn, out, &error))
+    {
+      if (error.empty())
+        error = "Could not write the Pack.";
+      VOLUM_LOG("pack", "export failed: " + error);
+      return error;
+    }
+    VOLUM_LOG("pack", std::string("export wrote ") + volum::pack::JobName(planIn.job)
+                        + " Pack: " + std::to_string(planIn.ampIds.size()) + " amps, "
+                        + std::to_string(planIn.irIds.size()) + " IRs, " + std::to_string(planIn.pedalIds.size())
+                        + " pedals, " + std::to_string(planIn.presetIds.size()) + " presets");
+    return {};
+  };
+
   WDL_String fileName, dir;
   const std::string harnessPath = volum::HarnessEnv("VOLUM_PACK_SAVE_PATH");
   if (!harnessPath.empty())
@@ -58,28 +83,13 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
     const auto settingsCopy = settingsJson;
     GetUI()->ReleaseMouseCapture();
     GetUI()->PromptForFile(fileName, dir, EFileAction::Save, "volumpack",
-                           [this, planCopy, settingsCopy](const WDL_String& chosen, const WDL_String&) {
+                           [writeChosen, planCopy, settingsCopy, this](const WDL_String& chosen, const WDL_String&) {
                              if (!chosen.GetLength())
                                return;
-                             std::string error;
-                             auto out = volum::content::PathFromUtf8(chosen.Get());
-                             if (out.extension() != ".volumpack")
-                               out += ".volumpack";
-                             auto& live = volum::content::GlobalContentStore();
-                             if (!volum::pack::WritePack(live, planCopy, settingsCopy, out, &error))
-                             {
-                               if (error.empty())
-                                 error = "Could not write the Pack.";
-                               VOLUM_LOG("pack", "export failed: " + error);
+                             const std::string error = writeChosen(planCopy, settingsCopy, chosen.Get());
+                             if (!error.empty())
                                if (auto* gfx = GetUI())
                                  _ShowMessageBox(gfx, error.c_str(), "VoLum", EMsgBoxType::kMB_OK);
-                               return;
-                             }
-                             VOLUM_LOG("pack", std::string("export wrote ") + volum::pack::JobName(planCopy.job)
-                                                 + " Pack: " + std::to_string(planCopy.ampIds.size()) + " amps, "
-                                                 + std::to_string(planCopy.irIds.size()) + " IRs, "
-                                                 + std::to_string(planCopy.pedalIds.size()) + " pedals, "
-                                                 + std::to_string(planCopy.presetIds.size()) + " presets");
                            });
     return {};
 #else
@@ -90,27 +100,29 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   }
   if (fileName.GetLength() == 0)
     return {}; // cancelled: not a failure
-
-  std::string error;
-  auto out = volum::content::PathFromUtf8(fileName.Get());
-  if (out.extension() != ".volumpack")
-    out += ".volumpack";
-  if (!volum::pack::WritePack(store, plan, settingsJson, out, &error))
-  {
-    if (error.empty())
-      error = "Could not write the Pack.";
-    VOLUM_LOG("pack", "export failed: " + error);
-    return error;
-  }
-  VOLUM_LOG("pack", std::string("export wrote ") + volum::pack::JobName(plan.job)
-                      + " Pack: " + std::to_string(plan.ampIds.size()) + " amps, " + std::to_string(plan.irIds.size())
-                      + " IRs, " + std::to_string(plan.pedalIds.size()) + " pedals, "
-                      + std::to_string(plan.presetIds.size()) + " presets");
-  return {};
+  return writeChosen(plan, settingsJson, fileName.Get());
 }
 
 volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
 {
+  // One opener for the synchronous dialog and the Linux completion.
+  auto openChosen = [this](const char* chosen) -> volum::pack::PackContents {
+    if (!chosen || !chosen[0])
+      return {};
+    auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(chosen));
+    if (pack.ok)
+    {
+      mVolumOpenedPackDualAmp.Open(pack.settingsJson);
+      VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
+      for (const auto& skipped : pack.skipped)
+        VOLUM_LOG("pack", "skipped on open: " + skipped);
+    }
+    else
+      VOLUM_LOG("pack", std::string("open refused: ") + pack.error
+                          + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
+    return pack;
+  };
+
   WDL_String fileName, dir;
   const std::string harnessPath = volum::HarnessEnv("VOLUM_PACK_OPEN_PATH");
   if (!harnessPath.empty())
@@ -122,20 +134,10 @@ volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
     // brings the overlay back once the file is chosen.
     GetUI()->ReleaseMouseCapture();
     GetUI()->PromptForFile(
-      fileName, dir, EFileAction::Open, "volumpack", [this](const WDL_String& chosen, const WDL_String&) {
+      fileName, dir, EFileAction::Open, "volumpack", [openChosen, this](const WDL_String& chosen, const WDL_String&) {
         if (!chosen.GetLength())
           return;
-        auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(chosen.Get()));
-        if (pack.ok)
-        {
-          mVolumOpenedPackDualAmp.Open(pack.settingsJson);
-          VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
-          for (const auto& skipped : pack.skipped)
-            VOLUM_LOG("pack", "skipped on open: " + skipped);
-        }
-        else
-          VOLUM_LOG("pack", std::string("open refused: ") + pack.error
-                              + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
+        auto pack = openChosen(chosen.Get());
         if (auto* gfx = GetUI())
           if (auto* overlay = static_cast<VoLumPackOverlayControl*>(gfx->GetControlWithTag(kCtrlTagVoLumPackOverlay)))
             overlay->OpenPickedPack(std::move(pack));
@@ -149,18 +151,7 @@ volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
   }
   if (fileName.GetLength() == 0)
     return volum::pack::PackContents{}; // cancelled: empty error, so the modal closes quietly
-  auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(fileName.Get()));
-  if (pack.ok)
-  {
-    mVolumOpenedPackDualAmp.Open(pack.settingsJson);
-    VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
-    for (const auto& skipped : pack.skipped)
-      VOLUM_LOG("pack", "skipped on open: " + skipped);
-  }
-  else
-    VOLUM_LOG("pack", std::string("open refused: ") + pack.error
-                        + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
-  return pack;
+  return openChosen(fileName.Get());
 }
 
 std::vector<std::string> NeuralAmpModeler::_VolumSoundingLibraryIds() const

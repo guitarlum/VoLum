@@ -132,7 +132,6 @@ public:
     SetDirty(false);
   }
 #endif
-
   void Draw(IGraphics& g) override
   {
     g.FillRect(IColor(190, 8, 10, 14), mRECT); // scrim

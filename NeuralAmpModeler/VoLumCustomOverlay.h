@@ -744,8 +744,6 @@ private:
     }
     else
     {
-      // The macOS panel swallows the mouse-up, which would leave this press captured.
-      ui->ReleaseMouseCapture();
 #if defined(OS_LINUX)
       if (!mLinuxPendingManage.empty())
       {
@@ -766,6 +764,7 @@ private:
         return;
       }
 #else
+      // The macOS panel swallows the mouse-up, which would leave this press captured.
       ui->ReleaseMouseCapture();
       ui->PromptForFiles(path, files, ext); // multi-select; each entry is a full path
 #endif
@@ -1145,8 +1144,6 @@ private:
         return;
       WDL_String path;
       std::vector<WDL_String> files;
-      // The macOS panel swallows the mouse-up, which would leave this press captured.
-      ui->ReleaseMouseCapture();
 #if defined(OS_LINUX)
       if (!mLinuxPendingBuilder.empty())
       {
@@ -1156,6 +1153,7 @@ private:
       }
       else
       {
+        ui->ReleaseMouseCapture();
         static_cast<iplug::igraphics::IGraphicsLinux*>(ui)->PromptForOpenFiles(
           "nam", [this, rect](const std::vector<std::string>& paths) {
             if (paths.empty())
