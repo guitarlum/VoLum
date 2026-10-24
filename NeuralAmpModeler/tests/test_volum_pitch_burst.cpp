@@ -231,6 +231,9 @@ void ExpectEngineHash(const std::string& name, const std::string& actual, const 
 #elif defined(__linux__)
   (void)windowsExpected;
   INFO(name << " actual=" << actual);
+  if (!volum::test::RequireLinuxHash(name.c_str()))
+    return;
+  MESSAGE(std::string("linux-hash ") << name << " " << actual);
   const char* expected = LinuxPinnedHash(name);
   REQUIRE(expected != nullptr);
   CHECK(actual == std::string(expected));

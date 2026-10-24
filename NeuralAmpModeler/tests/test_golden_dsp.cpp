@@ -58,6 +58,11 @@ void ExpectGoldenHash(const char* name, const std::string& actual, const char* w
   INFO(std::string(name) << " actual=" << actual);
   const char* expected =
     PlatformExpected(windowsExpected, macExpected, macSanitizedExpected, linuxExpected, linuxSanitizedExpected);
+#if defined(__linux__)
+  if (!volum::test::RequireLinuxHash(name))
+    return;
+  MESSAGE(std::string("linux-hash ") << name << " " << actual);
+#endif
   // FAIL_CHECK keeps the rest of the case running so one Linux pass prints every hash.
   if (expected == nullptr)
   {

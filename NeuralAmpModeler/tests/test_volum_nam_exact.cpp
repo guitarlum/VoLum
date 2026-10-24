@@ -269,6 +269,9 @@ void ExpectNamHash(const std::string& name, const std::string& actual)
   CHECK(actual == std::string(PinnedHash(name)));
 #elif defined(__linux__)
   INFO(name << " actual=" << actual);
+  if (!volum::test::RequireLinuxHash(name.c_str()))
+    return;
+  MESSAGE(std::string("linux-hash ") << name << " " << actual);
   const char* expected = LinuxPinnedHash(name);
   REQUIRE(expected != nullptr);
   CHECK(actual == std::string(expected));

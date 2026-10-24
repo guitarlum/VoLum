@@ -8,10 +8,10 @@
 # apt toolchain and test packages (including xvfb, xdotool and jackd2) and does
 # not download pluginval, REAPER or Carla.
 #
-# The doctest suite selects gcc-15 and clang-21 by name. 26.04 ships both.
-# 22.04 and 24.04 do not: gcc-15 comes from ppa:ubuntu-toolchain-r/test and
-# clang-21 from apt.llvm.org. Those repos are added only when the package is
-# missing from the distro archive.
+# ubuntu-22.04 CI uses the archive compilers: gcc-12 and clang-15. No toolchain
+# PPA and no apt.llvm.org. If a previous run added those source files, this
+# script removes only those files. 24.04 and 26.04 keep the distro default
+# gcc and clang.
 #
 # Never stops, restarts or reconfigures ~/localai-platform, llama-server,
 # Ollama or docker. Package installs only.
@@ -123,40 +123,24 @@ write_if_changed() {
   fi
 }
 
-# A package is installable only when apt has a real candidate. Strip color:
-# a terminal makes "(none)" fail a plain string compare.
-has_candidate() {
-  local cand
-  cand=$(apt-cache -o APT::Color=0 policy "$1" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk '/^  Candidate:/ {print $2; exit}' || true)
-  [ -n "$cand" ] && [ "$cand" != "(none)" ]
-}
-
-# GCC 15.2 and Clang 21.1.8 on every supported Ubuntu. 26.04 already has them.
-# 22.04 and 24.04 always get the toolchain PPA and apt.llvm.org. The 22.04
-# runner image can report a g++-15 candidate that does not include gcc-15.
-ensure_pinned_toolchain() {
-  case "$VERSION_ID" in
-    26.04) return 0 ;;
-  esac
-  local list="/etc/apt/sources.list.d/llvm-toolchain-${VERSION_CODENAME}-21.list"
-  log "enabling ppa:ubuntu-toolchain-r/test"
-  if ! command -v add-apt-repository >/dev/null 2>&1; then
+# Drop only the compiler sources this script used to add. Nothing else under
+# /etc/apt is touched.
+drop_added_compiler_sources() {
+  local removed=0
+  local f
+  shopt -s nullglob
+  for f in /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test-*.list \
+           /etc/apt/sources.list.d/llvm-toolchain-*-21.list \
+           /etc/apt/trusted.gpg.d/apt.llvm.org.asc \
+           /etc/apt/trusted.gpg.d/apt.llvm.org.gpg; do
+    log "removing previously added compiler source $f"
+    run_root rm -f "$f"
+    removed=1
+  done
+  shopt -u nullglob
+  if [ "$removed" -eq 1 ]; then
+    log "apt-get update after removing compiler sources"
     apt_retry run_apt update -qq
-    apt_retry run_apt install -y --no-install-recommends software-properties-common ca-certificates
-  fi
-  run_root env DEBIAN_FRONTEND=noninteractive add-apt-repository -y ppa:ubuntu-toolchain-r/test
-  log "enabling apt.llvm.org clang-21"
-  if [ ! -f "$list" ]; then
-    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | run_root tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
-    printf 'deb http://apt.llvm.org/%s/ llvm-toolchain-%s-21 main\n' \
-      "$VERSION_CODENAME" "$VERSION_CODENAME" | run_root tee "$list" >/dev/null
-  fi
-  log "apt-get update after toolchain repos"
-  apt_retry run_apt update -qq
-  apt-cache -o APT::Color=0 policy gcc-15 g++-15 clang-21 || true
-  if ! has_candidate gcc-15 || ! has_candidate g++-15 || ! has_candidate clang-21; then
-    log "pinned compilers still have no apt candidate"
-    exit 1
   fi
 }
 
@@ -187,7 +171,7 @@ if [ "$CI" -eq 0 ]; then
 fi
 
 log "ubuntu $VERSION_ID ${VERSION_CODENAME:-} ci=$CI"
-ensure_pinned_toolchain
+drop_added_compiler_sources
 
 gl_pkg=$(choose_pkg libgl-dev libgl1-mesa-dev)
 alsa_pkg=$(choose_pkg libasound2-dev libasound-dev)
@@ -196,10 +180,7 @@ log "packages: gl=$gl_pkg alsa=$alsa_pkg"
 pkgs=(
   gcc
   g++
-  gcc-15
-  g++-15
   clang
-  clang-21
   lld
   cmake
   ninja-build
@@ -233,6 +214,9 @@ pkgs=(
   unzip
   xz-utils
 )
+if [ "$VERSION_ID" = "22.04" ]; then
+  pkgs+=(gcc-12 g++-12 clang-15)
+fi
 
 missing=()
 for pkg in "${pkgs[@]}"; do
@@ -282,10 +266,12 @@ need_cmd() {
 }
 need_cmd gcc
 need_cmd g++
-need_cmd g++-15
 need_cmd clang
-need_cmd clang++-21
 need_cmd ld.lld
+if [ "$VERSION_ID" = "22.04" ]; then
+  need_cmd g++-12
+  need_cmd clang++-15
+fi
 
 # Clang 18+ ships the ASan/UBSan runtimes as libclang-rt-<major>-dev; older
 # releases bundle them with clang itself, so the package may not exist.
@@ -299,7 +285,9 @@ install_clang_rt() {
   fi
 }
 install_clang_rt "$(clang -dumpversion | cut -d. -f1)"
-install_clang_rt "$(clang++-21 -dumpversion | cut -d. -f1)"
+if command -v clang++-15 >/dev/null 2>&1; then
+  install_clang_rt "$(clang++-15 -dumpversion | cut -d. -f1)"
+fi
 need_cmd cmake
 need_cmd ninja
 need_cmd pkg-config
@@ -308,8 +296,14 @@ need_cmd xdotool
 need_cmd xdpyinfo
 need_cmd jackd
 
-log "g++-15 $(g++-15 --version | head -n 1)"
-log "clang++-21 $(clang++-21 --version | head -n 1)"
+log "g++ $(g++ --version | head -n 1)"
+log "clang $(clang --version | head -n 1)"
+if command -v g++-12 >/dev/null 2>&1; then
+  log "g++-12 $(g++-12 --version | head -n 1)"
+fi
+if command -v clang++-15 >/dev/null 2>&1; then
+  log "clang++-15 $(clang++-15 --version | head -n 1)"
+fi
 if [ "$CI" -eq 1 ]; then
   log "ci mode: skipped pluginval, REAPER and Carla"
   log "done"

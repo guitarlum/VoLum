@@ -4,10 +4,12 @@
 #   bash NeuralAmpModeler/scripts/run-tests-linux.sh
 #   bash NeuralAmpModeler/scripts/run-tests-linux.sh --clang --sanitize
 #
-# Default is GCC 15 Release (g++-15). --clang selects Clang 21 (clang++-21).
-# --sanitize (implies --clang) is Debug with ASan and UBSan, and it excludes
-# the same cases as run-tests-mac.sh. At most 14 compile jobs: the box shares
-# two build slots. provision-linux.sh installs these compilers.
+# Default is the newest archive GCC on ubuntu-22.04 (g++-12), and the distro
+# default g++ where that binary is absent. --clang selects archive Clang
+# (clang++-15, else clang++-14, else clang++). --sanitize (implies --clang)
+# is Debug with ASan and UBSan, and it excludes the same cases as
+# run-tests-mac.sh. At most 14 compile jobs: the box shares two build slots.
+# provision-linux.sh installs the 22.04 archive compilers.
 
 set -euo pipefail
 
@@ -139,17 +141,31 @@ fi
 # Prebuilt iPlug libs and the WAM SDK are for the app/VST3 package, which
 # run-tests-mac.sh also does not build. This target does not link them.
 
-# GCC 15 Release owns the Linux golden hashes. Clang 21 is the sanitizer
-# compiler. Both names are what provision-linux.sh installs on 22.04 and what
-# 26.04 already ships, so the box and CI use the same major.
+# Archive GCC on ubuntu-22.04 (g++-12, else g++-11, else g++) owns the Linux
+# golden hashes. The sanitizer compiler is archive Clang (clang++-15, else
+# clang++-14, else clang++). The box has neither versioned binary and keeps
+# its distro default.
+first_of() {
+  local name
+  for name in "$@"; do
+    if command -v "$name" >/dev/null 2>&1; then
+      printf '%s\n' "$name"
+      return 0
+    fi
+  done
+  echo "none of these compilers exist: $*" >&2
+  return 1
+}
+
 BUILD_DIR="$PROJECT_DIR/build-tests-linux"
 BUILD_TYPE=Release
-CC=gcc-15
-CXX=g++-15
 if [[ "$CLANG" == "1" ]]; then
   BUILD_DIR="$PROJECT_DIR/build-tests-linux-clang"
-  CC=clang-21
-  CXX=clang++-21
+  CC="$(first_of clang-15 clang-14 clang)"
+  CXX="$(first_of clang++-15 clang++-14 clang++)"
+else
+  CC="$(first_of gcc-12 gcc-11 gcc)"
+  CXX="$(first_of g++-12 g++-11 g++)"
 fi
 if [[ "$SANITIZE" == "1" ]]; then
   BUILD_DIR="$PROJECT_DIR/build-tests-linux-sanitized"

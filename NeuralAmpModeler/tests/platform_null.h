@@ -3,8 +3,12 @@
 // Peak residual of a live render against the committed Windows reference.
 // Windows Release writes the file only when VOLUM_WRITE_PLATFORM_NULL=1, and
 // otherwise requires the file to match the live render byte for byte. Linux
-// Release (not ASan) requires the peak |live-windows| to be <= -100 dBFS,
-// with 0 dBFS meaning amplitude 1. Other platforms leave the file alone.
+// requires the peak |live-windows| to be <= -100 dBFS, with 0 dBFS meaning
+// amplitude 1, including ASan. Other platforms leave the file alone.
+//
+// Linux exact hashes are pinned to one reference build: the CI Linux tests job
+// on ubuntu-22.04. The identity is the glibc version plus the compiler
+// __VERSION__ string. A different identity skips only the hash compare.
 
 #include "third_party/doctest.h"
 
@@ -18,26 +22,68 @@
 #include <string>
 #include <vector>
 
+#if defined(__linux__)
+  #include <gnu/libc-version.h>
+#endif
+
 namespace volum::test
 {
 inline constexpr double kWindowsNullPeakDb = -100.0;
+
+// glibc version + compiler __VERSION__, filled from the ubuntu-22.04 archive
+// GCC that the Linux tests job runs. Updated when that job's log shows a
+// different string.
+inline const char* LinuxHashReferenceIdentity()
+{
+  return "glibc 2.35 | 12.3.0";
+}
+
+inline std::string LinuxRuntimeIdentity()
+{
+#if defined(__linux__)
+  if (const char* fake = std::getenv("VOLUM_LINUX_HASH_IDENTITY_FAKE"))
+    return std::string(fake);
+  return std::string("glibc ") + gnu_get_libc_version() + " | " + __VERSION__;
+#else
+  return {};
+#endif
+}
+
+// True when this Linux build must CHECK the exact pin. A mismatch prints both
+// identities and skips the compare, unless VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1,
+// which fails the case. Windows and macOS do not call this.
+inline bool RequireLinuxHash(const char* caseName)
+{
+#if !defined(__linux__)
+  (void)caseName;
+  return true;
+#else
+  static bool announced = false;
+  if (!announced)
+  {
+    announced = true;
+    MESSAGE(std::string("Linux hash identity runtime=\"")
+            << LinuxRuntimeIdentity() << "\" reference=\"" << LinuxHashReferenceIdentity() << "\"");
+  }
+  if (LinuxRuntimeIdentity() == LinuxHashReferenceIdentity())
+    return true;
+  const char* require = std::getenv("VOLUM_REQUIRE_LINUX_HASH_REFERENCE");
+  const bool required = require != nullptr && std::strcmp(require, "1") == 0;
+  MESSAGE(std::string("Linux hash identity mismatch for ")
+          << caseName << ": runtime=\"" << LinuxRuntimeIdentity() << "\" reference=\""
+          << LinuxHashReferenceIdentity() << "\"");
+  if (required)
+    FAIL_CHECK("VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1 but this build is not the Linux hash reference");
+  return required;
+#endif
+}
 
 inline bool WindowsNullActive()
 {
 #if defined(_WIN32) && defined(NDEBUG)
   return true;
-#elif defined(__linux__) && defined(NDEBUG)
-  #if defined(__SANITIZE_ADDRESS__)
-  return false;
-  #elif defined(__has_feature)
-    #if __has_feature(address_sanitizer)
-  return false;
-    #else
+#elif defined(__linux__)
   return true;
-    #endif
-  #else
-  return true;
-  #endif
 #else
   return false;
 #endif

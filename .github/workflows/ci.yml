@@ -555,6 +555,8 @@ jobs:
         shell: bash
 
       - name: Unit tests (doctest, GCC)
+        env:
+          VOLUM_REQUIRE_LINUX_HASH_REFERENCE: "1"
         run: bash NeuralAmpModeler/scripts/run-tests-linux.sh
         shell: bash
 
