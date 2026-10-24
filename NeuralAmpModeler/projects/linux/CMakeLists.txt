@@ -186,9 +186,15 @@ add_library(volum_dsp OBJECT ${VOLUM_DSP_SOURCES})
 volum_includes(volum_dsp)
 target_compile_definitions(volum_dsp PRIVATE NAM_ENABLE_A2_FAST)
 
-add_library(volum_gfx OBJECT ${VOLUM_GFX_SOURCES})
-volum_includes(volum_gfx)
-volum_common_defs(volum_gfx)
+# IControl derives from Steinberg::FObject only under VST3_API, so these
+# sources are compiled once per plug-in API. Sharing one object set between the
+# VST3 and the app gives the two sides different IControl vtables.
+foreach(api VST3_API APP_API)
+  add_library(volum_gfx_${api} OBJECT ${VOLUM_GFX_SOURCES})
+  volum_includes(volum_gfx_${api})
+  volum_common_defs(volum_gfx_${api})
+  target_compile_definitions(volum_gfx_${api} PRIVATE ${api})
+endforeach()
 set_source_files_properties(
   "${IPLUG}/Dependencies/IGraphics/glad_GL2/src/glad.c"
   "${IPLUG}/Dependencies/IGraphics/NanoVG/src/nanovg.c"
@@ -212,7 +218,7 @@ add_library(VoLum-vst3 SHARED
   "${IPLUG}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp"
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
-  $<TARGET_OBJECTS:volum_gfx>
+  $<TARGET_OBJECTS:volum_gfx_VST3_API>
 )
 volum_includes(VoLum-vst3)
 volum_common_defs(VoLum-vst3)
@@ -254,7 +260,7 @@ add_executable(VoLum-app
   ${VOLUM_SWELL_SOURCES}
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
-  $<TARGET_OBJECTS:volum_gfx>
+  $<TARGET_OBJECTS:volum_gfx_APP_API>
 )
 volum_includes(VoLum-app)
 volum_common_defs(VoLum-app)
