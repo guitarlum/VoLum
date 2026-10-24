@@ -91,7 +91,8 @@ def main() -> int:
         return 1
     lib.carla_set_engine_option(host, ENGINE_OPTION_PROCESS_MODE, ENGINE_PROCESS_MODE_SINGLE_CLIENT, b"")
     lib.carla_set_engine_option(host, ENGINE_OPTION_FORCE_STEREO, 1, b"")
-    lib.carla_set_engine_buffer_size_and_sample_rate(host, 256, 48000.0)
+    # Buffer size is the jackd dummy server's (48000 / 256). Asking Carla to
+    # set it before engine_init asserts handle->engine != nullptr.
     if not lib.carla_engine_init(host, b"JACK", b"VoLumCarla"):
         err = lib.carla_get_last_error(host)
         print(f"carla-single: engine init failed: {err}", file=sys.stderr)

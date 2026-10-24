@@ -29,6 +29,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <locale>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -65,6 +66,12 @@ inline std::string TimestampNow()
   localtime_r(&secs, &tm);
 #endif
   std::ostringstream os;
+#if defined(__linux__)
+  // libstdc++ is linked statically into the plug-in. A host that replaces the
+  // global C++ locale (Carla does) installs facets from its own libstdc++, and
+  // this copy's num_put then crashes in codecvt. classic() belongs to our copy.
+  os.imbue(std::locale::classic());
+#endif
   os << std::put_time(&tm, "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0') << std::setw(3) << ms.count();
   return os.str();
 }
@@ -135,6 +142,9 @@ public:
           std::filesystem::remove(mPath, rec); // rename blocked: drop the old generation
       }
       std::ofstream out(mPath, std::ios::app | std::ios::binary);
+#if defined(__linux__)
+      out.imbue(std::locale::classic());
+#endif
       if (out)
         out << line;
     }
