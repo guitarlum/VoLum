@@ -61,6 +61,7 @@ set(VOLUM_DSP_SOURCES
   "${VOLUM_ROOT}/NeuralAmpModelerCore/NAM/wavenet/slimmable.cpp"
   "${VOLUM_NAM}/ToneStack.cpp"
   "${VOLUM_NAM}/VoLumHttpGet.cpp"
+  "${VOLUM_NAM}/VoLumHttpGetLinux.cpp"
 )
 
 set(VOLUM_GFX_SOURCES
@@ -170,21 +171,11 @@ function(volum_common_defs target)
     NOMINMAX
   )
   target_compile_options(${target} PRIVATE -Wno-unknown-pragmas)
-  # GCC 12 (Ubuntu 22.04's newest stock g++) errors on a using-declaration in
-  # AudioDSPTools that changes the meaning of LanczosResampler. GCC 13 turned
-  # that into a warning. -fpermissive restores the GCC 12 build. The box GCC 15
-  # does not need it.
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13)
-    target_compile_options(${target} PRIVATE -fpermissive)
-  endif()
 endfunction()
 
 add_library(volum_dsp OBJECT ${VOLUM_DSP_SOURCES})
 volum_includes(volum_dsp)
 target_compile_definitions(volum_dsp PRIVATE NAM_ENABLE_A2_FAST)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13)
-  target_compile_options(volum_dsp PRIVATE -fpermissive)
-endif()
 
 add_library(volum_gfx OBJECT ${VOLUM_GFX_SOURCES})
 volum_includes(volum_gfx)
@@ -216,7 +207,7 @@ add_library(VoLum-vst3 SHARED
 )
 volum_includes(VoLum-vst3)
 volum_common_defs(VoLum-vst3)
-target_compile_definitions(VoLum-vst3 PRIVATE VST3_API)
+target_compile_definitions(VoLum-vst3 PRIVATE VST3_API IPLUG_LINUX_EDITOR_STUB)
 set_target_properties(VoLum-vst3 PROPERTIES
   PREFIX ""
   OUTPUT_NAME "VoLum"

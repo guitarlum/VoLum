@@ -17,6 +17,13 @@ JOBS="${JOBS:-14}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+# Prefer the Ubuntu 22.04 CI compiler when it is installed. The box (Ubuntu 26.04)
+# has no g++-12 and keeps the default GCC 15. An explicit CC/CXX wins.
+if [[ -z "${CXX:-}" && -z "${CC:-}" ]] && command -v g++-12 >/dev/null 2>&1 && command -v gcc-12 >/dev/null 2>&1; then
+  export CC=gcc-12
+  export CXX=g++-12
+fi
+
 SDK="iPlug2/Dependencies/IPlug/VST3_SDK"
 if [[ ! -f "$SDK/public.sdk/source/main/linuxmain.cpp" || ! -f "$SDK/public.sdk/samples/vst-hosting/validator/source/validator.cpp" ]]; then
   echo "build-linux: fetching the VST3 SDK (linuxmain.cpp and the validator sample)"
