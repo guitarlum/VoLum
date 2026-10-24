@@ -1,0 +1,4 @@
+# The only UBSan suppression for the Linux host gates. NanoVG's vendored
+# stb_image.h JPEG decoder left-shifts negative coefficients while it loads
+# VoLum's .jpg art. Not a global -fno-sanitize, and not NChanDelay.
+shift-base:stb_image.h
