@@ -4,9 +4,11 @@
 #   bash NeuralAmpModeler/scripts/run-tests-linux.sh
 #   bash NeuralAmpModeler/scripts/run-tests-linux.sh --clang --sanitize
 #
-# Default is GCC Release. --clang selects Clang. --sanitize (implies --clang)
-# is Debug with ASan and UBSan, and it excludes the same cases as
-# run-tests-mac.sh. At most 14 compile jobs: the box shares two build slots.
+# Default is archive g++-12 on ubuntu-22.04, and the distro g++ where that
+# binary is absent (the box). --clang selects archive clang++-15, else
+# clang++-14, else clang++. --sanitize (implies --clang) is Debug with ASan
+# and UBSan, and it excludes the same cases as run-tests-mac.sh. At most 14
+# compile jobs: the box shares two build slots.
 
 set -euo pipefail
 
@@ -138,21 +140,58 @@ fi
 # Prebuilt iPlug libs and the WAM SDK are for the app/VST3 package, which
 # run-tests-mac.sh also does not build. This target does not link them.
 
+# g++-12 on ubuntu-22.04 owns the Linux golden hashes. The box's g++ is not
+# that binary. The sanitizer compiler is archive clang++-15, else clang++-14,
+# else clang++.
+first_of() {
+  local name
+  for name in "$@"; do
+    if command -v "$name" >/dev/null 2>&1; then
+      printf '%s\n' "$name"
+      return 0
+    fi
+  done
+  echo "none of these compilers exist: $*" >&2
+  return 1
+}
+
 BUILD_DIR="$PROJECT_DIR/build-tests-linux"
 BUILD_TYPE=Release
-CXX=g++
 if [[ "$CLANG" == "1" ]]; then
   BUILD_DIR="$PROJECT_DIR/build-tests-linux-clang"
-  CXX=clang++
+  CC="$(first_of clang-15 clang-14 clang)"
+  CXX="$(first_of clang++-15 clang++-14 clang++)"
+else
+  CC="$(first_of gcc-12 gcc-11 gcc)"
+  CXX="$(first_of g++-12 g++-11 g++)"
 fi
 if [[ "$SANITIZE" == "1" ]]; then
   BUILD_DIR="$PROJECT_DIR/build-tests-linux-sanitized"
   BUILD_TYPE=Debug
 fi
+if ! command -v "$CC" >/dev/null 2>&1 || ! command -v "$CXX" >/dev/null 2>&1; then
+  echo "missing $CC or $CXX. Run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci" >&2
+  exit 1
+fi
+export CC CXX
+echo "CC=$CC ($("$CC" --version | head -n 1))"
+echo "CXX=$CXX ($("$CXX" --version | head -n 1))"
+
+# A build directory configured with /usr/bin/g++ does not accept g++-15 even
+# when both resolve to GCC 15. Drop it and configure again.
+if [[ -f "$BUILD_DIR/CMakeCache.txt" ]]; then
+  cached_cxx="$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$BUILD_DIR/CMakeCache.txt" | head -n 1)"
+  want_cxx="$(command -v "$CXX")"
+  if [[ "$cached_cxx" != "$want_cxx" ]]; then
+    echo "clearing $BUILD_DIR (cached compiler '$cached_cxx', want '$want_cxx')"
+    rm -rf "$BUILD_DIR"
+  fi
+fi
 
 cmake -S "$PROJECT_DIR/tests" -B "$BUILD_DIR" \
   -G Ninja \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+  -DCMAKE_C_COMPILER="$CC" \
   -DCMAKE_CXX_COMPILER="$CXX" \
   -DVOLUM_ENABLE_SANITIZERS="$SANITIZE"
 

@@ -270,7 +270,7 @@ TEST_CASE("Filter core: tone stack biquads cost at most half the any-degree loop
   // treble 6, one channel, 64-frame blocks at 48 kHz.
   constexpr size_t kBlock = 64;
   constexpr int kBlocksPerRound = 500;
-  constexpr int kRounds = 41;
+  constexpr int kRounds = 81;
   constexpr double kSampleRate = 48000.0;
   const recursive_linear_filter::BiquadParams bass(kSampleRate, 150.0, 0.707, 4.0 * (7.0 - 5.0));
   const recursive_linear_filter::BiquadParams mid(kSampleRate, 425.0, 1.5, 3.0 * (4.0 - 5.0));
