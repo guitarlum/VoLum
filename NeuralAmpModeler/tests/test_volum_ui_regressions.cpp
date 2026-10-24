@@ -280,8 +280,12 @@ TEST_CASE("NAM fusion figure is drawn from one joint table that holds the fusion
   REQUIRE(joint.size() == 22);
   auto u = [&](const char* n) { return joint.at(n).first; };
   auto v = [&](const char* n) { return joint.at(n).second; };
-  for (const auto& [name, uv] : joint)
+  // A real reference, not a structured binding: doctest CAPTURE puts the name in a
+  // lambda, and archive clang-15 rejects capturing a binding.
+  for (const auto& entry : joint)
   {
+    const std::string& name = entry.first;
+    const auto& uv = entry.second;
     CAPTURE(name);
     CHECK(uv.first >= 0.f);
     CHECK(uv.first <= 1.f);

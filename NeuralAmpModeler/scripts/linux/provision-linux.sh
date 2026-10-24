@@ -8,11 +8,11 @@
 # apt toolchain and test packages (including xvfb, xdotool and jackd2) and does
 # not download pluginval, REAPER or Carla.
 #
-# ubuntu-22.04 CI uses archive g++-12. Archive clang-15 fails to compile
-# test_volum_ui_regressions.cpp (a lambda binding), so the sanitizer compiler
-# is clang-21 from apt.llvm.org. The GCC toolchain PPA is not used. If a
-# previous run added that PPA or an unused llvm list, this script removes
-# only those files before adding the clang-21 list on 22.04.
+# ubuntu-22.04 CI uses the archive compilers g++-12 and clang-15. gcc-12 could
+# not compile ResamplingContainer.h until the LanczosResampler alias was
+# qualified; that fix is in AudioDSPTools. The toolchain PPA and apt.llvm.org
+# are not used. If a previous run added those source files, this script
+# removes only those files.
 #
 # Never stops, restarts or reconfigures ~/localai-platform, llama-server,
 # Ollama or docker. Package installs only.
@@ -145,22 +145,6 @@ drop_added_compiler_sources() {
   fi
 }
 
-# Archive clang-15 cannot compile the suite. clang-21 comes from apt.llvm.org.
-enable_clang21() {
-  if [ "$VERSION_ID" != "22.04" ]; then
-    return 0
-  fi
-  local list="/etc/apt/sources.list.d/llvm-toolchain-${VERSION_CODENAME}-21.list"
-  log "enabling apt.llvm.org clang-21"
-  if [ ! -f "$list" ]; then
-    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | run_root tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
-    printf 'deb http://apt.llvm.org/%s/ llvm-toolchain-%s-21 main\n' \
-      "$VERSION_CODENAME" "$VERSION_CODENAME" | run_root tee "$list" >/dev/null
-  fi
-  log "apt-get update after clang-21 repo"
-  apt_retry run_apt update -qq
-}
-
 if [ ! -r /etc/os-release ]; then
   log "missing /etc/os-release"
   exit 1
@@ -189,7 +173,6 @@ fi
 
 log "ubuntu $VERSION_ID ${VERSION_CODENAME:-} ci=$CI"
 drop_added_compiler_sources
-enable_clang21
 
 gl_pkg=$(choose_pkg libgl-dev libgl1-mesa-dev)
 alsa_pkg=$(choose_pkg libasound2-dev libasound-dev)
@@ -233,7 +216,7 @@ pkgs=(
   xz-utils
 )
 if [ "$VERSION_ID" = "22.04" ]; then
-  pkgs+=(gcc-12 g++-12 clang-21)
+  pkgs+=(gcc-12 g++-12 clang-15)
 fi
 
 missing=()
@@ -288,7 +271,7 @@ need_cmd clang
 need_cmd ld.lld
 if [ "$VERSION_ID" = "22.04" ]; then
   need_cmd g++-12
-  need_cmd clang++-21
+  need_cmd clang++-15
 fi
 
 # Clang 18+ ships the ASan runtime as libclang-rt-<major>-dev; older releases
@@ -302,8 +285,8 @@ install_clang_rt() {
   fi
 }
 install_clang_rt "$(clang -dumpversion | cut -d. -f1)"
-if command -v clang++-21 >/dev/null 2>&1; then
-  install_clang_rt "$(clang++-21 -dumpversion | cut -d. -f1)"
+if command -v clang++-15 >/dev/null 2>&1; then
+  install_clang_rt "$(clang++-15 -dumpversion | cut -d. -f1)"
 fi
 need_cmd cmake
 need_cmd ninja
@@ -318,8 +301,8 @@ log "clang $(clang --version | head -n 1)"
 if command -v g++-12 >/dev/null 2>&1; then
   log "g++-12 $(g++-12 --version | head -n 1)"
 fi
-if command -v clang++-21 >/dev/null 2>&1; then
-  log "clang++-21 $(clang++-21 --version | head -n 1)"
+if command -v clang++-15 >/dev/null 2>&1; then
+  log "clang++-15 $(clang++-15 --version | head -n 1)"
 fi
 if [ "$CI" -eq 1 ]; then
   log "ci mode: skipped pluginval, REAPER and Carla"
