@@ -67,8 +67,7 @@ Fn Pulse(const char* name)
 }
 } // namespace
 
-extern "C"
-{
+extern "C" {
 
 void jack_set_error_function(void (*func)(const char*))
 {
