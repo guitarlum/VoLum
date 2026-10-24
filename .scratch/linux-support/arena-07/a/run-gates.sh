@@ -41,10 +41,9 @@ clean_log() {
 run_pluginval() {
   local bundle="$1" log="$2" preload=() home
   home="$(throwaway_home)"
-  # pluginval links libstdc++ statically. With only libasan preloaded, Mesa's
-  # libLLVM resolves std::call_once against pluginval's copy and crashes in its
-  # static initialisers while libGLX loads the driver, so the system libstdc++
-  # is preloaded as well.
+  # With only libasan preloaded, Mesa's libLLVM crashes in its static
+  # initialisers (pthread_once on a null function) while libGLX loads the
+  # driver inside pluginval. Preloading the system libstdc++ as well avoids it.
   [[ "${3:-}" == asan ]] && preload=(env "LD_PRELOAD=$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)"
     "ASAN_OPTIONS=detect_leaks=0" "UBSAN_OPTIONS=print_stacktrace=1:suppressions=$HERE/ubsan.supp")
   set +e

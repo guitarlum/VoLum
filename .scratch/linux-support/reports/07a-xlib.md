@@ -1,6 +1,6 @@
 # 07a Xlib+GLX IGraphicsLinux (arena candidate a)
 
-Status: **PASS** on the box and on the laptop; CI: see [CI](#ci). The ticket stays open for the arena judges.
+Status: **PASS**: box gates, laptop tests and CI are green on the final code head. The ticket stays open for the arena judges.
 
 VoLum's real editor opens in REAPER for Linux and in pluginval, at scale 1 and 2, from our own Xlib+GLX platform layer. Every X and GL call runs on the host UI thread from the host's `IRunLoop`. `IPLUG_LINUX_EDITOR_STUB` and the `IGraphicsLinux.cpp` stub body are gone.
 
@@ -55,7 +55,7 @@ reaper cycles scale=1 asan=1 cycles=20 instances=2: PASS
 How the sanitizer runs are set up:
 
 - The plug-in links `libasan.so.8` and `libubsan.so.1` (`readelf -d`). The hosts are not instrumented, so they run with `LD_PRELOAD=libasan.so` and `detect_leaks=0`.
-- **pluginval needs the system `libstdc++` preloaded as well.** pluginval links libstdc++ statically. With only libasan preloaded, libGLX dlopens Mesa, and Mesa's `libLLVM` crashes in its static initialisers (`pthread_once` with a null function) inside `glXChooseFBConfig`, before any VoLum GL call. With both libraries preloaded the run is clean.
+- **pluginval needs the system `libstdc++` preloaded as well.** With only libasan preloaded, libGLX dlopens Mesa, and Mesa's `libLLVM` crashes in its static initialisers (`pthread_once` with a null function) inside `glXChooseFBConfig`, before any VoLum GL call. Preloading the system `libstdc++` as well makes the run clean. The likely cause is that `libLLVM` resolves `std::call_once` against a libstdc++ copy inside the pluginval binary; that was not confirmed further.
 - **REAPER's helper child processes inherit `LD_PRELOAD`.** They fail to map ASan's shadow (`ReserveShadowMemoryRange failed`), never load VoLum, and are not counted.
 - **UBSan has two suppressions.** Both findings are pre-existing and not Linux-specific; see [Found along the way](#found-along-the-way).
   - `nonnull-attribute:NChanDelay.h`: `memset(nullptr, 0, 0)` from `InitLatencyDelay`.
@@ -119,7 +119,7 @@ How the sanitizer runs are set up:
 | `IPlug/Linux/IPlugLinuxRunLoop.h` | 160 | |
 | `IPlug/VST3/IPlugVST3_LinuxRunLoop.h` | 308 | Steinberg `IRunLoop` adapter, `Steinberg::Timer` adapter |
 | **Platform layer total** | **1892** | |
-| `IPlugVST3.cpp` / `.h` / `IPlugVST3_View.h` | +59 / −22 | `OS_LINUX` sections and the stub removal |
+| `IPlugVST3.cpp` / `.h` / `IPlugVST3_View.h` | +64 / −0 against `b98aacb44`; +59 / −22 against `8eb3b8968` | Only `OS_LINUX` additions against the Dec-2023 base; the stub is gone |
 
 Ticket 05's leaf files are reused unchanged: `IGraphicsLinuxGL.*` (160) and `IGraphicsLinuxFont.*` (271). For scale, PR #1336's `IGraphicsLinux.cpp` alone is 1835 lines, with GTK dialogs and the render thread.
 
@@ -161,7 +161,7 @@ default:
 | Wheel (buttons 4/5; 6/7 ignored) | `:424-430` | Wheel over the sound list; 21070 pixels change |
 | Double click (time and distance, replaces the second down as `WM_LBUTTONDBLCLK` does) | `:434-446` | Double click on the art: no crash, no X error |
 | Keys: `KeysymToVK` (PR #1336 table plus keypad, F13-F24, locks, Super, ISO_Left_Tab), UTF-8 text from Latin-1 and Unicode keysyms, auto-repeat release dropped | `IGraphicsLinuxKeys.cpp`, `IGraphicsLinux.cpp:503-531` | Down arrow moves to "03 Crack the Skye"; 200364 pixels change |
-| Unhandled keys forwarded to the host's embed window, as `IGraphicsWin` forwards them to the root window | `IGraphicsLinux.cpp:520-529` | Space was sent; REAPER's play state stayed 0 (headless REAPER with its audio device closed). Delivery unproven, no error |
+| Unhandled keys forwarded to the host's embed window, as `IGraphicsWin` forwards them to the root window | `IGraphicsLinux.cpp:520-529` | Space was sent with no X error. This REAPER cannot show the result: with its audio device closed under Xvfb it never enters play, and its own `OnPlayButton()` also leaves `GetPlayState()` at 0 (ad-hoc check). Delivery unproven |
 | Keyboard focus taken on click (`XSetInputFocus`) | `:431-432` | The key steps above reached VoLum |
 | Cursors: all 14 `ECursor` shapes, cached font cursors; hide/lock with a blank pixmap cursor | `:539-626` | `SIZENWSE` on the corner resizer |
 | Mouse enter/leave (`OnSetCursor`, `OnMouseOut` outside grabs) | `:490-497` | |
@@ -222,12 +222,20 @@ The first case is the two-instance case from the ticket 05 review. B's idle time
 ## Laptop and CI
 
 - `pwsh -NoProfile -File NeuralAmpModeler\scripts\run-tests-win.ps1`: exit 0. doctest 1470 passed, 0 failed, 1 skipped; 30255183 assertions. The Windows-visible code is identical on the final head: the only later change was in `IGraphicsLinux.cpp`/`.h`, which Windows does not compile.
-- CI: see the next section.
+- CI: [run 40098689237](https://github.com/guitarlum/VoLum/actions/runs/40098689237), green.
 
 ### CI
 
-- [Run 40092730330](https://github.com/guitarlum/VoLum/actions/runs/40092730330) on `e6d31b1`: Formatting, Windows (tests + installer + portable zip + plugin validation), macOS (tests + full distribution + plugin validation), NAMCore, Coverage and the Windows installer upgrade succeeded. The macOS standalone e2e and the macOS installer upgrade were still queued for a macOS runner at the time of writing.
-- The final code head `f88fdb7` only changes Linux-only files (`IGraphicsLinux.cpp`/`.h`) from `e6d31b1`. It got its own dispatch after that run finished: CI_FINAL.
+- **Final:** [run 40098689237](https://github.com/guitarlum/VoLum/actions/runs/40098689237) on `d6ee2d66`, which is code head `f88fdb7` plus the report and scratch scripts. **All jobs succeeded:**
+  - Formatting
+  - Windows (tests + installer + portable zip + plugin validation)
+  - macOS (tests + full distribution + plugin validation)
+  - NAMCore regression tests
+  - Coverage
+  - Windows installer upgrade
+  - macOS installer upgrade
+  - macOS standalone e2e
+- **Previous code head:** [run 40092730330](https://github.com/guitarlum/VoLum/actions/runs/40092730330) on `e6d31b1`, all green. Each run was left to finish; none was cancelled.
 
 ## Found along the way
 
@@ -248,13 +256,14 @@ The first case is the two-instance case from the ticket 05 review. B's idle time
 - Dialogs, clipboard, `OpenURL` and message boxes log `IGraphicsLinux: ... not implemented` and return false, empty or `kNoResult` (ticket 09). A file prompt reports cancel; it never echoes the default path back.
 - The standalone app still has no window loop. `IPlugLinuxPollRunLoop` is ready, and a parent of `nullptr` creates a top-level window, but `WM_DELETE_WINDOW` and the app main are ticket 10.
 - No XEmbed protocol messages, and `ConfigureNotify` from the host is ignored. Neither REAPER nor pluginval needs them.
-- Forwarding unhandled keys to the host is implemented but not observed working under headless REAPER (play state 0).
+- Forwarding unhandled keys to the host is implemented but unproven. Headless REAPER cannot enter play with no audio device, so it cannot show whether the forwarded space arrived.
 - No changelog or user-doc line: the brief's scope does not include them, and ticket 15 owns the docs.
 
 ## Checklist
 
 - **Windows and macOS code paths unchanged outside the stub removal.**
-  - `git diff 8eb3b8968 -- IPlug/VST3` shows only `OS_LINUX` sections, the removed stub branches, and `createView` back to its `b98aacb44` body.
+  - Against the upstream base, `git diff --numstat b98aacb44 HEAD` on `IPlugVST3.cpp`/`.h`/`IPlugVST3_View.h` is `16 0`, `3 0`, `45 0`: only added lines, all in `OS_LINUX` sections (`#ifdef OS_LINUX` or `#elif defined OS_LINUX`).
+  - Against `8eb3b8968`, the diff also removes the stub branches, and `createView` is back to its `b98aacb44` body.
   - `IGraphicsLinux*` and `IPlugLinuxRunLoop*` are Linux-only files.
   - `wdlendian.h` is narrowed as above.
   - CI's Windows and macOS jobs are green.
@@ -262,8 +271,8 @@ The first case is the two-instance case from the ticket 05 review. B's idle time
   - new and changed iPlug2 C++ is formatted with iPlug2's `.clang-format`;
   - the test file is formatted with the root `.clang-format`;
   - the existing upstream-style VST3 files were edited by hand in their own style, not reformatted;
-  - CI Formatting passed.
+  - CI Formatting passed, but on a dispatch it only checks the last commit's files, so the box clang-format pass is the real evidence.
 - **LF and exec bits:** `git ls-files --eol` shows `i/lf w/lf` for every gate script, and the three `.sh` files are mode 100755. On `f88fdb7`, before they were committed, `run-tests-linux.sh` reported `Shell exec bits OK (35 tracked .sh files)`.
-- **No hard-coded paths** outside the scratch scripts. The only one is the REAPER/pluginval location under `$HOME/volum-linux/tools`, which can be overridden with `REAPER=`/`PLUGINVAL=`.
+- **No hard-coded paths** outside the scratch scripts. Inside them, the only machine path is the REAPER/pluginval location under `$HOME/volum-linux/tools`, which can be overridden with `REAPER=`/`PLUGINVAL=`.
 - **Packages:** none installed. Already on the box: `xvfb 2:21.1.22-1ubuntu1.2`, `imagemagick 8:7.1.2.18`, `xdotool 1:3.20160805.1`, `x11-xserver-utils 7.7+11build1` (xrdb), `gdb`, clang-format 21.1.8.
 - **Outside the brief's write list:** none. The `.vcxproj` line is the parity-list entry the brief allows.
