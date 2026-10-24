@@ -264,6 +264,14 @@ else
   log "apt: already installed"
 fi
 
+# The pulseaudio package enables a per-user daemon. WSLg already serves the
+# default devices; a second session server must not start. The binary stays,
+# for a private null sink the real-device gate starts itself.
+if [ "$CI" -eq 0 ]; then
+  run_root rm -f /etc/systemd/user/default.target.wants/pulseaudio.service \
+    /etc/systemd/user/sockets.target.wants/pulseaudio.socket
+fi
+
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { log "missing command after install: $1"; exit 1; }
 }

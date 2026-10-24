@@ -134,7 +134,11 @@ REC_DEVICE=""
 if [[ $PRIVATE -eq 1 ]]; then
   command -v pulseaudio >/dev/null || { echo "REASON: pulseaudio daemon is not installed"; exit 2; }
   echo "== private pulse null sink (WSLg is not touched)"
-  pulseaudio -n --daemonize=no --exit-idle-time=-1 --disable-shm=yes \
+  # A private runtime dir: the login runtime's pulse pid path is a symlink loop
+  # on this box, and a session daemon must not start.
+  mkdir -p "$OUT/pulse-run"
+  XDG_RUNTIME_DIR="$OUT/pulse-run" pulseaudio -n --daemonize=no --exit-idle-time=-1 \
+    --use-pid-file=no --disable-shm \
     -L "module-native-protocol-unix auth-anonymous=1 socket=$OUT/pulse.sock" \
     -L "module-null-sink sink_name=gate_out rate=48000 channels=2" \
     >"$OUT/pulse.log" 2>&1 &
