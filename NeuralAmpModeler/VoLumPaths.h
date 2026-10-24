@@ -13,6 +13,9 @@
 #elif defined(__APPLE__)
   #include <dlfcn.h>
   #include <mach-o/dyld.h>
+#elif defined(__linux__)
+  #include <dlfcn.h>
+  #include <unistd.h>
 #endif
 
 namespace volum
@@ -90,9 +93,95 @@ inline std::vector<std::filesystem::path> WindowsRigsCandidates(const std::files
   return candidates;
 }
 
-// Bundled rigs candidates: the module (VST3 DLL or standalone .exe — not the host process)
-// and, on Windows, the installer's registry root; then CWD ./VoLumRigs or ./rigs (dev uses
-// repo rigs/).
+#if defined(__linux__)
+// XDG Base Directory: an empty or relative XDG_DATA_HOME is not a path. Fall back to
+// $HOME/.local/share, then VoLum, the same folder the Windows files use under LOCALAPPDATA.
+inline bool LinuxAbsoluteXdg(const char* value)
+{
+  return value && value[0] == '/';
+}
+
+inline std::filesystem::path LinuxVoLumDataDir()
+{
+  namespace fs = std::filesystem;
+  if (const char* xdg = std::getenv("XDG_DATA_HOME"); LinuxAbsoluteXdg(xdg))
+    return fs::path(xdg) / "VoLum";
+  const char* home = std::getenv("HOME");
+  if (!home || !*home)
+    return {};
+  return fs::path(home) / ".local" / "share" / "VoLum";
+}
+
+// App: dladdr and /proc/self/exe name the same file, and the exe path is the one readlink
+// resolved. Plugin: the VoLum symbol lives in the .so, which is not the host executable.
+inline std::filesystem::path LinuxChooseModuleFile(const std::filesystem::path& fromDladdr,
+                                                   const std::filesystem::path& fromExe)
+{
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  const bool dlOk = !fromDladdr.empty() && fs::is_regular_file(fromDladdr, ec);
+  ec.clear();
+  const bool exeOk = !fromExe.empty() && fs::is_regular_file(fromExe, ec);
+  if (dlOk && exeOk)
+  {
+    ec.clear();
+    if (fs::equivalent(fromDladdr, fromExe, ec) && !ec)
+      return fromExe;
+  }
+  if (dlOk)
+    return fromDladdr;
+  if (exeOk)
+    return fromExe;
+  return !fromExe.empty() ? fromExe : fromDladdr;
+}
+
+inline std::filesystem::path LinuxModuleFile()
+{
+  namespace fs = std::filesystem;
+  fs::path fromDl;
+  Dl_info info{};
+  if (dladdr(reinterpret_cast<const void*>(&LinuxModuleFile), &info) != 0 && info.dli_fname && info.dli_fname[0])
+    fromDl = fs::path(info.dli_fname);
+
+  fs::path fromExe;
+  char buf[4096];
+  const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  if (n > 0 && static_cast<std::size_t>(n) < sizeof(buf) - 1)
+  {
+    buf[n] = '\0';
+    fromExe = fs::path(buf);
+  }
+  return LinuxChooseModuleFile(fromDl, fromExe);
+}
+
+// Locked order: beside the binary, <bundle>.vst3/Contents/Resources/VoLumRigs (the .so sits in
+// Contents/x86_64-linux, so Resources is the parent of that directory), the user data dir,
+// then /usr/share/VoLum/VoLumRigs. moduleFile is the .so or the executable, not its folder.
+// volumDataDir is $XDG_DATA_HOME/VoLum, or the $HOME/.local/share/VoLum fallback.
+inline std::vector<std::filesystem::path> LinuxRigsCandidates(
+  const std::filesystem::path& moduleFile, const std::filesystem::path& volumDataDir,
+  const std::filesystem::path& systemRigs = "/usr/share/VoLum/VoLumRigs")
+{
+  namespace fs = std::filesystem;
+  std::vector<fs::path> candidates;
+  if (!moduleFile.empty())
+  {
+    const fs::path dir = moduleFile.parent_path();
+    candidates.push_back(dir / "VoLumRigs");
+    candidates.push_back(dir.parent_path() / "Resources" / "VoLumRigs");
+  }
+  if (!volumDataDir.empty())
+    candidates.push_back(volumDataDir / "VoLumRigs");
+  if (!systemRigs.empty())
+    candidates.push_back(systemRigs);
+  return candidates;
+}
+#endif
+
+// Bundled rigs candidates: the module (VST3 DLL / .so or standalone executable — not the host
+// process) and, on Windows, the installer's registry root. On Linux the order is beside the
+// binary, the bundle Resources directory, the XDG VoLum dir, then /usr/share. Then CWD
+// ./VoLumRigs or ./rigs (dev uses repo rigs/).
 inline std::vector<std::filesystem::path> RigsRootCandidates()
 {
   namespace fs = std::filesystem;
@@ -149,6 +238,8 @@ inline std::vector<std::filesystem::path> RigsRootCandidates()
       }
     }
   }
+#elif defined(__linux__)
+  candidates = LinuxRigsCandidates(LinuxModuleFile(), LinuxVoLumDataDir());
 #endif
 
   candidates.push_back(fs::path("VoLumRigs"));
@@ -308,6 +399,11 @@ inline std::filesystem::path VolumUserSettingsFilePath()
   if (!home || !*home)
     return {};
   return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum-settings.json";
+#elif defined(__linux__)
+  const fs::path dir = LinuxVoLumDataDir();
+  if (dir.empty())
+    return {};
+  return dir / "volum-settings.json";
 #else
   (void)0;
   return {};
@@ -329,6 +425,11 @@ inline std::filesystem::path VolumUpdateStateFilePath()
   if (!home || !*home)
     return {};
   return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum-update-state.json";
+#elif defined(__linux__)
+  const fs::path dir = LinuxVoLumDataDir();
+  if (dir.empty())
+    return {};
+  return dir / "volum-update-state.json";
 #else
   (void)0;
   return {};
@@ -354,6 +455,11 @@ inline std::filesystem::path VolumContentDir()
   if (!home || !*home)
     return {};
   return fs::path(home) / "Library" / "Application Support" / "VoLum" / "content";
+#elif defined(__linux__)
+  const fs::path dir = LinuxVoLumDataDir();
+  if (dir.empty())
+    return {};
+  return dir / "content";
 #else
   (void)0;
   return {};
@@ -375,6 +481,11 @@ inline std::filesystem::path VolumDualAmpSettingsFilePath()
   if (!home || !*home)
     return {};
   return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum-dual-amp-settings.json";
+#elif defined(__linux__)
+  const fs::path dir = LinuxVoLumDataDir();
+  if (dir.empty())
+    return {};
+  return dir / "volum-dual-amp-settings.json";
 #else
   (void)0;
   return {};
@@ -395,6 +506,11 @@ inline std::filesystem::path VolumDiagLogFilePath()
   if (!home || !*home)
     return {};
   return fs::path(home) / "Library" / "Application Support" / "VoLum" / "volum.log";
+#elif defined(__linux__)
+  const fs::path dir = LinuxVoLumDataDir();
+  if (dir.empty())
+    return {};
+  return dir / "volum.log";
 #else
   (void)0;
   return {};
