@@ -41,14 +41,10 @@ clean_log() {
 run_pluginval() {
   local bundle="$1" log="$2" preload=() home
   home="$(throwaway_home)"
-  # ASAN_PRELOAD: none | asan (default) | asan+stdc++. See the 07 report for
-  # which one each host needs.
+  # The ASan runtime has to come first in an uninstrumented host.
+  # ASAN_PRELOAD=none shows the plug-in then fails to load.
   local lib=""
-  case "${ASAN_PRELOAD:-asan}" in
-    none) ;;
-    asan) lib="$(gcc -print-file-name=libasan.so)" ;;
-    asan+stdc++) lib="$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)" ;;
-  esac
+  [[ "${ASAN_PRELOAD:-asan}" == none ]] || lib="$(gcc -print-file-name=libasan.so)"
   [[ "${3:-}" == asan ]] && preload=(env "LD_PRELOAD=$lib"
     "ASAN_OPTIONS=detect_leaks=0" "UBSAN_OPTIONS=print_stacktrace=1:suppressions=$HERE/ubsan.supp")
   set +e

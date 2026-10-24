@@ -39,9 +39,11 @@ if(NOT EXISTS "${VST3_SDK}/public.sdk/source/main/linuxmain.cpp")
 endif()
 
 option(VOLUM_BUILD_VALIDATOR "Build the Steinberg VST3 validator from the vendored SDK" ON)
-# ASan + UBSan for every target. With GCC the plug-in links libasan.so, so a
-# host that is not sanitized itself (REAPER, pluginval) needs
-# LD_PRELOAD="$(gcc -print-file-name=libasan.so)".
+# ASan + UBSan for every target, linked against the shared libstdc++/libgcc
+# (static ones are skipped below). A host that is not sanitized itself (REAPER,
+# pluginval) still needs LD_PRELOAD="$(gcc -print-file-name=libasan.so)":
+# without it the ASan runtime is not first in the library list and the
+# plug-in fails to load.
 option(VOLUM_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 if(VOLUM_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
