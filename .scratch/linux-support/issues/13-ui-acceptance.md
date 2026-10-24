@@ -33,6 +33,16 @@ May write:
   reacts to a forwarded key under Xvfb (Carla, or the standalone with a test
   hook), and show it fails with forwarding removed.
 
+## Carried from ticket 09 (coordinator, 2026-10-25)
+
+- **Text entry and popup menus in a host:** on Linux these are still the
+  in-graphics IGraphics controls (`IGraphicsLinux.cpp` `CreatePlatformTextEntry`
+  / `CreatePlatformPopupMenu`), and no host run has typed into a field or
+  picked a menu item. In REAPER under Xvfb, type a name into a text field (for
+  example a custom amp name) and commit it, and pick a VoLum popup menu item
+  that changes state; check the result in the saved settings. Each check fails
+  when its feature is broken on purpose.
+
 ## Acceptance
 
 - Every scene is under the threshold, and the cold reviewer's verdict is
