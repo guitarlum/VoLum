@@ -18,6 +18,12 @@ source "$SCRIPT_DIR/linux/host-env.sh"
 linux_gate_root
 cd "$REPO_ROOT"
 
+# box.ps1 holds the build flock on fds 7-9. A child that ignores SIGHUP
+# (Xvfb, jackd) would keep that lock after this script dies.
+for fd in 7 8 9; do
+  eval "exec ${fd}>&-" 2>/dev/null || true
+done
+
 # jackd ignores SIGHUP, so an ssh -tt drop or a killed gate reparents it to
 # init. The pid is stopped from EXIT/INT/TERM/HUP, and the process itself gets
 # SIGTERM when this shell dies (PR_SET_PDEATHSIG), including SIGKILL of the shell.

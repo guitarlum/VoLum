@@ -24,6 +24,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/linux/host-env.sh"
 linux_gate_root
 
+# box.ps1 holds the build flock on fds 7-9. Close them before any child.
+for fd in 7 8 9; do
+  eval "exec ${fd}>&-" 2>/dev/null || true
+done
+
 BUNDLE=""
 OUT=""
 MODE=gates

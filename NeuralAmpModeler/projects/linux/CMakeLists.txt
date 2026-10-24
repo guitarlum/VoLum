@@ -49,10 +49,6 @@ if(VOLUM_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
   add_link_options(-fsanitize=address,undefined)
 endif()
-# Static libstdc++ plus the host's libstdc++. GNU unique symbols merge the
-# plug-in's locale facets with the host's, and Carla's global locale then
-# crashes num_put in codecvt. This keeps our facet copies in the .so.
-add_compile_options(-fno-gnu-unique)
 
 set(VOLUM_DSP_SOURCES
   "${VOLUM_ROOT}/AudioDSPTools/dsp/dsp.cpp"

@@ -1,12 +1,12 @@
 # 08 Plugin gates (box + CI)
 
-Status: **PASS** on code head `d13168d1`. The coordinator merges. This report commit is later and does not change the gates.
+Status: **PASS** after the coordinator review (jackd lifetime, one Carla locale fix, UI-thread red from the `/g` script). The CI run below is the dispatch of this commit.
 
 ## Heads
 
 | | Branch | Head |
 | --- | --- | --- |
-| Superproject, code | `feature/linux-08-plugin-gates` | `d13168d1936acda90fd7073ef4a4c5eeaafd5c6f` |
+| Superproject | `feature/linux-08-plugin-gates` | this commit (jackd lifetime, lock fds closed, `-fno-gnu-unique` removed). The earlier green run 40117645281 was `d13168d1` and is not this head. |
 | iPlug2 | `volum/linux` | `72593f1683be9baf2bc287af9d854e829750a152` (unchanged) |
 | AudioDSPTools | from `feature/linux-support` | `3f28127e3125adb8befbdb56e26e986aaf9c0e55` |
 
@@ -35,9 +35,15 @@ Product scripts, from the ticket 07 arena harness (those scratch copies are dele
 
 **Render null.** The bar is peak residual ≤ -100 dBFS, the same number as `platform_null.h`, with 0 dBFS = amplitude 1. It is not a bit-exact compare: the box is GCC 15 / glibc 2.43 and CI is g++-12 / glibc 2.35. The live render must also peak above -40 dBFS, so silence cannot pass. On the box the two takes and the committed file were bit-identical (`-inf`).
 
-**Carla and iostream.** Static libstdc++ plus a host that sets the global C++ locale crashes `num_put` in `codecvt` (GNU unique symbols merge the facets). The diagnostic log and the atomic JSON temp path on Linux use `strftime` / `snprintf` / `fwrite`. The Linux CMake file also passes `-fno-gnu-unique`. Windows code in those headers is the previous ostream path.
+**Carla and iostream.** Static libstdc++ plus a host that sets the global C++ locale crashes `num_put` in `codecvt`. `-fno-gnu-unique` does not stop it: with that flag still on and the Linux stdio paths reverted to the shared ostream code, Carla segfaults (exit 139) while constructing the plug-in. With the stdio paths kept and the flag removed, Carla loads and processes (`transport frame 96000`, exit 0) and the REAPER render still nulls at -inf dBFS. The flag is gone. The Linux branches in `VoLumDiagLog.h` and `VoLumSettingsFileIO.h` stay. Windows in those headers is the original ostream code.
 
-**box.ps1.** A killed local client SIGHUPs the remote session. Proof: `box.ps1` reached `SESSION_UP` / `sleep 90` on `f678fa02`, the local `ssh -tt` was killed, and the remote `volum-box-runner` was gone (`REMOTE_GONE`). A later crash left `jackd -n volum-carla-…` holding the inherited lock fd; background `jackd` and REAPER now start with fds 7–9 closed, and that orphan was killed before the next job.
+Other `ostream << number` sites in the plug-in, not on this Carla load/process path: `NeuralAmpModeler::_ProcessInput` throws if `nChansOut != 1` (`ss << nChansOut`; the gate's process ran and did not throw), and the editor formatters in `NeuralAmpModelerControls.h` (`p.value`, `naturalValue << " dBu"`). `std::to_string` is not one of these.
+
+**box.ps1 and jackd.** A killed local client SIGHUPs the remote session (`REMOTE_GONE` on the `sleep 90` check). jackd ignores SIGHUP. The old gate only had `trap cleanup_jack RETURN`, so a kill left the server with ppid 1. The gate now traps EXIT, HUP, INT and TERM, closes inherited lock fds 7–9, and starts jackd with `PR_SET_PDEATHSIG` so the kernel sends SIGTERM when that shell dies.
+
+Red, old script `2791e749`: `kill -TERM` on `validate-vst3-linux.sh` (pid 270091) left `jackd -n volum-carla-270092` pid 270106, ppid 1. Killing the local `ssh -tt` during the same RETURN-only launch (held open with `sleep 25` so the kill could land) left `jackd -n volum-carla-274877` pid 274878, ppid 1. Both orphans were then stopped.
+
+Green, fixed script `6bdc74ab`: `kill -TERM` on `validate-vst3-linux.sh` (pid 275806) while `jackd -n volum-carla-275807` was up, then `ps`, printed `JACKD_GONE`. Killing the local `ssh -tt` (pid 46796) once that script had reached `=== carla-single ===` also printed `JACKD_GONE`.
 
 ## Gate evidence (box, code head `d13168d1`)
 
@@ -76,7 +82,9 @@ The scripted redproof run removed only the first call (the substitution was not 
 
 ## CI
 
-[Run 40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) on `d13168d1`, dispatched with `ci-watch.ps1 -Dispatch`. Exit 0. Every job succeeded:
+Earlier run [40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) on `d13168d1` was green, including Linux plugin gates (null `-inf` dBFS on ubuntu-22.04). It does not contain the jackd trap or the dropped `-fno-gnu-unique`. The run for this commit is dispatched with `ci-watch.ps1 -Dispatch` and is the one that has to be green.
+
+[Run 40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) jobs, for the record:
 
 | Job | Result |
 | --- | --- |
