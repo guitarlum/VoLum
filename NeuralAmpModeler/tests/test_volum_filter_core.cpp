@@ -56,37 +56,6 @@ bool SameRings(const std::vector<std::vector<DSP_SAMPLE>>& a, const std::vector<
   return true;
 }
 
-// GCC -O3 unrolls this degree-3 loop even with the attribute on an inline method
-// (the CI ratio stayed 0.502). A noinline function keeps the scalar loop.
-#if defined(__GNUC__) && !defined(__clang__)
-__attribute__((noinline, optimize("no-tree-vectorize,no-unroll-loops")))
-#endif
-void RunScalarAnyDegree(double* inputCoeff, double* outputCoeff, DSP_SAMPLE* inputHist, DSP_SAMPLE* outputHist,
-                        DSP_SAMPLE* output, size_t inputDegree, size_t outputDegree, long& inputStart, long& outputStart,
-                        DSP_SAMPLE* input, size_t numFrames)
-{
-  for (size_t s = 0; s < numFrames; s++)
-  {
-    DSP_SAMPLE out = 0.0;
-    inputStart -= 1;
-    if (inputStart < 0)
-      inputStart = static_cast<long>(inputDegree) - 1;
-    inputHist[static_cast<size_t>(inputStart)] = input[s];
-    for (size_t i = 0; i < inputDegree; i++)
-      out += inputCoeff[i] * inputHist[(static_cast<size_t>(inputStart) + i) % inputDegree];
-    outputStart -= 1;
-    if (outputStart < 0)
-      outputStart = static_cast<long>(outputDegree) - 1;
-    for (size_t i = 1; i < outputDegree; i++)
-      out += outputCoeff[i] * outputHist[(static_cast<size_t>(outputStart) + i) % outputDegree];
-    if (std::isnan(out))
-      out = 0.0;
-    if (outputDegree >= 1)
-      outputHist[static_cast<size_t>(outputStart)] = out;
-    output[s] = out;
-  }
-}
-
 // Opens the reference path, the coefficients and the history rings of any filter.
 template <class Filter>
 class Probe : public Filter
@@ -101,21 +70,6 @@ public:
   DSP_SAMPLE** ProcessGeneric(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
   {
     return this->_ProcessGeneric(inputs, numChannels, numFrames);
-  }
-
-  // Timing baseline only. Same arithmetic as _ProcessAnyDegree, in a noinline
-  // function so GCC cannot unroll it into the fixed kernels' league.
-  DSP_SAMPLE** ProcessGenericScalar(DSP_SAMPLE** inputs, size_t numChannels, size_t numFrames)
-  {
-    this->_PrepareBuffers(numChannels, numFrames);
-    for (size_t c = 0; c < numChannels; c++)
-    {
-      RunScalarAnyDegree(this->mInputCoefficients.data(), this->mOutputCoefficients.data(),
-                         this->mInputHistory[c].data(), this->mOutputHistory[c].data(), this->mOutputs[c].data(),
-                         this->_GetInputDegree(), this->_GetOutputDegree(), this->mInputStart, this->mOutputStart,
-                         inputs[c], numFrames);
-    }
-    return this->_GetPointers();
   }
 
   std::vector<double>& InputCoefficients() { return this->mInputCoefficients; }
@@ -359,9 +313,9 @@ TEST_CASE("Filter core: tone stack biquads cost at most half the any-degree loop
     const auto t0 = std::chrono::steady_clock::now();
     for (int b = 0; b < kBlocksPerRound; ++b)
     {
-      DSP_SAMPLE** out = generic.bass.ProcessGenericScalar(inputs, 1, kBlock);
-      out = generic.mid.ProcessGenericScalar(out, 1, kBlock);
-      out = generic.treble.ProcessGenericScalar(out, 1, kBlock);
+      DSP_SAMPLE** out = generic.bass.ProcessGeneric(inputs, 1, kBlock);
+      out = generic.mid.ProcessGeneric(out, 1, kBlock);
+      out = generic.treble.ProcessGeneric(out, 1, kBlock);
       sink = sink + out[0][kBlock - 1];
     }
     return std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / kBlocksPerRound;

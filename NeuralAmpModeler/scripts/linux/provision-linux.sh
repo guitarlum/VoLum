@@ -8,13 +8,11 @@
 # apt toolchain and test packages (including xvfb, xdotool and jackd2) and does
 # not download pluginval, REAPER or Carla.
 #
-# ubuntu-22.04's archive GCC 12 cannot compile the suite:
-#   AudioDSPTools/dsp/ResamplingContainer/ResamplingContainer.h:89: error:
-#   declaration of 'using LanczosResampler = class dsp::LanczosResampler<T, NCHANS, A>'
-#   changes meaning of 'LanczosResampler' [-fpermissive]
-# CI therefore keeps gcc-15 from ppa:ubuntu-toolchain-r/test and clang-21 from
-# apt.llvm.org. 24.04 and 26.04 use the distro default compilers. Sources this
-# script added are removed again on hosts that do not enable them.
+# ubuntu-22.04 CI uses the archive compilers g++-12 and clang-15. gcc-12 could
+# not compile ResamplingContainer.h until the LanczosResampler alias was
+# qualified; that fix is in AudioDSPTools. The toolchain PPA and apt.llvm.org
+# are not used. If a previous run added those source files, this script
+# removes only those files.
 #
 # Never stops, restarts or reconfigures ~/localai-platform, llama-server,
 # Ollama or docker. Package installs only.
@@ -147,30 +145,6 @@ drop_added_compiler_sources() {
   fi
 }
 
-# gcc-12 on jammy rejects ResamplingContainer.h:89 (using-declaration changes
-# meaning, -fpermissive). The reference compiler is gcc-15 from the toolchain
-# PPA, and the sanitizer compiler is clang-21 from apt.llvm.org.
-enable_reference_toolchain() {
-  if [ "$VERSION_ID" != "22.04" ]; then
-    return 0
-  fi
-  log "enabling ppa:ubuntu-toolchain-r/test because gcc-12 cannot build"
-  if ! command -v add-apt-repository >/dev/null 2>&1; then
-    apt_retry run_apt update -qq
-    apt_retry run_apt install -y --no-install-recommends software-properties-common ca-certificates
-  fi
-  run_root env DEBIAN_FRONTEND=noninteractive add-apt-repository -y ppa:ubuntu-toolchain-r/test
-  local list="/etc/apt/sources.list.d/llvm-toolchain-${VERSION_CODENAME}-21.list"
-  log "enabling apt.llvm.org clang-21"
-  if [ ! -f "$list" ]; then
-    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | run_root tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
-    printf 'deb http://apt.llvm.org/%s/ llvm-toolchain-%s-21 main\n' \
-      "$VERSION_CODENAME" "$VERSION_CODENAME" | run_root tee "$list" >/dev/null
-  fi
-  log "apt-get update after reference toolchain repos"
-  apt_retry run_apt update -qq
-}
-
 if [ ! -r /etc/os-release ]; then
   log "missing /etc/os-release"
   exit 1
@@ -199,7 +173,6 @@ fi
 
 log "ubuntu $VERSION_ID ${VERSION_CODENAME:-} ci=$CI"
 drop_added_compiler_sources
-enable_reference_toolchain
 
 gl_pkg=$(choose_pkg libgl-dev libgl1-mesa-dev)
 alsa_pkg=$(choose_pkg libasound2-dev libasound-dev)
@@ -243,7 +216,7 @@ pkgs=(
   xz-utils
 )
 if [ "$VERSION_ID" = "22.04" ]; then
-  pkgs+=(gcc-15 g++-15 clang-21)
+  pkgs+=(gcc-12 g++-12 clang-15)
 fi
 
 missing=()
@@ -297,13 +270,12 @@ need_cmd g++
 need_cmd clang
 need_cmd ld.lld
 if [ "$VERSION_ID" = "22.04" ]; then
-  need_cmd g++-15
-  need_cmd clang++-21
+  need_cmd g++-12
+  need_cmd clang++-15
 fi
 
-# Clang 18+ ships the ASan/UBSan runtimes as libclang-rt-<major>-dev; older
-# releases bundle them with clang itself, so the package may not exist.
-# clang-21 is the sanitizer compiler, which may not be the default clang.
+# Clang 18+ ships the ASan runtime as libclang-rt-<major>-dev; older releases
+# bundle it with clang itself, so the package may not exist.
 install_clang_rt() {
   local major=$1
   local pkg="libclang-rt-${major}-dev"
@@ -313,8 +285,8 @@ install_clang_rt() {
   fi
 }
 install_clang_rt "$(clang -dumpversion | cut -d. -f1)"
-if command -v clang++-21 >/dev/null 2>&1; then
-  install_clang_rt "$(clang++-21 -dumpversion | cut -d. -f1)"
+if command -v clang++-15 >/dev/null 2>&1; then
+  install_clang_rt "$(clang++-15 -dumpversion | cut -d. -f1)"
 fi
 need_cmd cmake
 need_cmd ninja
@@ -326,11 +298,11 @@ need_cmd jackd
 
 log "g++ $(g++ --version | head -n 1)"
 log "clang $(clang --version | head -n 1)"
-if command -v g++-15 >/dev/null 2>&1; then
-  log "g++-15 $(g++-15 --version | head -n 1)"
+if command -v g++-12 >/dev/null 2>&1; then
+  log "g++-12 $(g++-12 --version | head -n 1)"
 fi
-if command -v clang++-21 >/dev/null 2>&1; then
-  log "clang++-21 $(clang++-21 --version | head -n 1)"
+if command -v clang++-15 >/dev/null 2>&1; then
+  log "clang++-15 $(clang++-15 --version | head -n 1)"
 fi
 if [ "$CI" -eq 1 ]; then
   log "ci mode: skipped pluginval, REAPER and Carla"

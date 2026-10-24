@@ -35,7 +35,7 @@ inline constexpr double kWindowsNullPeakDb = -100.0;
 // different string.
 inline const char* LinuxHashReferenceIdentity()
 {
-  return "glibc 2.35 | 15.2.0";
+  return "glibc 2.35 | 12.3.0";
 }
 
 inline std::string LinuxRuntimeIdentity()
