@@ -167,6 +167,7 @@ function(volum_common_defs target)
     "GRAYED_ALPHA=0.5f"
     IPLUG_EDITOR=1
     IPLUG_DSP=1
+    NOMINMAX
   )
   target_compile_options(${target} PRIVATE -Wno-unknown-pragmas)
 endfunction()
