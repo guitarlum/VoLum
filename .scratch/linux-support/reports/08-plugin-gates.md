@@ -1,12 +1,12 @@
 # 08 Plugin gates (box + CI)
 
-Status: **PASS** after the coordinator review (jackd lifetime, one Carla locale fix, UI-thread red from the `/g` script). The CI run below is the dispatch of this commit.
+Status: **PASS** after the coordinator review (jackd lifetime, the stdio locale fix kept and `-fno-gnu-unique` dropped, UI-thread red from `redproof-plugin-gates.sh`). The CI run is the dispatch of this commit.
 
 ## Heads
 
 | | Branch | Head |
 | --- | --- | --- |
-| Superproject | `feature/linux-08-plugin-gates` | this commit (jackd lifetime, lock fds closed, `-fno-gnu-unique` removed). The earlier green run 40117645281 was `d13168d1` and is not this head. |
+| Superproject | `feature/linux-08-plugin-gates` | this commit. The code is `482b0ce9` (lock fds 7–9 closed, `-fno-gnu-unique` removed) on `6bdc74ab` (jackd EXIT/HUP/INT/TERM traps and `PR_SET_PDEATHSIG`). Run 40117645281 was `d13168d1` and is not this head. |
 | iPlug2 | `volum/linux` | `72593f1683be9baf2bc287af9d854e829750a152` (unchanged) |
 | AudioDSPTools | from `feature/linux-support` | `3f28127e3125adb8befbdb56e26e986aaf9c0e55` |
 
@@ -72,9 +72,23 @@ Each of these exited non-zero. The tree was restored afterwards (the UI-thread `
 | pluginval | same bundle | `pluginval exit 1`, `FAILED!!  1 test failed, out of a total of 1`, `FAILURE`, 0 editor opens |
 | Carla | same bundle | `add_plugin failed: b'Failed to get plugin description'`, exit 1 |
 | REAPER | `--reference` a 10 s silence file | `null FAIL residual -9.24 dBFS is above -100` |
-| UI-thread sites | the four `IPlugLinuxCheckUIThread` calls commented out, `.so` rebuilt | all four `missing IGraphicsLinux::…` lines, `count 0 -> 4`, `FAIL`, exit 1 |
+| UI-thread sites | `redproof-plugin-gates.sh` at checkout `482b0ce9` (perl `/g` removes all four `IPlugLinuxCheckUIThread` calls, then rebuilds) | all four `missing IGraphicsLinux::…` lines, `count 0 -> 4`, `OpenWindow signal 11`, `FAIL`, `ui-thread sites exit 1` |
 
-The scripted redproof run removed only the first call (the substitution was not global). The harness still failed, on the missing OpenWindow line. A follow-up with `/g` removed all four and is the table above. The script now uses `/g`.
+That UI-thread row is the script itself, not a hand-edited substitution. On the box, `bash NeuralAmpModeler/scripts/linux/redproof-plugin-gates.sh` at `482b0ce9` printed:
+
+```
+ui-thread sites: missing IGraphicsLinux::OpenWindow called off the UI thread
+ui-thread sites: missing IGraphicsLinux::CloseWindow called off the UI thread
+ui-thread sites: missing IGraphicsLinux::ProcessX11Events called off the UI thread
+ui-thread sites: missing IGraphicsLinux::OnDisplayTimer called off the UI thread
+ui-thread sites: count 0 -> 4, OpenWindow signal 11
+ui-thread sites: FAIL
+ui-thread sites exit 1
+red ui-thread exit 1
+RED PROOFS PASSED (each gate exited non-zero)
+```
+
+The same invocation also re-failed the other gates: validator exit 255, pluginval `FAILED!!  1 test failed, out of a total of 1`, Carla `add_plugin failed: b'Failed to get plugin description'` exit 1, REAPER `null FAIL residual -9.24 dBFS is above -100`. The script then checked `IGraphicsLinux.cpp` back out and rebuilt `VoLum-vst3`. After it exited, `grep -c IPlugLinuxCheckUIThread` was 4, the worktree was clean, and no `jackd` was left. An earlier scripted run, before `/g`, removed only OpenWindow; that is not the proof above.
 
 ## Session kill
 
@@ -82,7 +96,7 @@ The scripted redproof run removed only the first call (the substitution was not 
 
 ## CI
 
-Earlier run [40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) on `d13168d1` was green, including Linux plugin gates (null `-inf` dBFS on ubuntu-22.04). It does not contain the jackd trap or the dropped `-fno-gnu-unique`. The run for this commit is dispatched with `ci-watch.ps1 -Dispatch` and is the one that has to be green.
+Earlier run [40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) on `d13168d1` was green, including Linux plugin gates (null `-inf` dBFS on ubuntu-22.04). It does not contain the jackd trap, the lock-fd close, or the dropped `-fno-gnu-unique`. The run for this commit is dispatched with `ci-watch.ps1 -Dispatch` and is the one that has to be green. The numeric id is the run whose `headSha` is this commit; it is not written back into a later commit, because that would move the branch tip off the green run.
 
 [Run 40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) jobs, for the record:
 
@@ -111,11 +125,11 @@ null peak -inf dBFS over 528000 frames x 1 ch (live peak -9.24 dBFS, limit -100,
 reaper gates asan=0 cycles=20 instances=2: PASS
 ```
 
-Artifact `VoLum-linux-vst3` (35 MB). This report commit is after that run and does not change the gates. The redproof script's substitution is now global (`/g`); the all-four revert above was run from that substitution on the box, and the `.so` was restored.
+Artifact `VoLum-linux-vst3` (35 MB) on that earlier run. The `/g` redproof above is from `redproof-plugin-gates.sh` at `482b0ce9`, and the `.so` was restored by that script.
 
 ## Laptop
 
-`pwsh NeuralAmpModeler/scripts/run-tests-win.ps1` exit 0. doctest 1470 passed, 0 failed, 1 skipped; 30255184 assertions. An earlier pwsh attempt in the same hour died with MSVC `C1060` (compiler out of heap) while the box and CI were also building. The retry above is the one that finished. A `powershell.exe` 5.1 attempt is not the runner: `check-agent-artifact-links.ps1` turns a native `git check-ignore` message into a terminating error there, and the script already disables that for pwsh 7.
+An earlier `pwsh NeuralAmpModeler/scripts/run-tests-win.ps1` on this branch exited 0 (doctest 1470 passed, 0 failed, 1 skipped; 30255184 assertions). A retry was required after MSVC `C1060` while the box was also building. This review does not start another local MSVC build: the laptop is short on RAM, and the Windows job on the CI run for this commit is the evidence. `run-tests-win.ps1` on `feature/linux-support` (`bf5ce757`) serializes MSBuild with a named mutex; that commit is not merged here.
 
 ## Not in this ticket
 
