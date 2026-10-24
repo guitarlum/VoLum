@@ -66,7 +66,7 @@ restore_cpp() {
   cmake --build "$REPO_ROOT/build-linux" -j "${JOBS:-10}" --target VoLum-vst3 || true
 }
 trap restore_cpp EXIT
-perl -0pi -e 's/IPlugLinuxCheckUIThread\("IGraphicsLinux::(OpenWindow|CloseWindow|ProcessX11Events|OnDisplayTimer)"\);/\/\* REVERTED: no IPlugLinuxCheckUIThread $1 *\//' "$REPO_ROOT/$CPP"
+perl -0pi -e 's/IPlugLinuxCheckUIThread\("IGraphicsLinux::(OpenWindow|CloseWindow|ProcessX11Events|OnDisplayTimer)"\);/\/\* REVERTED: no IPlugLinuxCheckUIThread $1 *\//g' "$REPO_ROOT/$CPP"
 if ! grep -q "REVERTED: no IPlugLinuxCheckUIThread" "$REPO_ROOT/$CPP"; then
   echo "redproof: the UI-thread revert did not apply" >&2
   exit 1
