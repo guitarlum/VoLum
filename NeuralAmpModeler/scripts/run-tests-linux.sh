@@ -140,11 +140,9 @@ fi
 
 BUILD_DIR="$PROJECT_DIR/build-tests-linux"
 BUILD_TYPE=Release
-CC=gcc
 CXX=g++
 if [[ "$CLANG" == "1" ]]; then
   BUILD_DIR="$PROJECT_DIR/build-tests-linux-clang"
-  CC=clang
   CXX=clang++
 fi
 if [[ "$SANITIZE" == "1" ]]; then
@@ -155,7 +153,6 @@ fi
 cmake -S "$PROJECT_DIR/tests" -B "$BUILD_DIR" \
   -G Ninja \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-  -DCMAKE_C_COMPILER="$CC" \
   -DCMAKE_CXX_COMPILER="$CXX" \
   -DVOLUM_ENABLE_SANITIZERS="$SANITIZE"
 

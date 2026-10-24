@@ -166,6 +166,9 @@ else()
 endif()
 
 if(UNIX AND NOT APPLE)
+  # GCC 15 does not expose malloc/free through the headers WDL includes.
+  # heapbuf.h calls them anyway. iPlug2 is not edited here.
+  target_compile_options(NeuralAmpModeler-Tests PRIVATE -include cstdlib)
   find_package(Threads REQUIRED)
   target_link_libraries(NeuralAmpModeler-Tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 endif()
