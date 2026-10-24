@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "golden_helpers.h"
+#include "platform_null.h"
 
 #include <algorithm>
 #include <cmath>
@@ -231,11 +232,49 @@ const char* PinnedHash(const std::string& name)
   return "";
 }
 
+// GCC Release contracts multiply-adds, so Linux does not share the MSVC pin.
+// Filled from a box run. Empty until then, which fails the check and prints
+// the actual hash. macOS still only prints.
+const char* LinuxPinnedHash(const std::string& name)
+{
+  struct Pin
+  {
+    const char* name;
+    const char* hash;
+  };
+  // GCC Release matched the MSVC pins bit for bit on the box (2026-10-24).
+  static const Pin pins[] = {
+    {"Soldano amp FULL 48k/64", "1b535bd0820398f1c92986cd7ac7ee75382dbc5c5209a622cf2ca5980babad74"},
+    {"Soldano amp LITE 48k/64", "1a732ea1bf225fb7d481007e935c59778cfddf4334fc4c9e218676c5f72fe980"},
+    {"Myth PRE FULL 48k/64", "40f0fdf7041d62136c2302f1a18812288ae8d93600bdc3d673b8c413279114c0"},
+    {"Myth PRE LITE 48k/64", "8e438ba76ecd28fa009078396f8393bd279623e6520cbb25ea043c99d8ecf5c0"},
+    {"Soldano amp FULL 48k/512", "1b535bd0820398f1c92986cd7ac7ee75382dbc5c5209a622cf2ca5980babad74"},
+    {"Soldano amp LITE 48k/512", "1a732ea1bf225fb7d481007e935c59778cfddf4334fc4c9e218676c5f72fe980"},
+    {"Soldano amp FULL 48k/2048", "1b535bd0820398f1c92986cd7ac7ee75382dbc5c5209a622cf2ca5980babad74"},
+    {"Soldano amp LITE 48k/2048", "1a732ea1bf225fb7d481007e935c59778cfddf4334fc4c9e218676c5f72fe980"},
+    {"Soldano amp FULL 48k/400 varied", "1b535bd0820398f1c92986cd7ac7ee75382dbc5c5209a622cf2ca5980babad74"},
+    {"Soldano amp LITE 48k/400 varied", "1a732ea1bf225fb7d481007e935c59778cfddf4334fc4c9e218676c5f72fe980"},
+    {"Myth PRE FULL 48k/400 varied", "40f0fdf7041d62136c2302f1a18812288ae8d93600bdc3d673b8c413279114c0"},
+  };
+  for (const Pin& p : pins)
+    if (name == p.name)
+      return p.hash;
+  return nullptr;
+}
+
 void ExpectNamHash(const std::string& name, const std::string& actual)
 {
 #if defined(_WIN32)
   INFO(name << " actual=" << actual);
   CHECK(actual == std::string(PinnedHash(name)));
+#elif defined(__linux__)
+  INFO(name << " actual=" << actual);
+  if (!volum::test::RequireLinuxHash(name.c_str()))
+    return;
+  MESSAGE((std::string("linux-hash ") + name + " " + actual));
+  const char* expected = LinuxPinnedHash(name);
+  REQUIRE(expected != nullptr);
+  CHECK(actual == std::string(expected));
 #else
   MESSAGE(name << " hash (not pinned on this platform): " << actual);
 #endif
@@ -257,6 +296,7 @@ TEST_CASE("NAM exact: bundled captures render the pinned bits")
     CHECK(std::all_of(out.begin(), out.end(), [](NAM_SAMPLE v) { return std::isfinite(v); }));
     CHECK(std::any_of(out.begin(), out.end(), [](NAM_SAMPLE v) { return v != 0; }));
     ExpectNamHash(c.name, volum::test::Sha256HexSamples(out));
+    volum::test::CheckWindowsNull(c.name, out);
   }
 }
 

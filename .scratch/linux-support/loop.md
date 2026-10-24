@@ -1,0 +1,84 @@
+# linux-support
+
+## Goal
+
+Native Linux x86_64 VoLum (VST3 with editor + standalone on JACK/ALSA/Pulse) per
+`.scratch/linux-support/spec.md`. It is merged into `dev` with every Windows,
+macOS and Linux CI job green, the box gates green including the Babyface loopback,
+docs and changelog done, and the 1.4.0-beta notes drafted. The owner releases.
+
+## Predicate
+
+- `pwsh .scratch/linux-support/verify.ps1 -Final` exit 0, run from `C:\dev\VoLum-linux`. In order it checks:
+  - the HEAD is pushed and the tree is clean;
+  - every ticket in `issues/` is `resolved`;
+  - clang-format is clean;
+  - `run-tests-win.ps1` passes;
+  - the box `verify-linux.sh --final` passes: GCC + Clang ASan/UBSan doctest,
+    validator, pluginval 10, REAPER, Carla, JACK-dummy, e2e, Babyface gate, UI scenes;
+  - the ci.yml run on that exact sha is green on every job, with macOS not
+    skipped and the Linux tests/plugin/e2e/package jobs present.
+- Every new regression test or gate was shown red with its fix reverted. The
+  ticket report names it.
+- `feature/linux-support` is merged into `dev` by `merge-verified-branch.ps1`.
+- `## Verifier` shows `accepted` at the current `worktree_hash`.
+- Without `-Final`, `verify.ps1` is the milestone predicate (gates that exist so far).
+
+## Wake prompt
+
+First tool call: `pwsh NeuralAmpModeler/scripts/conductor-status.ps1 -Effort linux-support` (from C:\dev\VoLum-linux).
+Do not trust chat memory. Continue until every Predicate line passes.
+Escalate and stop on new product, new sound / golden retune, irreversible git, or a real dead end.
+
+## Standing orders (owner, 2026-10-24)
+
+- **No time limit.** The loop runs until the Predicate holds, with no owner in the
+  loop.
+- **Escalation:** a blocker goes to `reports/escalations.md` and only that ticket
+  becomes `Status: escalated`. Keep working the rest.
+- **Stop the whole loop** only for irreversible git, box disk under 50 GB, or a
+  change to Windows/macOS sound or behaviour.
+- **Pre-authorized:** the Linux-specific golden hash set (null test ≤ -100 dBFS
+  against Windows); installing packages on the box; pushing `volum/linux`
+  (guitarlum/iPlug2) and `feature/linux-*` (guitarlum/VoLum); dispatching CI;
+  milestone merges into `dev`.
+- **Never:** `main`, or touching anything of localai-platform, llama-server, Ollama
+  or docker on the box. `localai-guard.sh` gates every box job.
+- **Shared `dev` (2026-10-24):** local `dev` is 4 commits ahead of `origin/dev`
+  (scratch/agents docs: `a3b2124e`, `42bd5af4`, `d611a746`, `fb127c17`).
+  `feature/linux-support` contains them. Before the M1 merge, push `dev` as is
+  (no rewrite) so that `merge-verified-branch.ps1` sees local == origin. The
+  uncommitted `.scratch/android-shootout` edits in `C:\dev\VoLum` belong to the
+  owner: never commit, stash or revert them.
+- **Cadence:** a `/loop` wake every 30 min. A wake is a no-op while workers run.
+  Parallel workers go in one message; at most 4 builds at once (2 on the box).
+- **pstack:** the plugin's skill files left the local cache on 2026-10-24. The
+  swarm, arena and interrogate procedures used here are written out in spec.md
+  ("How the loop runs").
+
+## Verifier
+
+- hash:
+- verdict:
+
+## Children
+
+(none)
+
+## Ledger
+
+- 2026-10-24 05:10 | setup | grilled plan → spec.md, 15 tickets, verify.ps1, loop.md; worktree C:\dev\VoLum-linux on feature/linux-support (fb127c17), iPlug2 volum/linux at b98aacb44 pushed; conductor "second orchestrator" sentence replaced (pstack may drive a loop) | no
+- 2026-10-24 05:20 | dispatch | 01 box-provision worker started (local, Grok 4.7, worktree C:\dev\VoLum-linux-01, branch feature/linux-01-box); 02 cloud worker refused: Cursor GitHub app not installed (E1). 02 goes to a local box worker after 01 | no
+- 2026-10-24 05:40 | 01 resolved | worker PASS 571a6ef4; coordinator re-ran box.ps1 acceptance independently (exit 0, build1 lock, Ubuntu 26.04 gcc 15.2 / clang 21 / cmake 4.2, pluginval + reaper in tools); merged as 2670f896. 05 unblocked from 02 (disjoint iPlug2-only paths, own compile target); 02 + 05 dispatched as a 2-worker swarm (local, box) | no
+- 2026-10-24 07:15 | 05 resolved | worker PASS: superproject f1d8126c (code 532ed7aa), volum/linux 068ac6a3; CI 40061394173 green on 532ed7aa (8/8 jobs incl. macOS + Windows); report-only commit after it. Coordinator review of the iPlug2 diff: changes in existing files sit in OS_LINUX branches except a wdlendian.h float-endian guard (noted); run-loop interface is process-wide with no lock, carried into ticket 07 as required work. Merged as c1903ae1. 06 dispatched | no
+- 2026-10-24 07:25 | 02 resolved | worker PASS at d5ff0b35: GCC 1468/1468, Clang ASan+UBSan 1433/1433, Windows 1470/1470; loudest null residual vs Windows -236.2 dBFS; red proof shown. Coordinator review: Windows/macOS hash literals byte-identical (Linux pins appended as new trailing args); no tolerance widened. Considers: `ASAN_OPTIONS=alloc_dealloc_mismatch=0` on Linux only (libstdc++ stable_sort), Windows/macOS sanitizers still catch mismatches; ~13 MB of float64 null WAVs added. Merged as 7ee6a6b0; provision now installs libclang-rt-<major>-dev (4eae9031). Independent box verify + CI on 4eae9031 running. 03 + 04 dispatched (swarm, Grok 4.7) | no
+- 2026-10-24 08:00 | 02 independently verified | coordinator box run at 4eae9031: verify-linux.sh rc=0, GCC 1468/1468, Clang ASan+UBSan 1433/1433, `linux gates: MET`. (First attempt's exit 0 was the grep pipeline's; rerun captured the script's rc.) CI 40065659611 on 4eae9031: Windows, installer upgrade, NAMCore, Coverage, Formatting green; macOS pending | no
+- 2026-10-24 08:10 | 04 BLOCKED → coordinator decision D1 | CI 40067942125: ubuntu-22.04 g++-15 (PPA ~22~ppa2) differs from box g++-15 (26.04 archive) on 5 Linux pins (oktaverb x3, octaver vintage, mode switches: transcendental-heavy paths), Windows null still ≤ -100 dBFS; tone-stack perf ratio 0.506 > 0.5. D1: Linux exact hashes bind to ONE reference environment (CI ubuntu-22.04 = release build env), identified at runtime (glibc version + compiler `__VERSION__`); there they are required and CI fails if the identity drifts (`VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1`). Elsewhere (box, users) the Windows null test (≤ -100 dBFS, unchanged) is the gate and the hash check prints a skip message. Prefer jammy archive compilers over PPAs on CI (stable identity). Within the owner's pre-authorized Linux golden set; Windows/macOS untouched. Worker 04 resumed | no
+- 2026-10-24 08:30 | wake | CI 40065659611 on 4eae9031 (02 + 05 merged) fully green incl. macOS, macOS installer upgrade, macOS standalone e2e: the Linux test changes do not affect Windows/macOS. Workers 03, 04, 06 running | no
+- 2026-10-24 09:50 | 03 resolved | worker PASS at 270e50df (code 7e822cbb; later commit report-only). CI 40071813906 Windows + macOS green; box verify-linux MET (GCC 1479, Clang ASan 1444); Windows 1470. Coordinator review: VoLumPaths.h / VoLumHttpGet.cpp changes are `__linux__` additions only; curl keeps TLS verification on, http/https only, 10 redirects, timeouts mirror WinHTTP. Merged as 2788db89. Ticket 06 must list VoLumHttpGetLinux.cpp + ${CMAKE_DL_LIBS} and DROP its own 57-line VoLumPaths.h Linux block in favour of 03's. 06 review items: config.h PLUG_HAS_UI per-OS hack (CI 40071324979 broke parse_config.py packaging on Windows + macOS) must go back to the single define, with the no-editor stub inside iPlug2's Linux VST3 view; `-fpermissive` not allowed; iPlug2 edits in IGraphics.cpp / IGraphicsStructs.h / IPlugLogger.h / APP host must be Linux-only | no
+- 2026-10-24 10:55 | 06 review → sent back | worker PASS (8933ed2f, volum/linux 863f2850, CI 40075268411 green, validator 47/0). Shared iPlug2 edits are OS_LINUX-guarded except an IPlugLogger.h snprintf size fix (real bounds fix, identical output; OK). Required: merge feature/linux-support, drop the duplicate VoLumPaths.h block for 03's, list VoLumHttpGetLinux.cpp, single `PLUG_HAS_UI 1` with the no-editor stub inside iPlug2 OS_LINUX, no -fpermissive. Root cause of -fpermissive (06) and the PPA g++-15 (04): GCC 12 rejects `using LanczosResampler = LanczosResampler<...>` in AudioDSPTools ResamplingContainer.h. Coordinator fixed it at the source: AudioDSPTools volum/linux f2cfd018 (qualified `dsp::` alias, no behaviour change), pointer bump 8e96b762. Red evidence: 06's GCC 12 error log at line 89; green proof comes from 06's full g++-12 build without -fpermissive. 04 to switch the CI reference to archive g++-12 and re-pin once it finishes its current report | no
+- 2026-10-24 11:45 | D2 accepted scope expansion (04) | run 40078121038 failed only on tone-stack ratio 0.5027; 04 interrupted and sent the g++-12 switch + timing investigation. Worker found the real cause: GCC mispredicts the `if (index < 0)` ring wrap in AudioDSPTools `_ProcessFixedDegree` (Linux ~0.50 vs Windows ~0.39) and pushed AudioDSPTools volum/linux 3f28127 (branchless StepBack). Coordinator review: same index sequence for every index ≥ 0, FP ops and order unchanged → bit-identical audio on all platforms (Windows golden hashes pass locally). Accepted as an audio-thread perf fix; condition: Windows + macOS CI green with golden hashes unchanged before merge, and the ticket reports Windows/macOS ratios before/after | no
+- 2026-10-24 12:15 | 06 resolved | after review fixes: fb8aa608 (iPlug2 volum/linux 8eb3b8968, AudioDSPTools f2cfd018). Coordinator checks: config.h and VoLumPaths.h identical to feature/linux-support; no -fpermissive anywhere; editor stub behind IPLUG_LINUX_EDITOR_STUB in IPlugVST3.cpp/_View.h (07 deletes it); CI 40080542838 green on exactly fb8aa608; validator 47/0; Ubuntu 22.04 g++-12 build clean (green proof of the AudioDSPTools alias fix); NEEDED has no jack/pulse/stdc++/curl. Merged as 3c59f06c. 07 arena dispatched: (a) Xlib+GLX → Opus 5.5 on feature/linux-07a-xlib + iPlug2 volum/linux-07a; (b) pugl → Grok 4.7 on feature/linux-07b-pugl + iPlug2 volum/linux-07b. Rubric = ticket 07's six criteria, written before spawning; judges Opus + Grok cross-family | no
+- 2026-10-24 14:10 | 07b first report: ISSUES | Release gates pass (validator 47/0, pluginval 10, REAPER 2×20), real screenshots; adapter 938 LOC + vendored pugl 5754. Sanitizer plugin aborted in shared iPlug2 `NChanDelayLine::ClearBuffer`: `memset(nullptr, 0, 0)` at zero latency (UB on every platform; ProcessBlock is already guarded by `mLatency`). Coordinator fix: iPlug2 volum/linux 56a660461 (size check), pointer e5a194ac. Regression gate = the sanitizer host smoke (07/08 acceptance); red proof = 07b's UBSan abort log; a doctest would need `iPlug2/IPlug` on the test include path. 07b resumed to merge and rerun the sanitizer REAPER smoke; 07a will need the same merge | no
+- 2026-10-24 14:25 | 04 resolved | worker PASS at 372e7ced (code a17f9a98; later commits report-only). CI 40085419768 attempts 1 and 2 green on every job incl. `Linux tests` (attempt 3 cancelled by a re-run). Reference = archive g++-12, identity `glibc 2.35 | 12.3.0`, sanitizer on archive clang-15; no PPA or apt.llvm.org. gcc-12 reproduced every existing Linux pin, so the 5 earlier diffs came from glibc libm (2.35 vs 2.43), not the compiler. Proofs: skip path exit 0 (null still checked, compressor -315.57 dBFS), required path exit 1, forced identity exit 1 on Oktaverb halo. D2 condition met, ratios taken by the coordinator from the CI logs: Windows 0.418 → 0.350 (fixed kernel 0.872 → 0.731 us), macOS arm64 0.541 → 0.535 (unchanged; the ≤ 0.5 check is x86-64 only, arm64 prints), Linux g++-12 ≈ 0.27 across 3 attempts. Merged as f59ca90b. M1 next: full CI on the merged head, push local dev, then merge-verified-branch.ps1 | no
+- 2026-10-24 14:45 | box orphan | 07b's box.ps1 job (local task 174637) exited -1 after 32 min waiting for a build lock, but its remote `bash -s` survived, took the lock and started `cmake --build build-linux` next to the worker's retry in the same dir. Coordinator stopped the orphan (pids 168718/159682 only); the retry ended at the same time. Follow-up for 08: box.ps1 must tie the remote job to the SSH session (e.g. `ssh -tt` or a remote pid file + kill on reconnect) so a dead client cannot leave a builder behind | no
