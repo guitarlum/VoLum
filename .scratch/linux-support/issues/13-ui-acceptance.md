@@ -25,6 +25,14 @@ May write:
 - Fix the defects, then commit the Linux reference set and make `ui-scenes.sh`
   a regression gate against it.
 
+## Carried from ticket 07 (coordinator, 2026-10-24)
+
+- **Unhandled keys reach the host:** 07 forwards keys VoLum ignores to the
+  parent window with `XSendEvent`, but headless REAPER never starts playback,
+  so the forwarded space bar was never observed. Prove it in a host that
+  reacts to a forwarded key under Xvfb (Carla, or the standalone with a test
+  hook), and show it fails with forwarding removed.
+
 ## Acceptance
 
 - Every scene is under the threshold, and the cold reviewer's verdict is
