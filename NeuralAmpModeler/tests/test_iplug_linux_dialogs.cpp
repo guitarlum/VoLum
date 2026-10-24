@@ -125,8 +125,10 @@ struct DialogEnv
     iplug::igraphics::linux_dialogs::CancelOwner(this);
     if (loop)
     {
-      for (int i = 0; i < 5; ++i)
-        loop->RunOnce(10);
+      // Reap timers are 100 ms. Drain them before the loop is popped, or the
+      // next test sees a leftover binding on the process-wide registry.
+      for (int i = 0; i < 8; ++i)
+        loop->RunOnce(30);
       IPlugLinuxRemoveRunLoop(loop);
       delete loop;
     }
@@ -452,7 +454,7 @@ TEST_CASE("Linux clipboard wait is capped at 100 ms")
 
   char displayName[16] = {};
   pid_t xvfb = -1;
-  for (int n = 61; n < 80 && xvfb < 0; ++n)
+  for (int n = 61; n < 64 && xvfb < 0; ++n)
   {
     std::snprintf(displayName, sizeof(displayName), ":%d", n);
     const std::string socket = std::string("/tmp/.X11-unix/X") + std::to_string(n);
