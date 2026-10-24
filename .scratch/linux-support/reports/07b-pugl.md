@@ -1,10 +1,10 @@
 # 07b pugl editor
 
-Status: issues. Release validator and pluginval pass on the merge. The sanitizer REAPER smoke now opens the editor and stops in shared NanoVG `stb_image`, outside the adapter and pugl.
+Status: pass. Release validator, pluginval, and the sanitizer REAPER smoke pass. The one allowed UBSan suppression is `shift-base:stb_image.h`. Nothing in `NChanDelay.h` is suppressed.
 
 ## Heads
 
-- Superproject `feature/linux-07b-pugl`: `ea161dc28b62988921a1ddedc131110976b5cbeb`.
+- Superproject `feature/linux-07b-pugl` plug-in code: `ea161dc28b62988921a1ddedc131110976b5cbeb`. The later commit adds `ubsan.supp` and this gate note only.
 - iPlug2 `volum/linux-07b`: `9362b06b212f4e2102af9d83aa78ee45c728fc44` (`--no-ff` merge of `volum/linux` `56a660461`). Not `volum/linux-07a`.
 - CI on that head: [run 40094896390](https://github.com/guitarlum/VoLum/actions/runs/40094896390).
 - Earlier [run 40089826109](https://github.com/guitarlum/VoLum/actions/runs/40089826109) on `4f68b34e`: Windows succeeded. macOS was cancelled (concurrency `cancel-in-progress` when the next dispatch on this ref started). That run's Windows job had already finished green.
@@ -26,12 +26,16 @@ Release build on the box at `ea161dc2`, Xvfb `1920x1080x24`.
 | Steinberg validator | `Result: 47 tests passed, 0 tests failed` (`validator_exit:0`) |
 | pluginval 10 in-process | `SUCCESS` (`pluginval_exit:0`). No `IPlugLinux X error`. |
 | REAPER release, 2×20 | `PASS` on the pre-merge editor. No `IPlugLinux X error`. |
-| REAPER `VOLUM_SANITIZE`, 2×20 | Stopped. UBSan in shared `stb_image.h:1578`. No `IPlugLinux X error`. No AddressSanitizer report. |
+| REAPER `VOLUM_SANITIZE`, 2×20 | `PASS`. X errors 0. Off-thread log lines 0. Sanitizer reports after suppression 0. |
 | Windows CI `40089826109` | success |
 | macOS CI `40089826109` | cancelled (concurrency) |
 | Windows + macOS CI `40094896390` | success on `ea161dc2` (Windows, macOS, both installer upgrades, macOS standalone e2e) |
 
-`VOLUM_SANITIZE=ON` rebuilt `build-linux-asan/VoLum.vst3` after the `NChanDelay` merge. REAPER found the plug-in and opened an editor. UBSan then aborted. The hit is `(-1 << magbits)` in vendored NanoVG, reached from layout bitmap load. It is not in `IGraphicsLinux` and not in pugl. Not patched here.
+`VOLUM_SANITIZE=ON` rebuilt `build-linux-asan/VoLum.vst3` after the `NChanDelay` merge. The first sanitizer open aborted in vendored NanoVG (`stb_image.h:1578`, `(-1 << magbits)`), reached from layout bitmap load. That file is shared with candidate 07a and was not patched. The rerun passes `UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=.scratch/linux-support/arena-07/b/ubsan.supp`. The suppression file is one line, `shift-base:stb_image.h`. `NChanDelay.h` is not suppressed; the log has no `NChanDelay` line. This harness has no sanitizer pluginval run.
+
+Rerun on `a6b5afec` (same plug-in sources as `ea161dc2`): two instances, 20 open/close cycles each, then `PASS`. X errors: 0. Off-thread (`off the UI thread`): 0. Sanitizer reports (`runtime error:` / `ERROR: AddressSanitizer`): 0. No non-`stb_image.h` frame.
+
+First run, before the suppression (not patched):
 
 ```
 runtime error: left shift of negative value -1
@@ -49,8 +53,6 @@ runtime error: left shift of negative value -1
 #11 IPlugVST3View::attached
 #12 REAPER
 ```
-
-Smoke progress before the abort: `STEP fx VST3: VoLum (Lum)` then `STEP inserted 2`. No `PASS` line.
 
 Screenshots of the real UI: `reports/07b-scale1.png` (900x600) and `reports/07b-scale2.png` (1800x1200), via `setContentScaleFactor`. `import` was already installed. No extra apt packages.
 
