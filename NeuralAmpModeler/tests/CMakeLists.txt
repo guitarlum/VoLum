@@ -159,6 +159,15 @@ if(APPLE)
   set_source_files_properties(test_volum_http_get_mac.mm "${PROJECT_DIR}/VoLumHttpGet.mm"
     PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   target_link_libraries(NeuralAmpModeler-Tests PRIVATE "-framework CoreFoundation" "-framework Foundation" "-framework Accelerate")
+else()
+  # Windows links VoLumHttpGet.cpp from the vcxproj. On Linux the same file
+  # returns false (the real client is a later ticket). Mac uses the .mm above.
+  target_sources(NeuralAmpModeler-Tests PRIVATE "${PROJECT_DIR}/VoLumHttpGet.cpp")
+endif()
+
+if(UNIX AND NOT APPLE)
+  find_package(Threads REQUIRED)
+  target_link_libraries(NeuralAmpModeler-Tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 endif()
 
 if(VOLUM_ENABLE_SANITIZERS)

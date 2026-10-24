@@ -194,11 +194,45 @@ std::vector<DSP_SAMPLE> RenderModeSwitches(bool reference = false)
 // the tracker-driven cases (Octaver, INSTANT, DROP) after the high-note tracker fix moved them.
 // macOS contracts `r += a * b` into fused multiply-adds, so its bits differ; it prints its value
 // instead until one is pinned from a CI run.
+// GCC Release contracts multiply-adds, so Linux does not share the MSVC pin.
+// Empty until a box run fills it. macOS still only prints.
+const char* LinuxPinnedHash(const std::string& name)
+{
+  struct Pin
+  {
+    const char* name;
+    const char* hash;
+  };
+  static const Pin pins[] = {
+    {"octaver modern 48k/64", ""},
+    {"octaver vintage 48k/333", ""},
+    {"transpose instant -5 48k/64", ""},
+    {"transpose instant +7 48k/64", ""},
+    {"transpose drop -12 48k/128", ""},
+    {"transpose drop +7 48k/128", ""},
+    {"transpose poly -12 48k/64", ""},
+    {"transpose poly +7 48k/64", ""},
+    {"octaver modern 44.1k/96", ""},
+    {"transpose instant -7 96k/256", ""},
+    {"mode switches", ""},
+  };
+  for (const Pin& p : pins)
+    if (name == p.name)
+      return p.hash;
+  return nullptr;
+}
+
 void ExpectEngineHash(const std::string& name, const std::string& actual, const char* windowsExpected)
 {
 #if defined(_WIN32)
   INFO(name << " actual=" << actual);
   CHECK(actual == std::string(windowsExpected));
+#elif defined(__linux__)
+  (void)windowsExpected;
+  INFO(name << " actual=" << actual);
+  const char* expected = LinuxPinnedHash(name);
+  REQUIRE(expected != nullptr);
+  CHECK(actual == std::string(expected));
 #else
   (void)windowsExpected;
   MESSAGE(name << " hash (not pinned on this platform): " << actual);

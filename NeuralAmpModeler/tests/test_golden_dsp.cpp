@@ -27,24 +27,36 @@ bool RunningWithAddressSanitizer()
 #endif
 }
 
-const char* PlatformExpected(const char* windowsExpected, const char* macExpected, const char* macSanitizedExpected)
+// linuxExpected / linuxSanitizedExpected are appended so the Windows and macOS
+// literals at existing call sites stay byte-identical. The sanitizer run
+// excludes "Golden *", so linuxSanitizedExpected stays unused for these cases.
+const char* PlatformExpected(const char* windowsExpected, const char* macExpected, const char* macSanitizedExpected,
+                             const char* linuxExpected = nullptr, const char* linuxSanitizedExpected = nullptr)
 {
-#if defined(__APPLE__)
+#if defined(__linux__)
+  if (RunningWithAddressSanitizer() && linuxSanitizedExpected != nullptr)
+    return linuxSanitizedExpected;
+  return linuxExpected;
+#elif defined(__APPLE__)
   if (RunningWithAddressSanitizer() && macSanitizedExpected != nullptr)
     return macSanitizedExpected;
   return macExpected;
 #else
+  (void)linuxExpected;
+  (void)linuxSanitizedExpected;
   return windowsExpected;
 #endif
 }
 
 void ExpectGoldenHash(const char* name, const std::string& actual, const char* windowsExpected, const char* macExpected,
-                      const char* macSanitizedExpected = nullptr)
+                      const char* macSanitizedExpected = nullptr, const char* linuxExpected = nullptr,
+                      const char* linuxSanitizedExpected = nullptr)
 {
   // std::string, not the raw pointer: doctest stringifies a const char* as its address,
   // which made the failure log useless for reading a new hash off a CI run.
   INFO(std::string(name) << " actual=" << actual);
-  const char* expected = PlatformExpected(windowsExpected, macExpected, macSanitizedExpected);
+  const char* expected =
+    PlatformExpected(windowsExpected, macExpected, macSanitizedExpected, linuxExpected, linuxSanitizedExpected);
   REQUIRE(expected != nullptr);
   CHECK(actual == std::string(expected));
 }

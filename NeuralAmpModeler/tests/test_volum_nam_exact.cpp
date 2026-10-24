@@ -231,11 +231,45 @@ const char* PinnedHash(const std::string& name)
   return "";
 }
 
+// GCC Release contracts multiply-adds, so Linux does not share the MSVC pin.
+// Filled from a box run. Empty until then, which fails the check and prints
+// the actual hash. macOS still only prints.
+const char* LinuxPinnedHash(const std::string& name)
+{
+  struct Pin
+  {
+    const char* name;
+    const char* hash;
+  };
+  static const Pin pins[] = {
+    {"Soldano amp FULL 48k/64", ""},
+    {"Soldano amp LITE 48k/64", ""},
+    {"Myth PRE FULL 48k/64", ""},
+    {"Myth PRE LITE 48k/64", ""},
+    {"Soldano amp FULL 48k/512", ""},
+    {"Soldano amp LITE 48k/512", ""},
+    {"Soldano amp FULL 48k/2048", ""},
+    {"Soldano amp LITE 48k/2048", ""},
+    {"Soldano amp FULL 48k/400 varied", ""},
+    {"Soldano amp LITE 48k/400 varied", ""},
+    {"Myth PRE FULL 48k/400 varied", ""},
+  };
+  for (const Pin& p : pins)
+    if (name == p.name)
+      return p.hash;
+  return nullptr;
+}
+
 void ExpectNamHash(const std::string& name, const std::string& actual)
 {
 #if defined(_WIN32)
   INFO(name << " actual=" << actual);
   CHECK(actual == std::string(PinnedHash(name)));
+#elif defined(__linux__)
+  INFO(name << " actual=" << actual);
+  const char* expected = LinuxPinnedHash(name);
+  REQUIRE(expected != nullptr);
+  CHECK(actual == std::string(expected));
 #else
   MESSAGE(name << " hash (not pinned on this platform): " << actual);
 #endif
