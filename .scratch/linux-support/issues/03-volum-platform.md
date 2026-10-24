@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02
 
 # 03 VoLum platform code for Linux

@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: 01
 
 # 02 Doctest suite on Linux

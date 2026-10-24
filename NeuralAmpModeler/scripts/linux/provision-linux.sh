@@ -237,6 +237,14 @@ need_cmd gcc
 need_cmd g++
 need_cmd clang
 need_cmd ld.lld
+
+# Clang 18+ ships the ASan/UBSan runtimes as libclang-rt-<major>-dev; older
+# releases bundle them with clang itself, so the package may not exist.
+clang_major=$(clang -dumpversion | cut -d. -f1)
+if apt-cache show "libclang-rt-$clang_major-dev" >/dev/null 2>&1 && ! have_pkg "libclang-rt-$clang_major-dev"; then
+  log "apt install libclang-rt-$clang_major-dev"
+  apt_retry run_apt install -y --no-install-recommends "libclang-rt-$clang_major-dev"
+fi
 need_cmd cmake
 need_cmd ninja
 need_cmd pkg-config

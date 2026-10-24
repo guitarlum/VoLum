@@ -71,6 +71,11 @@ macOS golden hash sets must not change.
   peak, unless an escalation sets otherwise).
   - `test_golden_dsp.cpp` `PlatformExpected` gains a Linux branch.
   - Never edit the Windows or macOS sets.
+  - The Linux set binds to one reference environment: the CI `Linux tests`
+    job on ubuntu-22.04, identified by glibc version plus compiler `__VERSION__`.
+    It is required there, and CI fails if that identity drifts. Everywhere else
+    (box, users) the null test is the gate. Bits differ between libm and
+    compiler builds even at the same GCC version (decision D1, ticket 04).
 - **Package:** `VoLum-<version>-linux-x86_64.tar.gz` containing `VoLum.vst3/`,
   `VoLum` (standalone), `VoLumRigs/`, `install.sh`, `LICENSE`,
   `THIRD_PARTY_LICENSES.md`.
@@ -124,15 +129,14 @@ macOS golden hash sets must not change.
     (no `speed_matrix`, `bench/run`, `fetch_models`, `build_llama` or pytest
     processes, and `llama-server` under 10% of a core over 5 s).
     - If it fails, the job exits 3 (`BOX_BUSY_LOCALAI`). The ticket defers box
-      work and continues with cloud and CI.
+      work and continues with CI.
     - Never stop, kill or reconfigure anything of `~/localai-platform`,
       `llama-server`, Ollama or docker.
   - PowerShell to ssh traps: pipe scripts to `bash -s` with CRs stripped and a
     sacrificial trailing `#` line. Never inline `$` in a double-quoted ssh
     argument. Upload files with `scp` of LF-only content.
-- **Cloud agents** (Cursor, Linux VMs): build-only work, arena candidates, and
-  CI-like Xvfb gates. They clone `guitarlum/VoLum` with submodules; the fork
-  branch `volum/linux` is on GitHub.
+- **Cloud agents:** not used. The owner declined them (E1, closed). All workers
+  are local Cursor subagents. Arena candidates share the box's two build locks.
 - **Local WSL:** optional and no sudo. Doctest only if its deps are already there.
 - **Laptop:** Windows tests (`run-tests-win.ps1`), `ci-watch.ps1`, merges,
   coordinator.

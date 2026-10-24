@@ -12,3 +12,6 @@ your repository."
   (`scripts/linux/box.ps1`, 2 build locks) and GitHub Actions.
   - The ticket 07 arena runs both candidates on the box, one per build lock.
 - Nothing is blocked; the loop is only slower.
+- **Closed 2026-10-24 10:35:** the owner declined. Workers stay local (the laptop,
+  plus builds on the box and in GitHub Actions) for the whole effort. Do not
+  dispatch cloud agents or ask again.

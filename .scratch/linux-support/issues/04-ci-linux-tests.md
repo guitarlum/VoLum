@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02
 
 # 04 Linux doctest CI job
