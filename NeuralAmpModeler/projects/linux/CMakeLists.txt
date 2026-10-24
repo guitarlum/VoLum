@@ -39,6 +39,14 @@ if(NOT EXISTS "${VST3_SDK}/public.sdk/source/main/linuxmain.cpp")
 endif()
 
 option(VOLUM_BUILD_VALIDATOR "Build the Steinberg VST3 validator from the vendored SDK" ON)
+# ASan + UBSan for every target. With GCC the plug-in links libasan.so, so a
+# host that is not sanitized itself (REAPER, pluginval) needs
+# LD_PRELOAD="$(gcc -print-file-name=libasan.so)".
+option(VOLUM_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+if(VOLUM_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+  add_link_options(-fsanitize=address,undefined)
+endif()
 
 set(VOLUM_DSP_SOURCES
   "${VOLUM_ROOT}/AudioDSPTools/dsp/dsp.cpp"
@@ -75,6 +83,7 @@ set(VOLUM_GFX_SOURCES
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinux.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxFont.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxGL.cpp"
+  "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxKeys.cpp"
   "${IPLUG}/IPlug/IPlugAPIBase.cpp"
   "${IPLUG}/IPlug/IPlugParameter.cpp"
   "${IPLUG}/IPlug/IPlugPluginBase.cpp"
@@ -207,7 +216,7 @@ add_library(VoLum-vst3 SHARED
 )
 volum_includes(VoLum-vst3)
 volum_common_defs(VoLum-vst3)
-target_compile_definitions(VoLum-vst3 PRIVATE VST3_API IPLUG_LINUX_EDITOR_STUB)
+target_compile_definitions(VoLum-vst3 PRIVATE VST3_API)
 set_target_properties(VoLum-vst3 PROPERTIES
   PREFIX ""
   OUTPUT_NAME "VoLum"
