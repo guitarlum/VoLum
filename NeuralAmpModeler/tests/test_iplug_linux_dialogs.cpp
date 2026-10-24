@@ -445,51 +445,98 @@ TEST_CASE("Linux OpenURL spawns xdg-open without a shell")
   CHECK(seen);
 }
 
-TEST_CASE("Linux clipboard wait is capped at 100 ms")
+TEST_CASE("Linux clipboard no-owner wait is one kWaitMs")
 {
   CHECK(kWaitMs == 100);
   #ifdef VOLUM_TEST_SANITIZERS
+  MESSAGE("sanitizer build skips the live clipboard wait; the GCC job times it");
   return;
   #endif
 
-  char displayName[16] = {};
+  // The GCC run sets this and starts the display with xvfb-run. A missing
+  // display is then a failure. Without the variable, a machine that cannot
+  // open X prints a skip instead of passing quietly.
+  const char* requireEnv = std::getenv("VOLUM_REQUIRE_X");
+  const bool requireX = requireEnv && requireEnv[0] && !(requireEnv[0] == '0' && requireEnv[1] == '\0');
+
+  XSetErrorHandler([](Display*, XErrorEvent*) { return 0; });
+
+  char displayName[80] = {};
   pid_t xvfb = -1;
-  for (int n = 61; n < 64 && xvfb < 0; ++n)
+  if (const char* existing = std::getenv("DISPLAY"))
   {
-    std::snprintf(displayName, sizeof(displayName), ":%d", n);
-    const std::string socket = std::string("/tmp/.X11-unix/X") + std::to_string(n);
-    if (std::filesystem::exists(socket))
-      continue;
-    xvfb = fork();
-    if (xvfb == 0)
+    if (existing[0])
+      std::snprintf(displayName, sizeof(displayName), "%s", existing);
+  }
+
+  Display* owner = nullptr;
+  Display* reader = nullptr;
+  auto tryOpen = [&]() {
+    owner = nullptr;
+    reader = nullptr;
+    if (!displayName[0])
+      return;
+    owner = XOpenDisplay(displayName);
+    reader = owner ? XOpenDisplay(displayName) : nullptr;
+    if (owner && !reader)
     {
-      execlp(
-        "Xvfb", "Xvfb", displayName, "-screen", "0", "640x480x24", "-nolisten", "tcp", static_cast<char*>(nullptr));
-      _exit(127);
+      XCloseDisplay(owner);
+      owner = nullptr;
     }
-    if (xvfb < 0)
-      break;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (!std::filesystem::exists(socket) && std::chrono::steady_clock::now() < deadline)
-      usleep(20000);
-    if (!std::filesystem::exists(socket))
+  };
+  tryOpen();
+
+  // Starting Xvfb here is only the local fallback. The required run must use
+  // the display the job provided: a private server would hide a missing one,
+  // and on this box a raw Xvfb cannot create a socket.
+  if (!owner && !requireX)
+  {
+    displayName[0] = '\0';
+    for (int n = 61; n < 64 && xvfb < 0; ++n)
+    {
+      std::snprintf(displayName, sizeof(displayName), ":%d", n);
+      const std::string socket = std::string("/tmp/.X11-unix/X") + std::to_string(n);
+      if (std::filesystem::exists(socket))
+      {
+        displayName[0] = '\0';
+        continue;
+      }
+      xvfb = fork();
+      if (xvfb == 0)
+      {
+        execlp(
+          "Xvfb", "Xvfb", displayName, "-screen", "0", "640x480x24", "-nolisten", "tcp", static_cast<char*>(nullptr));
+        _exit(127);
+      }
+      if (xvfb < 0)
+        break;
+      const auto ready = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+      while (!std::filesystem::exists(socket) && std::chrono::steady_clock::now() < ready)
+        usleep(20000);
+      if (!std::filesystem::exists(socket))
+      {
+        kill(xvfb, SIGTERM);
+        waitpid(xvfb, nullptr, 0);
+        xvfb = -1;
+        displayName[0] = '\0';
+      }
+    }
+    if (xvfb >= 0)
+      tryOpen();
+  }
+
+  if (!owner || !reader)
+  {
+    if (xvfb > 0)
     {
       kill(xvfb, SIGTERM);
       waitpid(xvfb, nullptr, 0);
-      xvfb = -1;
     }
-  }
-  if (xvfb < 0)
-  {
-    MESSAGE("Xvfb did not start; the 100 ms wait was not timed");
+    if (requireX)
+      FAIL("VOLUM_REQUIRE_X=1 and no X display; the clipboard wait was not measured");
+    MESSAGE("no X display; the clipboard wait was not timed");
     return;
   }
-
-  XSetErrorHandler([](Display*, XErrorEvent*) { return 0; });
-  Display* owner = XOpenDisplay(displayName);
-  Display* reader = XOpenDisplay(displayName);
-  REQUIRE(owner);
-  REQUIRE(reader);
   const int screen = DefaultScreen(owner);
   const Window ownerWindow = XCreateSimpleWindow(owner, RootWindow(owner, screen), 0, 0, 8, 8, 0, 0, 0);
   const Window readerWindow =
@@ -505,8 +552,21 @@ TEST_CASE("Linux clipboard wait is capped at 100 ms")
   const auto elapsed =
     std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
   CHECK_FALSE(got);
-  CHECK(elapsed >= 50);
-  CHECK(elapsed < 250);
+  // duration_cast truncates, and the deadline is checked again after poll, so a
+  // real wait can land a few milliseconds under kWaitMs. The box one-off under
+  // xvfb-run measured 99 ms for kWaitMs 100.
+  constexpr int kEarlyMs = 10;
+  // poll() can return after its timeout. This slack is one wakeup, not a second
+  // wait: 2 * kWaitMs is 200, and 200 is not < kWaitMs + 50. The 99 ms sample
+  // sits 49 ms under that ceiling.
+  constexpr int kLateMs = 50;
+  CHECK(elapsed >= kWaitMs - kEarlyMs);
+  CHECK(elapsed < kWaitMs + kLateMs);
+  std::printf(
+    "clipboard no-owner wait measured %lld ms (lower %d, upper %d)\n", static_cast<long long>(elapsed),
+    kWaitMs - kEarlyMs, kWaitMs + kLateMs);
+  std::fflush(stdout);
+  MESSAGE("clipboard no-owner wait measured " << elapsed << " ms");
 
   CHECK(SetText(reinterpret_cast<_XDisplay*>(reader), readerWindow, "hello café"));
   std::string back;
@@ -519,8 +579,11 @@ TEST_CASE("Linux clipboard wait is capped at 100 ms")
 
   XCloseDisplay(reader);
   XCloseDisplay(owner);
-  kill(xvfb, SIGTERM);
-  waitpid(xvfb, nullptr, 0);
+  if (xvfb > 0)
+  {
+    kill(xvfb, SIGTERM);
+    waitpid(xvfb, nullptr, 0);
+  }
 }
 
 #endif

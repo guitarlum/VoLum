@@ -218,14 +218,21 @@ PY
 )"
   "$BIN" --test-case-exclude="$EXCLUDE"
 else
+  if ! command -v xvfb-run >/dev/null 2>&1; then
+    echo "xvfb-run is required so the clipboard wait is measured" >&2
+    exit 1
+  fi
+  # Private X server for the clipboard doctest. VOLUM_REQUIRE_X makes a missing
+  # display a failure. The sanitizer run does not set it and skips that wait.
+  export VOLUM_REQUIRE_X=1
   set +e
-  "$BIN" --duration=true
+  xvfb-run -a -s "-screen 0 640x480x24" "$BIN" --duration=true
   rc=$?
   set -e
   if [[ "$rc" -ne 0 ]]; then
     if [[ "$rc" -gt 128 ]] && command -v gdb >/dev/null 2>&1; then
       echo "=== tests exited $rc; re-running under gdb for a backtrace ==="
-      gdb -batch -ex run -ex bt -ex "quit 1" --args "$BIN" --duration=true || true
+      xvfb-run -a -s "-screen 0 640x480x24" gdb -batch -ex run -ex bt -ex "quit 1" --args "$BIN" --duration=true || true
     fi
     exit "$rc"
   fi
