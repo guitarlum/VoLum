@@ -209,12 +209,14 @@ TEST_CASE("Golden DSP: PRE effects and tone stack hashes stay stable")
   const auto preEq = RunPreEqGolden();
   ExpectGoldenHash("pre-eq", volum::test::Sha256HexSamples(preEq),
                    "72697ba01950cdb27df11230f3f213c5d59db2dc96ef0e51b0b24bca96509f2b",
-                   "986fec4c92c2af9645e6e7402ccc5321e12fd083c1d5d813253b93248e98aba5");
+                   "986fec4c92c2af9645e6e7402ccc5321e12fd083c1d5d813253b93248e98aba5", nullptr,
+                   "6c161e75690a524c91e27b92d4e8406b0c204f3e57d6c1885695f41ae5d87c5c");
   volum::test::CheckWindowsNull("pre-eq", preEq);
   const auto toneStack = RunToneStackGolden();
   ExpectGoldenHash("tone-stack", volum::test::Sha256HexSamples(toneStack),
                    "7781f751a998773bec158e1d46361551ba63b0df09f319e59697ddd6185c605e",
-                   "81ef87af81dac5d6a5cf146cb233d0ac72248addf3bce8dd4721b0a00a865518");
+                   "81ef87af81dac5d6a5cf146cb233d0ac72248addf3bce8dd4721b0a00a865518", nullptr,
+                   "a94f1473cbadca8a8d06d2280eb02573a1678debe9ff4dbd6e80912b31aa835f");
   volum::test::CheckWindowsNull("tone-stack", toneStack);
 }
 
@@ -232,12 +234,14 @@ TEST_CASE("Golden DSP: delay mode hashes stay stable")
   const auto analog = RunDelayGolden(dsp::effect::Delay::kModeAnalog);
   ExpectGoldenHash("delay-analog", volum::test::Sha256Hex(analog),
                    "ac3e9d18fadb531d8bf0aa66c498cf8d1d180dea650f4809c43a773afca99ac9",
-                   "e2eb6d2b6326fb4232145e1fafae7aec4af1529217b07a407d25745943167bec");
+                   "e2eb6d2b6326fb4232145e1fafae7aec4af1529217b07a407d25745943167bec", nullptr,
+                   "038cb0c90cba84ca05c900919f4a4351dcf670ba8c83c1aea7f0bf2dfa3768a7");
   volum::test::CheckWindowsNull("delay-analog", analog);
   const auto reverse = RunDelayGolden(dsp::effect::Delay::kModeReverse);
   ExpectGoldenHash("delay-reverse", volum::test::Sha256Hex(reverse),
                    "5c402e0eb76693ebd5157a9f39669f26d3f97b9fd1fa6f0d5edca68ed97e6ae4",
-                   "6e1a4b3544b681fb2dddd1a0e55b0ce1a44e7637e862cc10530ddc25eb9c0a02");
+                   "6e1a4b3544b681fb2dddd1a0e55b0ce1a44e7637e862cc10530ddc25eb9c0a02", nullptr,
+                   "f38beabe2062622cdcd850fbfd2d70254e75eadddd14c45f095dd47037507e9c");
   volum::test::CheckWindowsNull("delay-reverse", reverse);
 }
 
@@ -254,7 +258,8 @@ TEST_CASE("Golden DSP: ping-pong with the same input on both sides stays stable"
   const auto analog = RunDelayGolden(dsp::effect::Delay::kModeAnalog, true);
   ExpectGoldenHash("delay-analog-same-lr", volum::test::Sha256Hex(analog),
                    "fe11f80414720180f957516e95cb22ed578aca9ae8b726194638ab9bcd408def",
-                   "494af847639a264c8d65ef38d9071bc8ba8e66e2817fbef49ad2b4bd80360548");
+                   "494af847639a264c8d65ef38d9071bc8ba8e66e2817fbef49ad2b4bd80360548", nullptr,
+                   "8a187987c4c1b6a0653375142899c391fa8c88df1f772c1d106bfc4e64d1ad80");
   volum::test::CheckWindowsNull("delay-analog-same-lr", analog);
 }
 
@@ -277,21 +282,25 @@ TEST_CASE("Golden DSP: reverb and Oktaverb mode hashes stay stable")
   const auto plate = RunReverbGolden(dsp::effect::Reverb::kModePlate, 0);
   ExpectGoldenHash("reverb-plate", volum::test::Sha256Hex(plate),
                    "36bb5435950bd077ef61f2fa4a563485490caf0384e90ef328b96f9ecb8b0c8c",
-                   "a4805485fccd8a767fbc8f6ddc87484d008f572a0d1e4311bc446722bb41425b");
+                   "a4805485fccd8a767fbc8f6ddc87484d008f572a0d1e4311bc446722bb41425b", nullptr,
+                   "0e6f453961758a3526fbdc12efaabbb34ce693a1068c55cc5fd1c41aca2c725d");
   volum::test::CheckWindowsNull("reverb-plate", plate);
   const auto halo = RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 0);
   ExpectGoldenHash("oktaverb-halo", volum::test::Sha256Hex(halo),
                    "8c7271c2c52d50c11cfb359ffa77e2c539cf5431c0239fe78451763a4041f434",
-                   "6165bcba62f985a34a94f1be51f8dbd135a9a68c479b48fe40ca79f5d7112a02");
+                   "6165bcba62f985a34a94f1be51f8dbd135a9a68c479b48fe40ca79f5d7112a02", nullptr,
+                   "1daf2177d39c99feebef9eb7229c8b340c2fe55647874a2fe647d4d6bcfdd444");
   volum::test::CheckWindowsNull("oktaverb-halo", halo);
   const auto shimmer = RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 1);
   ExpectGoldenHash("oktaverb-shimmer", volum::test::Sha256Hex(shimmer),
                    "3403ec0e51ca3dc37eb94cd14a1847b8135a1925cc83ab695dfa78498d775c86",
-                   "0b77bfc150d7d07009b79f96e8d8999e50645320eb02b23af0c2ed773de89339");
+                   "0b77bfc150d7d07009b79f96e8d8999e50645320eb02b23af0c2ed773de89339", nullptr,
+                   "ad15f8ba5903d4f24850cf67d25c91dc39e18d4fed24a4f7a1c2c1d5e1ec5c0a");
   volum::test::CheckWindowsNull("oktaverb-shimmer", shimmer);
   const auto bloom = RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 2);
   ExpectGoldenHash("oktaverb-bloom", volum::test::Sha256Hex(bloom),
                    "bb97b2c1331309464e2d18f4d75ee81bf374ffbe99a6346bb6b6bf9e561d678e",
-                   "91e46693fc1341469e3c429d149a26c491e746f4d371dfa1e9dbafe152807fc2");
+                   "91e46693fc1341469e3c429d149a26c491e746f4d371dfa1e9dbafe152807fc2", nullptr,
+                   "d91f61f60ebf77fa633df8dc8d8b97a98bcff44db4a6d08929c3a4765de23cf3");
   volum::test::CheckWindowsNull("oktaverb-bloom", bloom);
 }

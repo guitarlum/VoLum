@@ -179,7 +179,7 @@ void CheckWindowsNull(const char* name, const std::vector<Sample>& samples)
   const std::vector<double> reference = ReadFloat64Wav(path);
   REQUIRE(reference.size() == samples.size());
   const double db = PeakResidualDb(reinterpret_cast<const double*>(samples.data()), reference.data(), samples.size());
-  INFO(std::string(name) << " peak residual dBFS=" << db);
+  MESSAGE(std::string(name) << " peak residual dBFS=" << db);
 #if defined(_WIN32)
   CHECK(db == -std::numeric_limits<double>::infinity());
 #else
