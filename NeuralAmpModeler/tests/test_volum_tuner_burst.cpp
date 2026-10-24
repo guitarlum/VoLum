@@ -39,6 +39,11 @@ constexpr float kSampleRate = 48000.f;
 constexpr double kPi = 3.14159265358979323846;
 
 // The 1.3.0 difference loop, kept verbatim as the reference.
+// GCC -O3 vectorizes this loop, which makes the SIMD/scalar ratio meaningless.
+// The attribute is GCC-only; MSVC and the measured product kernel are unchanged.
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("no-tree-vectorize")))
+#endif
 void ReferenceDifference(const float* x, float* d)
 {
   d[0] = 0.f;
