@@ -1,6 +1,6 @@
 # 04 Linux doctest CI
 
-Status: pass under D1. Ticket not marked resolved.
+Status: pass under D1 on archive gcc-12 / clang-15. Ticket not marked resolved.
 
 Branch `feature/linux-04-ci`. The `Linux tests` job is on `ubuntu-22.04`. It checks out submodules the same way the other jobs do, downloads the VST3 SDK headers, runs `provision-linux.sh --ci`, then `run-tests-linux.sh` and `run-tests-linux.sh --clang --sanitize`. The display name is `Linux tests`. `merge-verified-branch.ps1` refuses unless every job whose name starts with `Linux` is green, unless `-AllowWindowsOnly` is passed.
 
@@ -45,7 +45,7 @@ Re-pinning the Linux hashes to the CI compiler would make the box fail, and the 
 
 `linux-tests` in `.github/workflows/ci.yml`, `runs-on: ubuntu-22.04`, `name: Linux tests`. Skipped when `workflow_dispatch` sets `windows_only`. Steps: checkout (`submodules: false`), `checkout-submodules.sh`, `download-vst3-sdk.sh master`, `provision-linux.sh --ci`, GCC doctest, Clang ASan/UBSan. No existing job's steps were edited.
 
-`provision-linux.sh` on 22.04 and 24.04 always enables `ppa:ubuntu-toolchain-r/test` and apt.llvm.org clang-21, and installs `x11-utils` (`xdpyinfo` is not in `x11-apps` on 22.04). 26.04 keeps its archive compilers.
+That paragraph described the first toolchain. D1 below is what the branch does now: ubuntu-22.04 installs archive `gcc-12` and `clang-15` and does not add a PPA or apt.llvm.org. `x11-utils` stays (`xdpyinfo` is not in `x11-apps` on 22.04). 24.04 and 26.04 keep their distro compilers.
 
 ## CI runs
 
@@ -60,11 +60,11 @@ There was no green run on the first toolchain. D1 below is the green one.
 
 ## D1
 
-Linux exact-bit pins bind to the CI `Linux tests` job. The box keeps its native compilers. A different glibc or `__VERSION__` skips the exact compare and still runs the Windows null check.
+Linux exact-bit pins bind to the CI `Linux tests` job on ubuntu-22.04. The box keeps its native compilers. A different glibc or `__VERSION__` skips the exact compare and still runs the Windows null check.
 
 ### Toolchain
 
-Archive gcc-12 on ubuntu-22.04 does not build. The exact error, from run [40069511486](https://github.com/guitarlum/VoLum/actions/runs/40069511486) job 120799811519:
+Archive gcc-12 failed first. Run [40069511486](https://github.com/guitarlum/VoLum/actions/runs/40069511486) job 120799811519:
 
 ```
 AudioDSPTools/dsp/ResamplingContainer/ResamplingContainer.h:89: error: declaration of
@@ -72,19 +72,17 @@ AudioDSPTools/dsp/ResamplingContainer/ResamplingContainer.h:89: error: declarati
 of 'LanczosResampler' [-fpermissive]
 ```
 
-CI therefore keeps `g++-15` from `ppa:ubuntu-toolchain-r/test` (15.2.0-15ubuntu1~22~ppa2) and `clang++-21` from apt.llvm.org (21.1.8). Those sources are added only on Ubuntu 22.04. The box had none of the files this script used to add (`ubuntu-toolchain-r-ubuntu-test-*.list`, `llvm-toolchain-*-21.list`, `apt.llvm.org.asc`); `provision-linux.sh` still removes only those paths if they appear.
+AudioDSPTools `f2cfd01` qualifies that alias. Archive gcc-12 then builds. The reference compiler is `g++-12 (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0`. The sanitizer compiler is archive `clang++-15` (Ubuntu clang version 15.0.7). No toolchain PPA and no apt.llvm.org list are added. `provision-linux.sh` still deletes only `ubuntu-toolchain-r-ubuntu-test-*.list`, `llvm-toolchain-*-21.list`, and `apt.llvm.org.asc` / `.gpg` if a previous run left them. The box had none.
 
-Reference identity, from the passing GCC run: `glibc 2.35 | 15.2.0`.
+Clang 15.0.7 rejected one test: `test_volum_ui_regressions.cpp` `CAPTURE(name)` on a structured binding (doctest wraps the argument in a lambda). A commit briefly switched the sanitizer to clang-21 from apt.llvm.org for that error. The loop now names the map entry, archive clang-15 compiles the suite, and the llvm.org repo is not used.
 
-Box GCC run: `glibc 2.43 | 15.2.0`. Box Clang run: `glibc 2.43 | Ubuntu Clang 21.1.8 (6ubuntu1)`. Both skipped the exact compare. `verify-linux.sh` exit 0 at `d22da417` (GCC 1468 passed, Clang ASan 1433 passed).
+Reference identity, one string in `platform_null.h`: `glibc 2.35 | 12.3.0`. GCC runs print `runtime="glibc 2.35 | 12.3.0" reference="glibc 2.35 | 12.3.0"`. The GCC step sets `VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1`. The sanitizer step does not.
 
-CI sanitizer identity: `glibc 2.35 | Ubuntu Clang 21.1.8 (++20251221032842+2078da43e25a-1~exp1~20251221153008.77)`. It does not set `VOLUM_REQUIRE_LINUX_HASH_REFERENCE`. 22 mismatch messages (11 NAM + 11 pitch), then the null residuals, then 1433 passed. Golden cases stay excluded by `Golden *`.
+### Pins on the archive compiler
 
-### Re-pinned from run 40069948079
+gcc-12 reproduced every Linux pin already in the tree, including the five that had moved off the box's gcc-15. Nothing was re-pinned from the box. NAM Linux pins stay the same bytes as the Windows pins. Residuals below are from the gcc-12 run [40082631113](https://github.com/guitarlum/VoLum/actions/runs/40082631113) (GCC step success, identity matched). The same hashes and the same residuals printed again on [40085419768](https://github.com/guitarlum/VoLum/actions/runs/40085419768).
 
-GCC `g++-15 (Ubuntu 15.2.0-15ubuntu1~22~ppa2)`, identity matched `glibc 2.35 | 15.2.0`. Five pins moved. The rest already matched this compiler and were left as they were. NAM Linux pins are the same bytes as the Windows pins; every NAM residual in that run was `-inf`.
-
-| Case | New pin | Residual dBFS |
+| Case | Pin (unchanged) | Residual dBFS |
 | --- | --- | --- |
 | oktaverb-halo | `732b960b94b03b725fcfcab6bb5fefcd4870293a147e4870d16d6484cae3afbe` | -290.444 |
 | oktaverb-shimmer | `e683aaaca08266c38d427594a6ec6894f5fd039b4977e6e31d02243343b3dd05` | -286.082 |
@@ -92,32 +90,52 @@ GCC `g++-15 (Ubuntu 15.2.0-15ubuntu1~22~ppa2)`, identity matched `glibc 2.35 | 1
 | octaver vintage 48k/333 | `994060e37d162e77658677a5367f7d1b65a8cc4613adc38e1aa50cfa1c7f8fb8` | -242.995 |
 | mode switches | `c0089ee0c700aaadf5bed4f7f863993b1ecbcba79d76d355e6e6fc30c7b0deda` | -243.426 |
 
-All are under -100. The threshold was not changed.
+Every NAM residual in that GCC step was `-inf`. All of the residuals above are under -100. The threshold was not changed.
 
 ### Tone stack
 
-`ratio <= 0.5` was not widened. On CI gcc-15 the any-degree loop and the fixed kernels measured:
+`ratio <= 0.5` was not widened. The earlier gcc-15 runs sat just over the line because the fixed kernel's ring wrap (`if (index < 0)`) is taken every third sample. GCC lays that out as a jump the fixed kernel pays and the any-degree loop does not, so the two paths measure almost exactly 2:1:
 
-| Run | Rounds | Fixed us | Generic us | Ratio |
+| Run | What was timed | Fixed us | Generic us | Ratio |
 | --- | --- | --- | --- | --- |
-| 40067942125 (`_ProcessGeneric`) | 41 | 1.08648 | 2.14611 | 0.506255 |
-| 40069948079 (`_ProcessGeneric`) | 41 | 1.07984 | 2.14975 | 0.502312 |
-| 40071230436 (inline copy; the attribute was optimized away) | 81 | 1.07992 | 2.14744 | 0.502889 |
+| 40067942125 | `_ProcessGeneric`, 41 rounds | 1.08648 | 2.14611 | 0.506255 |
+| 40069948079 | `_ProcessGeneric`, 41 | 1.07984 | 2.14975 | 0.502312 |
+| 40071230436 | inline copy, attribute optimized away, 81 | 1.07992 | 2.14744 | 0.502889 |
+| 40072097506 | `noinline` scalar copy | 0.968924 | 2.75873 | 0.351221 |
+| 40078121038 | same `noinline` binary, other runner | 1.07906 | 2.14658 | 0.502688 |
 
-An inline method with `no-tree-vectorize,no-unroll-loops` compiled to the same speed, so GCC was unrolling that degree-3 loop back into the caller. The baseline is now `RunScalarAnyDegree`, a `noinline` function with the same attribute. Run [40072097506](https://github.com/guitarlum/VoLum/actions/runs/40072097506) job 120807816637: fixed 0.968924 us, scalar loop 2.75873 us, ratio **0.351221**. That is under 0.48. Bit-exact tests still call `_ProcessGeneric`.
+`no-tree-vectorize` on an inline method did nothing (the ratio stayed 0.502). `noinline` moved one runner to 0.351 and the next runner, same bits, back to 0.503. That is a CPU difference, not a missing vectorizer. The degree-3 body is already scalar.
+
+The fix is in the fixed kernel, not the threshold. `StepBack<Degree>` steps the ring with the sign bit (`prev + ((prev >> (width-1)) & Degree)`), which is the same index sequence as the branch (0 wraps to `Degree-1`). Windows doctest on that change: 1470 passed, 0 failed (`run-tests-win.ps1` exit 0). On archive gcc-12 the ratio is no longer near 0.5:
+
+| Run | Head | Fixed us | Generic us | Ratio |
+| --- | --- | --- | --- | --- |
+| [40082631113](https://github.com/guitarlum/VoLum/actions/runs/40082631113) | `3736506e` | 0.578342 | 2.14685 | 0.26939 |
+| [40085419768](https://github.com/guitarlum/VoLum/actions/runs/40085419768) attempt 1 | `a17f9a98` | 0.575636 | 2.16315 | 0.266111 |
+| [40085419768](https://github.com/guitarlum/VoLum/actions/runs/40085419768) attempt 2 | `a17f9a98` | 0.576854 | 2.14808 | 0.268544 |
+
+All three archive-compiler ratios are under 0.48 (0.26939, 0.266111, 0.268544). The threshold stayed 0.5. No further hardening.
+
+### Sanitizer
+
+Run 40085419768, clang 15.0.7, no `VOLUM_REQUIRE_LINUX_HASH_REFERENCE`. Identity `glibc 2.35 | Ubuntu Clang 15.0.7` does not match `glibc 2.35 | 12.3.0`. 22 mismatch messages (11 NAM + 11 pitch). The exact compare is skipped. The null check still runs: NAM residuals `-inf`, octaver vintage `-242.995`, mode switches `-243.426`. 1444 passed, 0 failed, 36 skipped. `Golden *` stays excluded. The log has no `VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1 but` failure.
 
 ### Red proofs
 
-On the box binary at `d22da417`, `VOLUM_LINUX_HASH_IDENTITY_FAKE=not-the-reference`, case `PRE effects and tone stack`:
+On the box GCC binary at `a17f9a98` (identity would be `glibc 2.43 | 15.2.0`), case `PRE effects and tone stack`:
 
-- Without the require env: exit 0. Mismatch messages for compressor, pre-eq, and tone-stack. Residuals -315.57, -271.107, -273.225. No hash `CHECK` failure.
-- With `VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1`: exit 1. `ERROR: VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1 but this build is not the Linux hash reference`. Residuals still printed.
+- `VOLUM_LINUX_HASH_IDENTITY_FAKE=not-the-reference`: exit 0. Mismatch messages name runtime `not-the-reference` and reference `glibc 2.35 | 12.3.0`. Residuals -315.57, -271.107, -273.225. No hash `CHECK` failure.
+- Same fake identity plus `VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1`: exit 1. `ERROR: VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1 but this build is not the Linux hash reference`. Residuals still printed.
 
-Forcing the fake identity to `glibc 2.35 | 15.2.0` makes the box compare against the CI pins. Oktaverb halo/shimmer/bloom then fail `CHECK(actual == expected)` (box `1daf2177…` vs pin `732b960b…`, and the two siblings). Exit 1. Residuals still under -100. That is the same `CHECK` the CI reference build uses.
+Forcing the fake identity to `glibc 2.35 | 12.3.0` makes the box take the CI compare. Oktaverb halo/shimmer/bloom fail `CHECK(actual == expected)` (box `1daf2177…` vs pin `732b960b…`, and the two siblings). Exit 1. Residuals still under -100. That is the same `CHECK` the CI GCC step runs when the identity matches. On CI, run 40085419768 matched `glibc 2.35 | 12.3.0` and every pin, with the require env set.
+
+### Box
+
+`verify-linux.sh` exit 0 at `a17f9a98`. The box is not the reference: GCC `glibc 2.43 | 15.2.0`, Clang `glibc 2.43 | Ubuntu Clang 21.1.8 (6ubuntu1)`, both against `glibc 2.35 | 12.3.0`. Exact hashes were skipped. Null checks still ran. GCC 1479 passed, Clang ASan 1444 passed, `linux gates: MET`.
 
 ### Green run
 
-[40072097506](https://github.com/guitarlum/VoLum/actions/runs/40072097506) on `d22da417`. Linux tests job 120807816637 success. GCC 1468 passed. Clang ASan 1433 passed. `run-tests-win.ps1` exit 0 in the worktree after these test edits.
+[40085419768](https://github.com/guitarlum/VoLum/actions/runs/40085419768) on `a17f9a98`, attempt 1 every job success, attempt 2 reran `Linux tests` (job 120858807927) and the run stayed success. GCC 1479 passed. Clang ASan 1444 passed, hashes skipped, nulls checked. `run-tests-win.ps1` exit 0 in the worktree (1470 passed). This report commit does not change that code.
 
 ## merge-verified refusal
 
