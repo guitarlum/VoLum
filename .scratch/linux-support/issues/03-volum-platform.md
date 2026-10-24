@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02
 
 # 03 VoLum platform code for Linux
