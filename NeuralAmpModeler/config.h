@@ -29,12 +29,16 @@
 #define PLUG_DOES_STATE_CHUNKS 0
 // Linux has no editor until ticket 07 replaces the IGraphicsLinux stub. The
 // Steinberg validator then skips the view (createView returns null) and still
-// covers processing and state.
+// covers processing and state. Both defines stay in column 0: iPlug's
+// parse_config.py slices from the start of the line, and clang-format would
+// indent them inside the #if. The script keeps the last value, which is 1.
+// clang-format off
 #if defined(__linux__)
 #define PLUG_HAS_UI 0
 #else
 #define PLUG_HAS_UI 1
 #endif
+// clang-format on
 #define PLUG_WIDTH 900
 #define PLUG_HEIGHT 600
 #define PLUG_FPS 60
