@@ -222,6 +222,7 @@ pkgs=(
   xvfb
   xdotool
   x11-apps
+  x11-utils
   imagemagick
   alsa-utils
   zenity
