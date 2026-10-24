@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 Blocked by: (none)
 
 # 01 Box and runner provisioning
