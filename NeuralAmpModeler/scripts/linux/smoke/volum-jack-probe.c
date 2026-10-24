@@ -4,11 +4,14 @@
 //
 //   volum-jack-probe wait-server <timeout s>
 //   volum-jack-probe wait-ports <client> <timeout s>
-//   volum-jack-probe measure <client> <seconds> [stall ms]
+//   volum-jack-probe measure <client> <seconds> [stall ms] [warm-up s]
 //
-// measure prints one line per second ("second=N peak_dbfs=X xruns=N dsp_load=X") and then
+// measure connects, runs the warm-up (printed as "warmup_xruns=N", not part of
+// the summary), then prints one line per second ("second=N peak_dbfs=X xruns=N
+// dsp_load=X") and the summary of the measured seconds:
 //   xruns=N frames=N nonfinite=N peak_dbfs=X active_seconds=N seconds=N max_dsp_load=X
-// A stall (red proof) sleeps that long once inside the process callback.
+// A stall (red proof) sleeps that long once inside the process callback, two
+// seconds into the measured window.
 
 #include <jack/jack.h>
 
@@ -28,6 +31,7 @@ static volatile float gSecondPeak;
 static double gPhase;
 static double gStep;
 static volatile int gStallMs;
+static volatile int gMeasuring;
 
 static int OnProcess(jack_nframes_t n, void* arg)
 {
@@ -47,7 +51,7 @@ static int OnProcess(jack_nframes_t n, void* arg)
       gSecondPeak = fabsf(v);
   }
   gFrames += n;
-  if (gStallMs > 0 && gFrames > 96000)
+  if (gStallMs > 0 && gFrames > 96000 && gMeasuring)
   {
     usleep((useconds_t)gStallMs * 1000);
     gStallMs = 0;
@@ -147,6 +151,16 @@ int main(int argc, char** argv)
       fprintf(stderr, "cannot connect from %s\n", target);
       return 1;
     }
+
+    const int warmup = argc >= 6 ? atoi(argv[5]) : 0;
+    if (warmup > 0)
+      sleep((unsigned)warmup);
+    printf("warmup_seconds=%d warmup_xruns=%d\n", warmup, gXruns);
+    fflush(stdout);
+    gXruns = 0;
+    gFrames = 0;
+    gNonFinite = 0;
+    gMeasuring = 1;
 
     float peak = 0.f, maxLoad = 0.f;
     int active = 0, xrunsBefore = 0;

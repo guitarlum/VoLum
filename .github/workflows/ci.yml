@@ -609,7 +609,24 @@ jobs:
         shell: bash
 
       - name: Standalone audio smoke (Xvfb, jackd dummy)
-        run: bash NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh --app build-linux/standalone/VoLum --out "$RUNNER_TEMP/volum-smoke-app" --require-hide
+        run: bash NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh --app build-linux/standalone/VoLum --out "$RUNNER_TEMP/volum-smoke-app" --require-hide --require-rt
+        shell: bash
+
+      - name: Build the sanitized standalone (ASan + UBSan, g++-12)
+        run: |
+          cmake -S NeuralAmpModeler/projects/linux -B build-linux-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVOLUM_SANITIZE=ON -DVOLUM_BUILD_VALIDATOR=OFF
+          cmake --build build-linux-asan -j "$(nproc)" --target VoLum-app
+        env:
+          CC: gcc-12
+          CXX: g++-12
+        shell: bash
+
+      - name: Sanitized standalone smoke (1024-frame JACK cycle)
+        run: |
+          echo 'shift-base:stb_image.h' > "$RUNNER_TEMP/ubsan.supp"
+          export ASAN_OPTIONS=detect_leaks=0
+          export UBSAN_OPTIONS="print_stacktrace=1:suppressions=$RUNNER_TEMP/ubsan.supp"
+          bash NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh --app build-linux-asan/standalone/VoLum --out "$RUNNER_TEMP/volum-smoke-app-asan" --sanitized --period 1024 --seconds 20 --require-hide
         shell: bash
 
       - name: Upload smoke output
@@ -617,7 +634,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-standalone-smoke
-          path: ${{ runner.temp }}/volum-smoke-app
+          path: |
+            ${{ runner.temp }}/volum-smoke-app
+            ${{ runner.temp }}/volum-smoke-app-asan
           if-no-files-found: warn
 
   coverage:

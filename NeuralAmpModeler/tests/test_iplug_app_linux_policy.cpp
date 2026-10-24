@@ -103,6 +103,8 @@ TEST_CASE("Linux Preferences offers the loadable drivers and maps the selection 
   const auto change = dialog.find("case IDC_COMBO_AUDIO_DRIVER:");
   REQUIRE(change != std::string::npos);
   const std::string handler = dialog.substr(change, dialog.find("case IDC_COMBO_AUDIO_IN_DEV:", change) - change);
-  CHECK(handler.find("#if defined OS_LINUX\n            v = (int) SendDlgItemMessage(hwndDlg, IDC_COMBO_AUDIO_DRIVER, CB_GETITEMDATA, v, 0);")
-        != std::string::npos);
+  const std::string byItemData =
+    "#if defined OS_LINUX\n"
+    "            v = (int) SendDlgItemMessage(hwndDlg, IDC_COMBO_AUDIO_DRIVER, CB_GETITEMDATA, v, 0);";
+  CHECK(handler.find(byItemData) != std::string::npos);
 }

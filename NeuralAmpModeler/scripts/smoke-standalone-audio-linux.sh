@@ -6,11 +6,12 @@
 #   bash NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh [--app PATH] [--out DIR] [--seconds N]
 #
 # It passes when:
-#   1. VoLum opens its window and JACK ports and turns a -12 dBFS sine into a
-#      finite output above -50 dBFS for --seconds (default 60; the first 5 may
-#      be silent while the first capture loads) with zero xruns in that window,
-#      counted by the server's xrun callback and in the jackd log (xrun lines
-#      during each launch and quit are printed, not gated);
+#   1. VoLum opens its window and JACK ports and, after a --warmup (default 5 s)
+#      in which the first captures load and the editor starts, turns a -12 dBFS
+#      sine into a finite output above -50 dBFS in every second of --seconds
+#      (default 60) with zero xruns in that window, counted by the server's xrun
+#      callback and in the jackd log. Xruns during each launch, warm-up and quit
+#      are printed, not gated;
 #   2. the close button (WM_DELETE_WINDOW) and SIGTERM quit with exit code 0
 #      within 20 s, after the audio and plug-in teardowns, and settings.ini and
 #      volum-settings.json are written;
@@ -20,6 +21,10 @@
 #      (bubblewrap binds /dev/null over it) JACK alone is gone, both from
 #      --list-audio-devices and from Preferences, and the app still quits cleanly.
 #
+# --sanitized is for an ASan/UBSan build (CMake -DVOLUM_SANITIZE=ON): it adds a
+# gate that no launch printed a sanitizer report, and reports xruns without
+# gating them, since the instrumented DSP is several times slower. Use it with
+# a longer --period (frames per JACK cycle, default 256).
 # --require-hide fails step 4 when bubblewrap cannot run instead of skipping it.
 # --require-rt fails when jackd cannot get real-time scheduling. Without sudo the
 # script keeps the caller's rtprio and memlock limits.
@@ -32,24 +37,30 @@ ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 APP="$ROOT/build-linux/standalone/VoLum"
 OUT=""
 SECONDS_MAIN=60
+WARMUP=5
 QUIT_MODE="close"
 STALL_MS=0
 AMP_A=3
 AMP_B=9
 REQUIRE_HIDE=0
 REQUIRE_RT=0
+SANITIZED=0
+PERIOD=256
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --app) APP="$2"; shift 2 ;;
+    --sanitized) SANITIZED=1; shift ;;
+    --period) PERIOD="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --seconds) SECONDS_MAIN="$2"; shift 2 ;;
+    --warmup) WARMUP="$2"; shift 2 ;;
     --quit) QUIT_MODE="$2"; shift 2 ;;
     --stall-ms) STALL_MS="$2"; shift 2 ;;
     --amp-b) [[ "$2" == same ]] && AMP_B=$AMP_A || AMP_B="$2"; shift 2 ;;
     --require-hide) REQUIRE_HIDE=1; shift ;;
     --require-rt) REQUIRE_RT=1; shift ;;
-    *) echo "usage: $0 [--app PATH] [--out DIR] [--seconds N] [--require-hide] [--require-rt] [--quit close|kill] [--stall-ms N] [--amp-b N|same]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--app PATH] [--out DIR] [--seconds N] [--warmup N] [--period N] [--sanitized] [--require-hide] [--require-rt] [--quit close|kill] [--stall-ms N] [--amp-b N|same]" >&2; exit 2 ;;
   esac
 done
 
@@ -104,7 +115,7 @@ done
 [[ -n "$XVFB_PID" ]] || { echo "smoke: Xvfb did not start" >&2; tail -5 "$OUT/xvfb.log" >&2; exit 2; }
 echo "DISPLAY=$DISPLAY"
 
-echo "== jackd dummy 48000 / 256"
+echo "== jackd dummy 48000 / $PERIOD"
 # JACK runs real-time on a configured system: jackd2 gives the audio group
 # rtprio 95 and unlimited memlock. Give this process tree the same limits
 # (its own rlimits only, nothing system-wide) when it can.
@@ -115,7 +126,7 @@ echo "rtprio limit $(ulimit -r), memlock limit $(ulimit -l)"
 # A private server name, so nothing else's JACK server is used or disturbed.
 export JACK_DEFAULT_SERVER="volum-smoke-$$"
 export JACK_NO_AUDIO_RESERVATION=1
-jackd --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p 256 >"$OUT/jackd.log" 2>&1 &
+jackd --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p "$PERIOD" >"$OUT/jackd.log" 2>&1 &
 JACK_PID=$!
 "$PROBE" wait-server 15 || { echo "smoke: jackd did not come up" >&2; cat "$OUT/jackd.log" >&2; exit 2; }
 grep -ai "real-time\|realtime" "$OUT/jackd.log" | head -3
@@ -138,7 +149,7 @@ export XDG_DATA_HOME="$OUT/xdg"
 DATA="$XDG_DATA_HOME/VoLum"
 mkdir -p "$DATA"
 LOG="$DATA/volum.log"
-cat >"$DATA/settings.ini" <<'INI'
+cat >"$DATA/settings.ini" <<INI
 [audio]
 driver=1
 indev=system
@@ -146,7 +157,7 @@ outdev=system
 in1=1
 out1=1
 out2=2
-buffer=256
+buffer=$PERIOD
 sr=48000
 INI
 
@@ -199,16 +210,24 @@ quit() {
   PHASE_XRUNS=$(jack_xrun_lines)
 }
 
-# measure <name> <seconds>: the probe's summary goes to $OUT/<name>.probe
 jack_xrun_lines() { grep -aci "xrun" "$OUT/jackd.log"; }
 
 # measure <name> <seconds>: the probe's summary goes to $OUT/<name>.probe. The
 # jackd log's xrun lines are counted per phase: launch, measured window, quit.
 measure() {
-  local name="$1" secs="$2" before
+  local name="$1" secs="$2" before warm probe_pid
+  warm=$(jack_xrun_lines)
+  echo "  jackd xrun lines during the launch: $((warm - PHASE_XRUNS))"
+  "$PROBE" measure VoLum "$secs" "$STALL_MS" "$WARMUP" >"$OUT/$name.probe" 2>&1 &
+  probe_pid=$!
+  for _ in $(seq $(( (WARMUP + 10) * 10 ))); do
+    grep -aq "^warmup_seconds=" "$OUT/$name.probe" && break
+    kill -0 "$probe_pid" 2>/dev/null || break
+    sleep 0.1
+  done
   before=$(jack_xrun_lines)
-  echo "  jackd xrun lines during the launch: $((before - PHASE_XRUNS))"
-  "$PROBE" measure VoLum "$secs" "$STALL_MS" >"$OUT/$name.probe" 2>&1
+  echo "  warm-up ${WARMUP} s: $(sed -n 's/.*warmup_xruns=\([0-9]*\).*/\1/p' "$OUT/$name.probe") xruns (callback), $((before - warm)) jackd log lines; not gated"
+  wait "$probe_pid"
   tail -1 "$OUT/$name.probe"
   PHASE_XRUNS=$(jack_xrun_lines)
   echo "jackd_xrun_lines=$((PHASE_XRUNS - before))" >>"$OUT/$name.probe"
@@ -222,10 +241,13 @@ audio_checks() {
   xr=$(field "$probe" xruns); nf=$(field "$probe" nonfinite); pk=$(field "$probe" peak_dbfs); act=$(field "$probe" active_seconds)
   local jl
   jl=$(field "$probe" jackd_xrun_lines)
-  check "[$name] zero JACK xruns over ${secs} s: xrun callback ${xr:-none}, jackd log ${jl:-none}" test "${xr:-x}" = 0 -a "${jl:-x}" = 0
+  if [[ $SANITIZED -eq 1 ]]; then
+    echo "  [$name] sanitized build, xruns not gated: callback ${xr:-none}, jackd log ${jl:-none}"
+  else
+    check "[$name] zero JACK xruns over ${secs} s: xrun callback ${xr:-none}, jackd log ${jl:-none}" test "${xr:-x}" = 0 -a "${jl:-x}" = 0
+  fi
   check "[$name] output finite (${nf:-?} non-finite samples)" test "${nf:-x}" = 0
-  check "[$name] output audible: peak ${pk:-?} dBFS, ${act:-?}/${secs} s above -50 dBFS" \
-    test "${act:-0}" -ge "$((secs > 5 ? secs - 5 : secs))"
+  check "[$name] output audible: peak ${pk:-?} dBFS, ${act:-?}/${secs} s above -50 dBFS" test "${act:-0}" = "$secs"
 }
 
 quit_checks() {
@@ -266,9 +288,9 @@ shot run1
 [[ "$QUIT_MODE" == kill ]] && quit kill || quit close
 audio_checks run1 "$SECONDS_MAIN"
 quit_checks run1
-check "[run1] stream opened at 48000 Hz / 256" grep -aq "stream open: 48000 Hz, buffer 256" <(run_log)
+check "[run1] stream opened at 48000 Hz / $PERIOD" grep -aq "stream open: 48000 Hz, buffer $PERIOD" <(run_log)
 check "[run1] settings.ini keeps JACK on system" grep -q "^driver=1" "$DATA/settings.ini"
-check "[run1] settings.ini keeps 256 frames" grep -q "^buffer=256" "$DATA/settings.ini"
+check "[run1] settings.ini keeps $PERIOD frames" grep -q "^buffer=$PERIOD" "$DATA/settings.ini"
 check "[run1] settings.ini in the XDG library" test -f "$XDG_DATA_HOME/VoLum/settings.ini"
 
 for pass_name in run2:$AMP_A:term run3:$AMP_B:close; do
@@ -335,6 +357,13 @@ else
   quit term
   check "[run5] exit code 0 (got $APP_RC)" test "$APP_RC" = 0
   check "[run5] plug-in teardown complete" grep -aq "plugin teardown complete" <(run_log)
+fi
+
+if [[ $SANITIZED -eq 1 ]]; then
+  echo "== sanitizer reports"
+  SAN_LINES=$(cat "$OUT"/*.out 2>/dev/null | grep -a -c -E "runtime error|ERROR: AddressSanitizer|ERROR: LeakSanitizer")
+  cat "$OUT"/*.out 2>/dev/null | grep -a -E "runtime error|ERROR: AddressSanitizer|SUMMARY: " | sort | uniq -c | head -20
+  check "[sanitizers] no ASan or UBSan report in any launch ($SAN_LINES lines)" test "$SAN_LINES" = 0
 fi
 
 echo "== jackd"
