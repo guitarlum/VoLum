@@ -18,6 +18,22 @@ source "$SCRIPT_DIR/linux/host-env.sh"
 linux_gate_root
 cd "$REPO_ROOT"
 
+# jackd ignores SIGHUP, so an ssh -tt drop or a killed gate reparents it to
+# init. The pid is stopped from EXIT/INT/TERM/HUP, and the process itself gets
+# SIGTERM when this shell dies (PR_SET_PDEATHSIG), including SIGKILL of the shell.
+VOLUM_CARLA_JACK_PID=""
+stop_carla_jack() {
+  local pid="${VOLUM_CARLA_JACK_PID:-}"
+  [[ -n "$pid" ]] || return 0
+  VOLUM_CARLA_JACK_PID=""
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+trap 'stop_carla_jack' EXIT
+trap 'stop_carla_jack; exit 129' HUP
+trap 'stop_carla_jack; exit 130' INT
+trap 'stop_carla_jack; exit 143' TERM
+
 BUNDLE=""
 NO_BUILD=0
 ASAN=0
@@ -104,12 +120,30 @@ run_pluginval() {
 run_carla() {
   local server="volum-carla-$$" log="$OUT/carla.log" jack_log="$OUT/carla-jackd.log" home rc
   home="$(linux_throwaway_home "$OUT")"
-  # Close the box.ps1 lock fds. A surviving jackd would otherwise keep the
-  # build flock after this session is gone.
-  JACK_DEFAULT_SERVER="$server" jackd -n "$server" -d dummy -r 48000 -p 256 > "$jack_log" 2>&1 7>&- 8>&- 9>&- &
-  local jack_pid=$!
-  cleanup_jack() { kill "$jack_pid" 2>/dev/null || true; wait "$jack_pid" 2>/dev/null || true; }
-  trap cleanup_jack RETURN
+  # Parent of jackd is this shell. prctl survives exec, so the server dies
+  # with the shell even when a trap does not run.
+  python3 - "$server" "$jack_log" <<'PY' &
+import ctypes, os, signal, sys
+server, log = sys.argv[1], sys.argv[2]
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
+if libc.prctl(1, signal.SIGTERM) != 0:
+    os._exit(1)
+if os.getppid() == 1:
+    os._exit(1)
+fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+os.dup2(fd, 1)
+os.dup2(fd, 2)
+os.close(fd)
+for n in (7, 8, 9):
+    try:
+        os.close(n)
+    except OSError:
+        pass
+os.environ["JACK_DEFAULT_SERVER"] = server
+os.execvp("jackd", ["jackd", "-n", server, "-d", "dummy", "-r", "48000", "-p", "256"])
+PY
+  VOLUM_CARLA_JACK_PID=$!
+  local jack_pid="$VOLUM_CARLA_JACK_PID"
   local i up=0
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     if ! kill -0 "$jack_pid" 2>/dev/null; then
@@ -120,7 +154,12 @@ run_carla() {
     if compgen -G "/dev/shm/*${server}*" > /dev/null; then up=1; break; fi
     sleep 0.25
   done
-  [[ "$up" == 1 ]] || { echo "carla-single: jackd did not come up" >&2; cat "$jack_log" >&2 || true; return 1; }
+  if [[ "$up" != 1 ]]; then
+    echo "carla-single: jackd did not come up" >&2
+    cat "$jack_log" >&2 || true
+    stop_carla_jack
+    return 1
+  fi
   set +e
   HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
     JACK_DEFAULT_SERVER="$server" \
@@ -130,6 +169,7 @@ run_carla() {
   set -e
   cat "$log"
   echo "carla-single exit $rc"
+  stop_carla_jack
   [[ "$rc" == 0 ]]
 }
 
