@@ -47,3 +47,21 @@ set_source_files_properties(
   ${IPLUG}/Dependencies/IGraphics/glad_GL2/src/glad.c
   PROPERTIES COMPILE_OPTIONS "-w"
 )
+
+# Quote-includes next to these translation units are not system headers, and the
+# pre-existing bodies warn under GCC/Clang -Werror. The Linux edits in them are
+# preprocessor branches; silencing these does not hide a warning in new code
+# that lives in its own file.
+set_source_files_properties(${IPLUG}/IPlug/IPlugPaths.cpp PROPERTIES COMPILE_OPTIONS
+  "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-function>"
+  "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-variable>"
+  "$<$<CXX_COMPILER_ID:Clang>:-Wno-unused-function>"
+  "$<$<CXX_COMPILER_ID:Clang>:-Wno-unused-variable>"
+)
+set_source_files_properties(${IPLUG}/IGraphics/Drawing/IGraphicsNanoVG.cpp PROPERTIES COMPILE_OPTIONS
+  "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-parameter>"
+  "$<$<CXX_COMPILER_ID:GNU>:-Wno-sequence-point>"
+  "$<$<CXX_COMPILER_ID:GNU>:-Wno-maybe-uninitialized>"
+  "$<$<CXX_COMPILER_ID:Clang>:-Wno-unused-parameter>"
+  "$<$<CXX_COMPILER_ID:Clang>:-Wno-unsequenced>"
+)
