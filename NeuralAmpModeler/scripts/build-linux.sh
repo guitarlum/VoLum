@@ -25,7 +25,7 @@ if [[ ! -f "$SDK/public.sdk/source/main/linuxmain.cpp" || ! -f "$SDK/public.sdk/
   git -C "$SDK" submodule update --init --depth 1 base pluginterfaces public.sdk
 fi
 
-BUILD="build-linux"
+BUILD="${BUILD_DIR:-build-linux}"
 cmake -S NeuralAmpModeler/projects/linux -B "$BUILD" -DCMAKE_BUILD_TYPE="$CONFIG"
 cmake --build "$BUILD" -j "$JOBS" --target VoLum-vst3 VoLum-app validator
 
