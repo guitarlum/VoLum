@@ -28,3 +28,14 @@ Scenarios:
 - `ALL PASS` on the box and in the CI `linux-e2e` job, with the run id.
 - Each scenario is shown to fail with its feature broken: one mutation per
   scenario, logged in the report.
+
+## Carried from ticket 10
+
+- The standalone takes `--list-audio-devices` and `--preferences` for these
+  scenarios. A quit is SIGTERM (it closes like the close button); a second
+  signal exits at once.
+- `VoLumLinuxAppDataDir` (iPlug2 `IPlug/APP/VoLumAppLinuxPolicy.h`) repeats
+  `LinuxVoLumDataDir` (`NeuralAmpModeler/VoLumPaths.h`). Keep one, used by both
+  the app and the library. Both accept a relative `XDG_DATA_HOME`, which the XDG
+  spec says to ignore. Add a doctest that a relative value falls back to
+  `~/.local/share`, red against the current code.

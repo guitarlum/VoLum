@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: 07
 
 # 10 Standalone app on Linux
