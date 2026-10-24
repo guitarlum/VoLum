@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -34,12 +35,22 @@ inline std::filesystem::path MakeAtomicJsonTempPath(const std::filesystem::path&
   const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
   const auto threadHash = std::hash<std::thread::id>{}(std::this_thread::get_id());
 
-  std::ostringstream suffix;
-  suffix << ".tmp." << ticks << "." << threadHash;
+#if defined(__linux__)
+  // Same static-libstdc++ / host-locale crash as the diagnostic log: num_put
+  // dies in the host's codecvt. The suffix is only digits and dots.
+  char suffix[96];
+  std::snprintf(suffix, sizeof(suffix), ".tmp.%lld.%zu", static_cast<long long>(ticks), threadHash);
+  std::filesystem::path tmp = target;
+  tmp += suffix;
+  return tmp;
+#else
+  std::ostringstream oss;
+  oss << ".tmp." << ticks << "." << threadHash;
 
   std::filesystem::path tmp = target;
-  tmp += suffix.str();
+  tmp += oss.str();
   return tmp;
+#endif
 }
 
 inline bool ReplaceFileAtomically(const std::filesystem::path& tmp, const std::filesystem::path& target,
@@ -114,6 +125,23 @@ inline bool WriteJsonAtomically(const std::filesystem::path& target, const nlohm
 
   const auto tmp = MakeAtomicJsonTempPath(target);
   {
+#if defined(__linux__)
+    FILE* file = std::fopen(tmp.c_str(), "wb");
+    if (!file)
+    {
+      ec = std::make_error_code(std::errc::io_error);
+      return false;
+    }
+    const std::size_t wrote = std::fwrite(serialized.data(), 1, serialized.size(), file);
+    const int closed = std::fclose(file);
+    if (wrote != serialized.size() || closed != 0)
+    {
+      ec = std::make_error_code(std::errc::io_error);
+      std::error_code removeEc;
+      std::filesystem::remove(tmp, removeEc);
+      return false;
+    }
+#else
     std::ofstream out(tmp, std::ios::out | std::ios::trunc);
     if (!out)
     {
@@ -129,6 +157,7 @@ inline bool WriteJsonAtomically(const std::filesystem::path& target, const nlohm
       std::filesystem::remove(tmp, removeEc);
       return false;
     }
+#endif
   }
 
   if (!ReplaceFileAtomically(tmp, target, ec))
