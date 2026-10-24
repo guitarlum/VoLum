@@ -1,6 +1,6 @@
 # 06 Linux CMake for the VST3 and the app
 
-Status: pass on the box (GCC 15.2) and on Ubuntu 22.04 (GCC 12.3, glibc 2.35). CI is the run below; Windows tests exited 0.
+Status: pass. The box (GCC 15.2), Ubuntu 22.04 (GCC 12.3, glibc 2.35), Windows tests, and CI (Windows and macOS) are green.
 
 ## Heads
 
@@ -104,4 +104,4 @@ Inside the throwaway Ubuntu 22.04 container: `build-essential`, `g++-12`, `cmake
 
 ## CI
 
-[Run 40075268411](https://github.com/guitarlum/VoLum/actions/runs/40075268411) on `35239678615a680af52ab0f2fe0299496ed6a78c`. Watching for Windows and macOS green.
+[Run 40075268411](https://github.com/guitarlum/VoLum/actions/runs/40075268411) on `35239678615a680af52ab0f2fe0299496ed6a78c` succeeded. Windows (tests, installer, portable zip, plugin validation) and macOS (tests, full distribution, plugin validation) both completed success, as did formatting, NAMCore, both installer upgrades, and macOS standalone e2e.
