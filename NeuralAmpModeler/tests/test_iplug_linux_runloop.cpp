@@ -87,8 +87,14 @@ public:
   uint32_t nextId = 1;
 };
 
-void Count(void* userData) { ++*static_cast<int*>(userData); }
-void CountFd(int, void* userData) { ++*static_cast<int*>(userData); }
+void Count(void* userData)
+{
+  ++*static_cast<int*>(userData);
+}
+void CountFd(int, void* userData)
+{
+  ++*static_cast<int*>(userData);
+}
 } // namespace
 
 TEST_CASE("IPlugLinuxRunLoop: instance B's timers keep firing after instance A's editor closes")
