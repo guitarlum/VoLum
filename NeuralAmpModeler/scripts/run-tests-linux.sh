@@ -5,8 +5,8 @@
 #   bash NeuralAmpModeler/scripts/run-tests-linux.sh --clang --sanitize
 #
 # Default is archive g++-12 on ubuntu-22.04, and the distro g++ where that
-# binary is absent (the box). --clang selects archive clang++-15, else
-# clang++-14, else clang++. --sanitize (implies --clang) is Debug with ASan
+# binary is absent (the box). --clang selects clang++-21. Archive clang-15
+# does not compile the suite. --sanitize (implies --clang) is Debug with ASan
 # and UBSan, and it excludes the same cases as run-tests-mac.sh. At most 14
 # compile jobs: the box shares two build slots.
 
@@ -141,8 +141,8 @@ fi
 # run-tests-mac.sh also does not build. This target does not link them.
 
 # g++-12 on ubuntu-22.04 owns the Linux golden hashes. The box's g++ is not
-# that binary. The sanitizer compiler is archive clang++-15, else clang++-14,
-# else clang++.
+# that binary. The sanitizer compiler is clang++-21 (apt.llvm.org on 22.04,
+# the distro package on 26.04). Archive clang-15 does not compile.
 first_of() {
   local name
   for name in "$@"; do
@@ -159,8 +159,8 @@ BUILD_DIR="$PROJECT_DIR/build-tests-linux"
 BUILD_TYPE=Release
 if [[ "$CLANG" == "1" ]]; then
   BUILD_DIR="$PROJECT_DIR/build-tests-linux-clang"
-  CC="$(first_of clang-15 clang-14 clang)"
-  CXX="$(first_of clang++-15 clang++-14 clang++)"
+  CC="$(first_of clang-21 clang-15 clang-14 clang)"
+  CXX="$(first_of clang++-21 clang++-15 clang++-14 clang++)"
 else
   CC="$(first_of gcc-12 gcc-11 gcc)"
   CXX="$(first_of g++-12 g++-11 g++)"
