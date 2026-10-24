@@ -68,3 +68,4 @@ Escalate and stop on new product, new sound / golden retune, irreversible git, o
 ## Ledger
 
 - 2026-10-24 05:10 | setup | grilled plan → spec.md, 15 tickets, verify.ps1, loop.md; worktree C:\dev\VoLum-linux on feature/linux-support (fb127c17), iPlug2 volum/linux at b98aacb44 pushed; conductor "second orchestrator" sentence replaced (pstack may drive a loop) | no
+- 2026-10-24 05:20 | dispatch | 01 box-provision worker started (local, Grok 4.7, worktree C:\dev\VoLum-linux-01, branch feature/linux-01-box); 02 cloud worker refused: Cursor GitHub app not installed (E1). 02 goes to a local box worker after 01 | no
