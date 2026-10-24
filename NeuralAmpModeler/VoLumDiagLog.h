@@ -25,7 +25,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -65,21 +64,9 @@ inline std::string TimestampNow()
 #else
   localtime_r(&secs, &tm);
 #endif
-#if defined(__linux__)
-  // libstdc++ is linked into the plug-in, and GNU unique symbols still share
-  // locale facets with the host. Carla's global locale then makes num_put crash
-  // in codecvt. The stamp is formatted with C stdio, which does not use those facets.
-  char buf[64];
-  const std::size_t n = std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
-  if (n == 0)
-    return {};
-  std::snprintf(buf + n, sizeof(buf) - n, ".%03ld", static_cast<long>(ms.count()));
-  return std::string(buf);
-#else
   std::ostringstream os;
   os << std::put_time(&tm, "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0') << std::setw(3) << ms.count();
   return os.str();
-#endif
 }
 
 // A process-wide log with an injectable path, so doctests write into a temp dir and
@@ -147,18 +134,9 @@ public:
         if (rec)
           std::filesystem::remove(mPath, rec); // rename blocked: drop the old generation
       }
-#if defined(__linux__)
-      FILE* file = std::fopen(mPath.c_str(), "ab");
-      if (file)
-      {
-        std::fwrite(line.data(), 1, line.size(), file);
-        std::fclose(file);
-      }
-#else
       std::ofstream out(mPath, std::ios::app | std::ios::binary);
       if (out)
         out << line;
-#endif
     }
     catch (...)
     {

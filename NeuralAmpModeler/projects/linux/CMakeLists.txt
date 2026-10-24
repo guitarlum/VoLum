@@ -245,9 +245,12 @@ target_link_libraries(VoLum-vst3 PRIVATE
 target_link_options(VoLum-vst3 PRIVATE
   -pthread
   -Wl,--no-undefined
+  "-Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/volum-vst3.version"
 )
+set_property(TARGET VoLum-vst3 APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/volum-vst3.version")
 if(NOT VOLUM_SANITIZE)
-  target_link_options(VoLum-vst3 PRIVATE -static-libstdc++ -static-libgcc)
+  # Static libstdc++ facet ids are GNU-unique; they must not be exported or a host locale crashes num_put.
+  target_link_options(VoLum-vst3 PRIVATE -static-libstdc++ -static-libgcc "-Wl,--exclude-libs,ALL")
 endif()
 
 add_executable(VoLum-app
@@ -293,9 +296,12 @@ target_link_libraries(VoLum-app PRIVATE
 target_link_options(VoLum-app PRIVATE
   -pthread
   -Wl,--no-undefined
+  "-Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/volum-app.version"
 )
+set_property(TARGET VoLum-app APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/volum-app.version")
 if(NOT VOLUM_SANITIZE)
-  target_link_options(VoLum-app PRIVATE -static-libstdc++ -static-libgcc)
+  # Same constraint as VoLum-vst3: static libstdc++ must not be exported.
+  target_link_options(VoLum-app PRIVATE -static-libstdc++ -static-libgcc "-Wl,--exclude-libs,ALL")
 endif()
 
 set(VOLUM_COPY_RESOURCES "${CMAKE_CURRENT_LIST_DIR}/copy-resources.cmake")

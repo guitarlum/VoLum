@@ -48,6 +48,7 @@ SKIP_UI=0
 SKIP_VALIDATOR=0
 SKIP_PLUGINVAL=0
 SKIP_CARLA=0
+SKIP_STDLIB=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bundle) BUNDLE="$2"; shift 2 ;;
@@ -58,6 +59,7 @@ while [[ $# -gt 0 ]]; do
     --skip-validator) SKIP_VALIDATOR=1; shift ;;
     --skip-pluginval) SKIP_PLUGINVAL=1; shift ;;
     --skip-carla) SKIP_CARLA=1; shift ;;
+    --skip-stdlib-check) SKIP_STDLIB=1; shift ;;
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -179,6 +181,10 @@ PY
   [[ "$rc" == 0 ]]
 }
 
+if [[ "$SKIP_STDLIB" == 0 ]]; then
+  echo "=== stdlib exports ==="
+  bash "$LINUX_DIR/check-stdlib-exports.sh" "$SO"
+fi
 if [[ "$ASAN" == 0 && "$PLUGINVAL_ONLY" == 0 && "$SKIP_UI" == 0 ]]; then
   echo "=== ui-thread sites ==="
   bash "$LINUX_DIR/ui-thread-sites.sh" --so "$SO"

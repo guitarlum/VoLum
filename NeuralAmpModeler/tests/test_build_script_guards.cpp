@@ -262,6 +262,40 @@ TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step 
   CHECK(mesa < validate);
 }
 
+TEST_CASE("Linux plug-in hides static libstdc++ and the gate rejects an exported copy")
+{
+  // Facet ids in libstdc++.a are STB_GNU_UNIQUE. Exporting them makes a host
+  // locale bind the plug-in's num_put to the host codecvt, which crashes Carla.
+  // The stdio forks in the shared headers were a workaround; the link line is
+  // the constraint, and the headers stay on the shared ostream path.
+  const std::string cmake = ReadRepoFile("NeuralAmpModeler/projects/linux/CMakeLists.txt");
+  const auto vst3 = cmake.find("add_library(VoLum-vst3 SHARED");
+  const auto app = cmake.find("add_executable(VoLum-app");
+  REQUIRE(vst3 != std::string::npos);
+  REQUIRE(app != std::string::npos);
+  const std::string vst3Body = cmake.substr(vst3, app - vst3);
+  const std::string appBody = cmake.substr(app);
+  CHECK(vst3Body.find("-Wl,--exclude-libs,ALL") != std::string::npos);
+  CHECK(vst3Body.find("volum-vst3.version") != std::string::npos);
+  CHECK(appBody.find("-Wl,--exclude-libs,ALL") != std::string::npos);
+  CHECK(appBody.find("volum-app.version") != std::string::npos);
+  CHECK(cmake.find("if(NOT VOLUM_SANITIZE)") != std::string::npos);
+
+  const std::string version = ReadRepoFile("NeuralAmpModeler/projects/linux/volum-vst3.version");
+  CHECK(version.find("GetPluginFactory") != std::string::npos);
+  CHECK(version.find("ModuleEntry") != std::string::npos);
+  CHECK(version.find("ModuleExit") != std::string::npos);
+  CHECK(version.find("local:") != std::string::npos);
+
+  const std::string gate = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-linux.sh");
+  CHECK(gate.find("check-stdlib-exports.sh") != std::string::npos);
+
+  const std::string diag = ReadRepoFile("NeuralAmpModeler/VoLumDiagLog.h");
+  const std::string io = ReadRepoFile("NeuralAmpModeler/VoLumSettingsFileIO.h");
+  CHECK(diag.find("snprintf") == std::string::npos);
+  CHECK(io.find("snprintf") == std::string::npos);
+}
+
 TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
 {
   // The build steps are gated on matrix.os. Pinning the runner to macos-15

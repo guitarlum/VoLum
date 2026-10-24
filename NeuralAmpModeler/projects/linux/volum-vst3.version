@@ -1,0 +1,16 @@
+{
+  global:
+    GetPluginFactory;
+    ModuleEntry;
+    ModuleExit;
+    extern "C++" {
+      "iplug::IPlugLinuxCheckUIThread*";
+      "iplug::IPlugLinuxOffThreadCalls*";
+      "iplug::igraphics::IGraphicsLinux::OpenWindow*";
+      "iplug::igraphics::IGraphicsLinux::CloseWindow*";
+      "iplug::igraphics::IGraphicsLinux::ProcessX11Events*";
+      "iplug::igraphics::IGraphicsLinux::OnDisplayTimer*";
+    };
+  local:
+    *;
+};
