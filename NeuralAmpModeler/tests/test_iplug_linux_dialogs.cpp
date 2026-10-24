@@ -562,9 +562,8 @@ TEST_CASE("Linux clipboard no-owner wait is one kWaitMs")
   constexpr int kLateMs = 50;
   CHECK(elapsed >= kWaitMs - kEarlyMs);
   CHECK(elapsed < kWaitMs + kLateMs);
-  std::printf(
-    "clipboard no-owner wait measured %lld ms (lower %d, upper %d)\n", static_cast<long long>(elapsed),
-    kWaitMs - kEarlyMs, kWaitMs + kLateMs);
+  std::printf("clipboard no-owner wait measured %lld ms (lower %d, upper %d)\n", static_cast<long long>(elapsed),
+              kWaitMs - kEarlyMs, kWaitMs + kLateMs);
   std::fflush(stdout);
   MESSAGE("clipboard no-owner wait measured " << elapsed << " ms");
 
