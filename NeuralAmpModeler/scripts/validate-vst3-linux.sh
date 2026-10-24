@@ -104,7 +104,9 @@ run_pluginval() {
 run_carla() {
   local server="volum-carla-$$" log="$OUT/carla.log" jack_log="$OUT/carla-jackd.log" home rc
   home="$(linux_throwaway_home "$OUT")"
-  JACK_DEFAULT_SERVER="$server" jackd -n "$server" -d dummy -r 48000 -p 256 > "$jack_log" 2>&1 &
+  # Close the box.ps1 lock fds. A surviving jackd would otherwise keep the
+  # build flock after this session is gone.
+  JACK_DEFAULT_SERVER="$server" jackd -n "$server" -d dummy -r 48000 -p 256 > "$jack_log" 2>&1 7>&- 8>&- 9>&- &
   local jack_pid=$!
   cleanup_jack() { kill "$jack_pid" 2>/dev/null || true; wait "$jack_pid" 2>/dev/null || true; }
   trap cleanup_jack RETURN

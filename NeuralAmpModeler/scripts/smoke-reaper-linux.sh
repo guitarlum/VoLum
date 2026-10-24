@@ -158,7 +158,9 @@ if [[ "$ASAN" == 1 ]]; then
 fi
 [[ "${GDB:-0}" == 1 ]] && preload+=(gdb -q -batch -ex run -ex "thread apply all bt 25" --args)
 
-"${preload[@]}" "$REAPER" -newinst -nosplash -ignoreerrors -cfgfile "$cfg/reaper.ini" > "$WORK/reaper.log" 2>&1 &
+# Close the box.ps1 lock fds so a REAPER that outlives this session cannot
+# keep the build flock.
+"${preload[@]}" "$REAPER" -newinst -nosplash -ignoreerrors -cfgfile "$cfg/reaper.ini" > "$WORK/reaper.log" 2>&1 7>&- 8>&- 9>&- &
 pid=$!
 waited=0
 while kill -0 "$pid" 2>/dev/null; do
