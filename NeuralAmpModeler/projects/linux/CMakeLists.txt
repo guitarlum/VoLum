@@ -80,6 +80,7 @@ set(VOLUM_GFX_SOURCES
   "${IPLUG}/IPlug/IPlugProcessor.cpp"
   "${IPLUG}/IPlug/IPlugTimer.cpp"
   "${IPLUG}/IPlug/Linux/IPlugLinuxRunLoop.cpp"
+  "${IPLUG}/Dependencies/IGraphics/NanoVG/src/nanovg.c"
   "${IPLUG}/Dependencies/IGraphics/glad_GL2/src/glad.c"
 )
 
@@ -177,7 +178,11 @@ target_compile_definitions(volum_dsp PRIVATE NAM_ENABLE_A2_FAST)
 add_library(volum_gfx OBJECT ${VOLUM_GFX_SOURCES})
 volum_includes(volum_gfx)
 volum_common_defs(volum_gfx)
-set_source_files_properties("${IPLUG}/Dependencies/IGraphics/glad_GL2/src/glad.c" PROPERTIES COMPILE_OPTIONS "-w")
+set_source_files_properties(
+  "${IPLUG}/Dependencies/IGraphics/glad_GL2/src/glad.c"
+  "${IPLUG}/Dependencies/IGraphics/NanoVG/src/nanovg.c"
+  PROPERTIES COMPILE_OPTIONS "-w"
+)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set_source_files_properties("${IPLUG}/IGraphics/Drawing/IGraphicsNanoVG.cpp" PROPERTIES
     COMPILE_OPTIONS "-Wno-unused-parameter;-Wno-sequence-point;-Wno-maybe-uninitialized")
@@ -216,6 +221,7 @@ target_link_libraries(VoLum-vst3 PRIVATE
   -Wl,--as-needed
   ${CMAKE_DL_LIBS}
   m
+  atomic
 )
 target_link_options(VoLum-vst3 PRIVATE
   -static-libstdc++
@@ -261,6 +267,7 @@ target_link_libraries(VoLum-app PRIVATE
   -Wl,--as-needed
   ${CMAKE_DL_LIBS}
   m
+  atomic
 )
 target_link_options(VoLum-app PRIVATE
   -static-libstdc++
