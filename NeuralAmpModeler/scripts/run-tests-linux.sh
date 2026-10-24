@@ -161,6 +161,11 @@ cmake --build "$BUILD_DIR" -j "$JOBS"
 BIN="$BUILD_DIR/NeuralAmpModeler-Tests"
 cd "$REPO_ROOT"
 if [[ "$SANITIZE" == "1" ]]; then
+  # libstdc++ std::stable_sort gets a buffer with operator new and returns it
+  # with free. ASan reports that as alloc-dealloc-mismatch. The macOS sanitizer
+  # job uses libc++, which does not, so this is not one of its exclusions.
+  export ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}alloc_dealloc_mismatch=0"
+  export UBSAN_OPTIONS="${UBSAN_OPTIONS:+$UBSAN_OPTIONS:}print_stacktrace=1:halt_on_error=1"
   # Same comma-separated list as run-tests-mac.sh. doctest keeps only the last
   # repeated --test-case-exclude, so this must stay one flag.
   EXCLUDE="$(python3 - "$SCRIPT_DIR/run-tests-mac.sh" <<'PY'
