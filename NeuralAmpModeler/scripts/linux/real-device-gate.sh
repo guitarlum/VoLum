@@ -32,9 +32,11 @@ DROP=0
 PRIVATE=0
 SELF_TEST=0
 
-# Fixed after calibration. -999 fails a normal run closed, so a number is
-# never invented on the fly. Dropout samples use a fixed ratio in the aligner.
-NULL_PEAK_DB=-999
+# Fixed from the private null-sink calibration on 2026-10-25 (15 s, gain
+# 1.0002, residual peak -76.57 dBFS, rms -82.40, 0 dropout samples). -40 is
+# looser than that peak and still under a dropped buffer, which lands near
+# -24 dBFS. It is not fitted per run. Dropout samples use a fixed ratio.
+NULL_PEAK_DB=-40
 DROPOUT_LIMIT=32
 
 while [[ $# -gt 0 ]]; do
