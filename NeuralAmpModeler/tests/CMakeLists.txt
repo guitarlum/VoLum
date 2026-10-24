@@ -170,7 +170,8 @@ if(UNIX AND NOT APPLE)
   # heapbuf.h calls them anyway. iPlug2 is not edited here.
   target_compile_options(NeuralAmpModeler-Tests PRIVATE -include cstdlib)
   find_package(Threads REQUIRED)
-  target_link_libraries(NeuralAmpModeler-Tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
+  # 16-byte std::atomic in the tuner is not inlined by GCC/Clang on x86_64.
+  target_link_libraries(NeuralAmpModeler-Tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS} atomic)
 endif()
 
 if(VOLUM_ENABLE_SANITIZERS)
