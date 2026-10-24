@@ -27,7 +27,14 @@
 #define PLUG_DOES_MIDI_OUT 0
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
-#define PLUG_HAS_UI 1
+// Linux has no editor until ticket 07 replaces the IGraphicsLinux stub. The
+// Steinberg validator then skips the view (createView returns null) and still
+// covers processing and state.
+#if defined(__linux__)
+  #define PLUG_HAS_UI 0
+#else
+  #define PLUG_HAS_UI 1
+#endif
 #define PLUG_WIDTH 900
 #define PLUG_HEIGHT 600
 #define PLUG_FPS 60
