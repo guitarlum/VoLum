@@ -159,6 +159,19 @@ if(APPLE)
   set_source_files_properties(test_volum_http_get_mac.mm "${PROJECT_DIR}/VoLumHttpGet.mm"
     PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   target_link_libraries(NeuralAmpModeler-Tests PRIVATE "-framework CoreFoundation" "-framework Foundation" "-framework Accelerate")
+else()
+  # Windows links VoLumHttpGet.cpp from the vcxproj. On Linux the same file
+  # returns false (the real client is a later ticket). Mac uses the .mm above.
+  target_sources(NeuralAmpModeler-Tests PRIVATE "${PROJECT_DIR}/VoLumHttpGet.cpp")
+endif()
+
+if(UNIX AND NOT APPLE)
+  # GCC 15 does not expose malloc/free through the headers WDL includes.
+  # heapbuf.h calls them anyway. iPlug2 is not edited here.
+  target_compile_options(NeuralAmpModeler-Tests PRIVATE -include cstdlib)
+  find_package(Threads REQUIRED)
+  # 16-byte std::atomic in the tuner is not inlined by GCC/Clang on x86_64.
+  target_link_libraries(NeuralAmpModeler-Tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS} atomic)
 endif()
 
 if(VOLUM_ENABLE_SANITIZERS)

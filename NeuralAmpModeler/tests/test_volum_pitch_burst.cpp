@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 #include "golden_helpers.h"
+#include "platform_null.h"
 #include "VoLumBurstTiming.h"
 
 #include "../VoLumPitchShifter.h"
@@ -194,11 +195,45 @@ std::vector<DSP_SAMPLE> RenderModeSwitches(bool reference = false)
 // the tracker-driven cases (Octaver, INSTANT, DROP) after the high-note tracker fix moved them.
 // macOS contracts `r += a * b` into fused multiply-adds, so its bits differ; it prints its value
 // instead until one is pinned from a CI run.
+// GCC Release contracts multiply-adds, so Linux does not share the MSVC pin.
+// Empty until a box run fills it. macOS still only prints.
+const char* LinuxPinnedHash(const std::string& name)
+{
+  struct Pin
+  {
+    const char* name;
+    const char* hash;
+  };
+  static const Pin pins[] = {
+    {"octaver modern 48k/64", "5bcf4532b73082a6dc6f08cb33cec991c143807fc2d816576acf5b57b4a208c7"},
+    {"octaver vintage 48k/333", "7fc77b2e59d4f02c6187ee5a926e7bf32c9b329653fcd98d4df5fdc20900d006"},
+    {"transpose instant -5 48k/64", "6a6cea5b005c85dbb11ee5458a6c8381e671dd336fda8c3cdbcb28385f7188d5"},
+    {"transpose instant +7 48k/64", "110d4deca1408d4bad0562dfd99dbe96e3aaf37ae761a45c0a73887eee3df678"},
+    {"transpose drop -12 48k/128", "75bd46053ff92ece63fbd536c842c7bf5543c7b64f2cd92b3c48b291106d8b2b"},
+    {"transpose drop +7 48k/128", "a38ecf80c71882a6b6f7139f79f7b1255b8ae6ed469414eb3b79baab0b8b4149"},
+    {"transpose poly -12 48k/64", "75a0d82fc570d89c658879014436fa2c34b9032218b858b8c8d45cdf3c92bc93"},
+    {"transpose poly +7 48k/64", "cbccb47c0e46a34890c989dcc426067e6bdfbba66b3c3ec50ffc286c732d6fe6"},
+    {"octaver modern 44.1k/96", "0cbb9dedd0455a0328ecfc8a3f229621699b56a423b4c4df4b747036db587416"},
+    {"transpose instant -7 96k/256", "6690fd9973cb8b8783025947ed87ad4edd9b66f7ec95c3f135f04ca35bba2810"},
+    {"mode switches", "1c3ecb667240f5a6242a232c54a7dd5a2ad64031859603c843e87c1f7e489c65"},
+  };
+  for (const Pin& p : pins)
+    if (name == p.name)
+      return p.hash;
+  return nullptr;
+}
+
 void ExpectEngineHash(const std::string& name, const std::string& actual, const char* windowsExpected)
 {
 #if defined(_WIN32)
   INFO(name << " actual=" << actual);
   CHECK(actual == std::string(windowsExpected));
+#elif defined(__linux__)
+  (void)windowsExpected;
+  INFO(name << " actual=" << actual);
+  const char* expected = LinuxPinnedHash(name);
+  REQUIRE(expected != nullptr);
+  CHECK(actual == std::string(expected));
 #else
   (void)windowsExpected;
   MESSAGE(name << " hash (not pinned on this platform): " << actual);
@@ -244,12 +279,14 @@ TEST_CASE("Pitch burst: pedal renders keep the 1.3.0 engine's exact bits")
     INFO(c.name << ": first differing sample " << FirstDifference(live, reference) << " of " << live.size());
     CHECK(FirstDifference(live, reference) == live.size());
     ExpectEngineHash(c.name, volum::test::Sha256HexSamples(live), PinnedHash(c.name));
+    volum::test::CheckWindowsNull(c.name.c_str(), live);
   }
   const std::vector<DSP_SAMPLE> live = RenderModeSwitches();
   const std::vector<DSP_SAMPLE> reference = RenderModeSwitches(true);
   INFO("mode switches: first differing sample " << FirstDifference(live, reference) << " of " << live.size());
   CHECK(FirstDifference(live, reference) == live.size());
   ExpectEngineHash("mode switches", volum::test::Sha256HexSamples(live), PinnedHash("mode switches"));
+  volum::test::CheckWindowsNull("mode switches", live);
 }
 
 TEST_CASE("Pitch burst: Octaver replays several period updates per host block exactly")
