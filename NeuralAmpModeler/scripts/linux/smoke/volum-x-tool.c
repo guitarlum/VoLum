@@ -1,6 +1,7 @@
 // X side of smoke-standalone-audio-linux.sh. Xvfb runs no window manager, so
 // this sends the WM_DELETE_WINDOW a window manager sends for the close button.
 //
+//   volum-x-tool ping                             exit 0 when $DISPLAY accepts a connection
 //   volum-x-tool wait <window name> <timeout s>   exit 0 once a top-level window has that name
 //   volum-x-tool close <window name>              WM_DELETE_WINDOW to every such window
 
@@ -79,9 +80,12 @@ int main(int argc, char** argv)
   Display* d = XOpenDisplay(NULL);
   if (!d)
   {
-    fprintf(stderr, "volum-x-tool: cannot open display\n");
+    if (argc < 2 || strcmp(argv[1], "ping"))
+      fprintf(stderr, "volum-x-tool: cannot open display\n");
     return 2;
   }
+  if (argc >= 2 && !strcmp(argv[1], "ping"))
+    return 0;
   if (argc >= 4 && !strcmp(argv[1], "wait"))
   {
     for (int t = 0; t < atoi(argv[3]) * 10; ++t)

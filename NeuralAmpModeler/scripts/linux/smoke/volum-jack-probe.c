@@ -6,7 +6,7 @@
 //   volum-jack-probe wait-ports <client> <timeout s>
 //   volum-jack-probe measure <client> <seconds> [stall ms]
 //
-// measure prints one line per second ("second=N peak_dbfs=X") and then
+// measure prints one line per second ("second=N peak_dbfs=X xruns=N dsp_load=X") and then
 //   xruns=N frames=N nonfinite=N peak_dbfs=X active_seconds=N seconds=N max_dsp_load=X
 // A stall (red proof) sleeps that long once inside the process callback.
 
@@ -149,12 +149,13 @@ int main(int argc, char** argv)
     }
 
     float peak = 0.f, maxLoad = 0.f;
-    int active = 0;
+    int active = 0, xrunsBefore = 0;
     for (int s = 1; s <= seconds; ++s)
     {
       gSecondPeak = 0.f;
       sleep(1);
       const float secondPeak = gSecondPeak;
+      const int xruns = gXruns;
       const float load = jack_cpu_load(gClient);
       if (load > maxLoad)
         maxLoad = load;
@@ -162,7 +163,8 @@ int main(int argc, char** argv)
         peak = secondPeak;
       if (Dbfs(secondPeak) > -50.0)
         ++active;
-      printf("second=%d peak_dbfs=%.1f\n", s, Dbfs(secondPeak));
+      printf("second=%d peak_dbfs=%.1f xruns=%d dsp_load=%.1f\n", s, Dbfs(secondPeak), xruns - xrunsBefore, load);
+      xrunsBefore = xruns;
       fflush(stdout);
     }
     jack_deactivate(gClient);

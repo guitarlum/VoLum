@@ -300,11 +300,13 @@ add_executable(VoLum-app
 )
 volum_includes(VoLum-app)
 volum_common_defs(VoLum-app)
-target_compile_definitions(VoLum-app PRIVATE APP_API)
-set_source_files_properties("${IPLUG}/Dependencies/IPlug/RTAudio/RtAudio.cpp" PROPERTIES
-  COMPILE_DEFINITIONS "__LINUX_ALSA__;__UNIX_JACK__;__LINUX_PULSE__")
+# The RtAudio API macros go on every source: RtAudio.h sizes RtApiStream by
+# them (StreamMutex is an int without one), so a file compiled without them
+# reads and writes the stream at the wrong offsets.
+target_compile_definitions(VoLum-app PRIVATE APP_API __LINUX_ALSA__ __UNIX_JACK__ __LINUX_PULSE__)
+# MIDI is ALSA only. RtMidi.h has no API-dependent layout, so only its .cpp drops JACK.
 set_source_files_properties("${IPLUG}/Dependencies/IPlug/RTMidi/RtMidi.cpp" PROPERTIES
-  COMPILE_DEFINITIONS "__LINUX_ALSA__")
+  COMPILE_OPTIONS "-U__UNIX_JACK__;-U__LINUX_PULSE__")
 set_target_properties(VoLum-app PROPERTIES
   OUTPUT_NAME "VoLum"
   RUNTIME_OUTPUT_DIRECTORY "${VOLUM_APP_DIR}"

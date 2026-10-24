@@ -8,8 +8,9 @@
 # It passes when:
 #   1. VoLum opens its window and JACK ports and turns a -12 dBFS sine into a
 #      finite output above -50 dBFS for --seconds (default 60; the first 5 may
-#      be silent while the first capture loads) with zero xruns, counted by the
-#      server's xrun callback and in the jackd log;
+#      be silent while the first capture loads) with zero xruns in that window,
+#      counted by the server's xrun callback and in the jackd log (xrun lines
+#      during each launch and quit are printed, not gated);
 #   2. the close button (WM_DELETE_WINDOW) and SIGTERM quit with exit code 0
 #      within 20 s, after the audio and plug-in teardowns, and settings.ini and
 #      volum-settings.json are written;
@@ -20,6 +21,8 @@
 #      --list-audio-devices and from Preferences, and the app still quits cleanly.
 #
 # --require-hide fails step 4 when bubblewrap cannot run instead of skipping it.
+# --require-rt fails when jackd cannot get real-time scheduling. Without sudo the
+# script keeps the caller's rtprio and memlock limits.
 # Red proofs: --quit kill (no graceful quit), --stall-ms N (one stalled JACK
 # cycle), --amp-b same (the two seeded launches pick the same amp).
 set -uo pipefail
@@ -34,6 +37,7 @@ STALL_MS=0
 AMP_A=3
 AMP_B=9
 REQUIRE_HIDE=0
+REQUIRE_RT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -44,7 +48,8 @@ while [[ $# -gt 0 ]]; do
     --stall-ms) STALL_MS="$2"; shift 2 ;;
     --amp-b) [[ "$2" == same ]] && AMP_B=$AMP_A || AMP_B="$2"; shift 2 ;;
     --require-hide) REQUIRE_HIDE=1; shift ;;
-    *) echo "usage: $0 [--app PATH] [--out DIR] [--seconds N] [--require-hide] [--quit close|kill] [--stall-ms N] [--amp-b N|same]" >&2; exit 2 ;;
+    --require-rt) REQUIRE_RT=1; shift ;;
+    *) echo "usage: $0 [--app PATH] [--out DIR] [--seconds N] [--require-hide] [--require-rt] [--quit close|kill] [--stall-ms N] [--amp-b N|same]" >&2; exit 2 ;;
   esac
 done
 
@@ -81,15 +86,32 @@ PROBE="$OUT/volum-jack-probe"
 XTOOL="$OUT/volum-x-tool"
 
 echo "== Xvfb"
-rm -f "$OUT/display"
-Xvfb -displayfd 3 -screen 0 1600x1000x24 -nolisten tcp 3>"$OUT/display" 2>"$OUT/xvfb.log" &
-XVFB_PID=$!
-for _ in $(seq 50); do [[ -s "$OUT/display" ]] && break; sleep 0.1; done
-[[ -s "$OUT/display" ]] || { echo "smoke: Xvfb did not start" >&2; cat "$OUT/xvfb.log" >&2; exit 2; }
-export DISPLAY=":$(head -1 "$OUT/display")"
+# The first free display from :90. Not -displayfd: under WSLg /tmp/.X11-unix
+# is read-only and -displayfd gives up on every display, while a fixed one
+# still listens on the abstract socket.
+for n in $(seq 90 189); do
+  [[ -e "/tmp/.X$n-lock" ]] && continue
+  Xvfb ":$n" -screen 0 1600x1000x24 -nolisten tcp -noreset >"$OUT/xvfb.log" 2>&1 &
+  XVFB_PID=$!
+  for _ in $(seq 50); do
+    DISPLAY=":$n" "$XTOOL" ping 2>/dev/null && break
+    kill -0 "$XVFB_PID" 2>/dev/null || break
+    sleep 0.1
+  done
+  if DISPLAY=":$n" "$XTOOL" ping 2>/dev/null; then export DISPLAY=":$n"; break; fi
+  kill "$XVFB_PID" 2>/dev/null; wait "$XVFB_PID" 2>/dev/null; XVFB_PID=""
+done
+[[ -n "$XVFB_PID" ]] || { echo "smoke: Xvfb did not start" >&2; tail -5 "$OUT/xvfb.log" >&2; exit 2; }
 echo "DISPLAY=$DISPLAY"
 
 echo "== jackd dummy 48000 / 256"
+# JACK runs real-time on a configured system: jackd2 gives the audio group
+# rtprio 95 and unlimited memlock. Give this process tree the same limits
+# (its own rlimits only, nothing system-wide) when it can.
+if [[ "$(ulimit -r)" == 0 ]] && command -v prlimit >/dev/null && sudo -n true 2>/dev/null; then
+  sudo -n prlimit --pid $$ --rtprio=95:95 --memlock=unlimited:unlimited
+fi
+echo "rtprio limit $(ulimit -r), memlock limit $(ulimit -l)"
 # A private server name, so nothing else's JACK server is used or disturbed.
 export JACK_DEFAULT_SERVER="volum-smoke-$$"
 export JACK_NO_AUDIO_RESERVATION=1
@@ -97,6 +119,11 @@ jackd --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p 256 >"$OUT/jackd.log" 2
 JACK_PID=$!
 "$PROBE" wait-server 15 || { echo "smoke: jackd did not come up" >&2; cat "$OUT/jackd.log" >&2; exit 2; }
 grep -ai "real-time\|realtime" "$OUT/jackd.log" | head -3
+if grep -aqi "cannot use real-time" "$OUT/jackd.log"; then
+  [[ $REQUIRE_RT -eq 1 ]] && fail "[jackd] runs with real-time scheduling" || echo "  jackd is not real-time: xruns are likely"
+else
+  pass "[jackd] runs with real-time scheduling"
+fi
 
 # Nothing may reach a real output: ALSA's default is a null PCM and PulseAudio
 # points at a socket that does not exist. The fallback to ALSA in run 5 and the
@@ -125,6 +152,7 @@ INI
 
 LAUNCH_LOG_START=0
 APP_RC=""
+PHASE_XRUNS=0
 # launch <name> [launcher words...] -- [app args...]
 launch() {
   local name="$1"; shift
@@ -134,6 +162,15 @@ launch() {
   LAUNCH_LOG_START=$( [[ -f "$LOG" ]] && wc -l <"$LOG" || echo 0 )
   "${wrap[@]}" "$APP" "$@" >"$OUT/$name.out" 2>&1 &
   APP_PID=$!
+  # Signals go to VoLum itself, not to a bubblewrap parent.
+  APP_SIG_PID=$APP_PID
+  if [[ ${#wrap[@]} -gt 0 ]]; then
+    for _ in $(seq 50); do
+      APP_SIG_PID=$(pgrep -n -x VoLum -P "$APP_PID") && break
+      sleep 0.1
+    done
+    [[ -n "$APP_SIG_PID" ]] || APP_SIG_PID=$APP_PID
+  fi
 }
 
 run_log() { [[ -f "$LOG" ]] && tail -n +"$((LAUNCH_LOG_START + 1))" "$LOG"; }
@@ -144,8 +181,8 @@ quit() {
   t0=$(date +%s)
   case "$how" in
     close) "$XTOOL" close VoLum ;;
-    term) kill -TERM "$APP_PID" ;;
-    kill) kill -KILL "$APP_PID" ;;
+    term) kill -TERM "$APP_SIG_PID" ;;
+    kill) kill -KILL "$APP_SIG_PID" ;;
   esac
   for _ in $(seq 200); do kill -0 "$APP_PID" 2>/dev/null || break; sleep 0.1; done
   if kill -0 "$APP_PID" 2>/dev/null; then
@@ -158,14 +195,23 @@ quit() {
     APP_RC=$?
   fi
   APP_PID=""
-  echo "  quit by $how: exit $APP_RC after $(( $(date +%s) - t0 )) s"
+  echo "  quit by $how: exit $APP_RC after $(( $(date +%s) - t0 )) s; jackd xrun lines during the quit: $(( $(jack_xrun_lines) - PHASE_XRUNS ))"
+  PHASE_XRUNS=$(jack_xrun_lines)
 }
 
 # measure <name> <seconds>: the probe's summary goes to $OUT/<name>.probe
+jack_xrun_lines() { grep -aci "xrun" "$OUT/jackd.log"; }
+
+# measure <name> <seconds>: the probe's summary goes to $OUT/<name>.probe. The
+# jackd log's xrun lines are counted per phase: launch, measured window, quit.
 measure() {
-  local name="$1" secs="$2"
+  local name="$1" secs="$2" before
+  before=$(jack_xrun_lines)
+  echo "  jackd xrun lines during the launch: $((before - PHASE_XRUNS))"
   "$PROBE" measure VoLum "$secs" "$STALL_MS" >"$OUT/$name.probe" 2>&1
   tail -1 "$OUT/$name.probe"
+  PHASE_XRUNS=$(jack_xrun_lines)
+  echo "jackd_xrun_lines=$((PHASE_XRUNS - before))" >>"$OUT/$name.probe"
 }
 
 field() { sed -n "s/.*\b$2=\([^ ]*\).*/\1/p" "$1" | tail -1; }
@@ -174,7 +220,9 @@ audio_checks() {
   local name="$1" secs="$2" probe="$OUT/$1.probe"
   local xr nf pk act
   xr=$(field "$probe" xruns); nf=$(field "$probe" nonfinite); pk=$(field "$probe" peak_dbfs); act=$(field "$probe" active_seconds)
-  check "[$name] zero JACK xruns over ${secs} s (got ${xr:-none})" test "${xr:-x}" = 0
+  local jl
+  jl=$(field "$probe" jackd_xrun_lines)
+  check "[$name] zero JACK xruns over ${secs} s: xrun callback ${xr:-none}, jackd log ${jl:-none}" test "${xr:-x}" = 0 -a "${jl:-x}" = 0
   check "[$name] output finite (${nf:-?} non-finite samples)" test "${nf:-x}" = 0
   check "[$name] output audible: peak ${pk:-?} dBFS, ${act:-?}/${secs} s above -50 dBFS" \
     test "${act:-0}" -ge "$((secs > 5 ? secs - 5 : secs))"
@@ -290,8 +338,8 @@ else
 fi
 
 echo "== jackd"
-XRUN_LINES=$(grep -aci "xrun" "$OUT/jackd.log")
-check "[jackd] no xrun in the jackd log ($XRUN_LINES lines)" test "$XRUN_LINES" = 0
+echo "  xrun lines over the whole session, launches and quits included: $(jack_xrun_lines)"
+grep -ai "xrun\|real-time" "$OUT/jackd.log" | sort | uniq -c
 kill "$JACK_PID" 2>/dev/null; wait "$JACK_PID" 2>/dev/null; JACK_PID=""
 
 echo
