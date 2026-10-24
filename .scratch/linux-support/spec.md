@@ -110,7 +110,8 @@ macOS golden hash sets must not change.
 
 ## Machines
 
-- **Box:** `lum@192.168.178.91`, the owner's desktop running WSL2 Ubuntu 24.04.
+- **Box:** `lum@192.168.178.91`, the owner's desktop running WSL2 Ubuntu 26.04.1 (GCC 15.2,
+  Clang 21, CMake 4.2; release builds still come from `ubuntu-22.04` CI).
   32 threads, ~23 GB, passwordless sudo, WSLg PulseAudio bridge, Babyface
   attached on the Windows side.
   - SSH: `ssh -i C:/Users/SteffenDangmann/.ssh/volum_a2_pc -o BatchMode=yes`.

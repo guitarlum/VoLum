@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 Blocked by: 01
 
 # 02 Doctest suite on Linux

@@ -69,3 +69,4 @@ Escalate and stop on new product, new sound / golden retune, irreversible git, o
 
 - 2026-10-24 05:10 | setup | grilled plan → spec.md, 15 tickets, verify.ps1, loop.md; worktree C:\dev\VoLum-linux on feature/linux-support (fb127c17), iPlug2 volum/linux at b98aacb44 pushed; conductor "second orchestrator" sentence replaced (pstack may drive a loop) | no
 - 2026-10-24 05:20 | dispatch | 01 box-provision worker started (local, Grok 4.7, worktree C:\dev\VoLum-linux-01, branch feature/linux-01-box); 02 cloud worker refused: Cursor GitHub app not installed (E1). 02 goes to a local box worker after 01 | no
+- 2026-10-24 05:40 | 01 resolved | worker PASS 571a6ef4; coordinator re-ran box.ps1 acceptance independently (exit 0, build1 lock, Ubuntu 26.04 gcc 15.2 / clang 21 / cmake 4.2, pluginval + reaper in tools); merged as 2670f896. 05 unblocked from 02 (disjoint iPlug2-only paths, own compile target); 02 + 05 dispatched as a 2-worker swarm (local, box) | no

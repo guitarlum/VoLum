@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: (none)
 
 # 01 Box and runner provisioning

@@ -1,5 +1,5 @@
-Status: ready-for-agent
-Blocked by: 02
+Status: claimed
+Blocked by: 01
 
 # 05 iPlug2 Linux leaf pieces (compile-level)
 
