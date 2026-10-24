@@ -39,6 +39,7 @@ if(NOT EXISTS "${VST3_SDK}/public.sdk/source/main/linuxmain.cpp")
 endif()
 
 option(VOLUM_BUILD_VALIDATOR "Build the Steinberg VST3 validator from the vendored SDK" ON)
+option(VOLUM_SANITIZE "AddressSanitizer and UBSan for the plugin and standalone" OFF)
 
 set(VOLUM_DSP_SOURCES
   "${VOLUM_ROOT}/AudioDSPTools/dsp/dsp.cpp"
@@ -75,6 +76,10 @@ set(VOLUM_GFX_SOURCES
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinux.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxFont.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxGL.cpp"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/common.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/internal.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/x11.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/x11_gl.c"
   "${IPLUG}/IPlug/IPlugAPIBase.cpp"
   "${IPLUG}/IPlug/IPlugParameter.cpp"
   "${IPLUG}/IPlug/IPlugPluginBase.cpp"
@@ -151,6 +156,8 @@ function(volum_includes target)
     "${IPLUG}/Dependencies/IGraphics/NanoSVG/src"
     "${IPLUG}/Dependencies/IGraphics/glad_GL2/include"
     "${IPLUG}/Dependencies/IGraphics/glad_GL2/src"
+    "${IPLUG}/Dependencies/IGraphics/pugl/include"
+    "${IPLUG}/Dependencies/IGraphics/pugl/src"
     "${IPLUG}/Dependencies/IGraphics/STB"
     "${IPLUG}/Dependencies/Extras"
     "${IPLUG}/Dependencies/Extras/nlohmann"
@@ -183,7 +190,18 @@ volum_common_defs(volum_gfx)
 set_source_files_properties(
   "${IPLUG}/Dependencies/IGraphics/glad_GL2/src/glad.c"
   "${IPLUG}/Dependencies/IGraphics/NanoVG/src/nanovg.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/common.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/internal.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/x11.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/x11_gl.c"
   PROPERTIES COMPILE_OPTIONS "-w"
+)
+set_source_files_properties(
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/common.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/internal.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/x11.c"
+  "${IPLUG}/Dependencies/IGraphics/pugl/src/x11_gl.c"
+  PROPERTIES COMPILE_DEFINITIONS "USE_XCURSOR=1;USE_XRANDR=0;USE_XSYNC=0"
 )
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set_source_files_properties("${IPLUG}/IGraphics/Drawing/IGraphicsNanoVG.cpp" PROPERTIES
@@ -200,6 +218,7 @@ add_library(VoLum-vst3 SHARED
   ${VOLUM_VST3_SDK_SOURCES}
   "${IPLUG}/IPlug/IPlugPaths.cpp"
   "${IPLUG}/IPlug/VST3/IPlugVST3.cpp"
+  "${IPLUG}/IPlug/VST3/IPlugVST3_Linux.cpp"
   "${IPLUG}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp"
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
@@ -207,7 +226,7 @@ add_library(VoLum-vst3 SHARED
 )
 volum_includes(VoLum-vst3)
 volum_common_defs(VoLum-vst3)
-target_compile_definitions(VoLum-vst3 PRIVATE VST3_API IPLUG_LINUX_EDITOR_STUB)
+target_compile_definitions(VoLum-vst3 PRIVATE VST3_API)
 set_target_properties(VoLum-vst3 PROPERTIES
   PREFIX ""
   OUTPUT_NAME "VoLum"
@@ -217,6 +236,7 @@ set_target_properties(VoLum-vst3 PROPERTIES
 target_link_libraries(VoLum-vst3 PRIVATE
   -Wl,--no-as-needed
   X11
+  Xcursor
   GL
   fontconfig
   freetype
@@ -226,8 +246,6 @@ target_link_libraries(VoLum-vst3 PRIVATE
   atomic
 )
 target_link_options(VoLum-vst3 PRIVATE
-  -static-libstdc++
-  -static-libgcc
   -pthread
   -Wl,--no-undefined
 )
@@ -264,6 +282,7 @@ target_link_libraries(VoLum-app PRIVATE
   -Wl,--no-as-needed
   asound
   X11
+  Xcursor
   GL
   fontconfig
   freetype
@@ -273,11 +292,22 @@ target_link_libraries(VoLum-app PRIVATE
   atomic
 )
 target_link_options(VoLum-app PRIVATE
-  -static-libstdc++
-  -static-libgcc
   -pthread
   -Wl,--no-undefined
 )
+
+if(NOT VOLUM_SANITIZE)
+  foreach(volum_target VoLum-vst3 VoLum-app)
+    target_link_options(${volum_target} PRIVATE -static-libstdc++ -static-libgcc)
+  endforeach()
+else()
+  foreach(volum_target volum_dsp volum_gfx VoLum-vst3 VoLum-app)
+    target_compile_options(${volum_target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+  endforeach()
+  foreach(volum_target VoLum-vst3 VoLum-app)
+    target_link_options(${volum_target} PRIVATE -fsanitize=address,undefined)
+  endforeach()
+endif()
 
 set(VOLUM_COPY_RESOURCES "${CMAKE_CURRENT_LIST_DIR}/copy-resources.cmake")
 add_custom_command(TARGET VoLum-vst3 POST_BUILD

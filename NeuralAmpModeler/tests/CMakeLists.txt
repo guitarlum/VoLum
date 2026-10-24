@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.20)
 
 project(NeuralAmpModelerTests LANGUAGES CXX)
 
@@ -17,6 +17,7 @@ add_executable(NeuralAmpModeler-Tests
   test_volum_chunk_version.cpp
   test_volum_paths.cpp
   test_volum_http_get_linux.cpp
+  test_iplug_linux_runloop.cpp
   test_volum_settings_atomic_write.cpp
   test_volum_machine_settings_writer.cpp
   test_volum_update_check.cpp
@@ -168,7 +169,11 @@ else()
 endif()
 
 if(UNIX AND NOT APPLE)
-  target_sources(NeuralAmpModeler-Tests PRIVATE "${PROJECT_DIR}/VoLumHttpGetLinux.cpp")
+  target_sources(NeuralAmpModeler-Tests PRIVATE
+    "${PROJECT_DIR}/VoLumHttpGetLinux.cpp"
+    "${REPO_ROOT}/iPlug2/IPlug/Linux/IPlugLinuxRunLoop.cpp"
+  )
+  target_include_directories(NeuralAmpModeler-Tests PRIVATE "${REPO_ROOT}/iPlug2/IPlug")
   # GCC 15 does not expose malloc/free through the headers WDL includes.
   # heapbuf.h calls them anyway. iPlug2 is not edited here.
   target_compile_options(NeuralAmpModeler-Tests PRIVATE -include cstdlib)
