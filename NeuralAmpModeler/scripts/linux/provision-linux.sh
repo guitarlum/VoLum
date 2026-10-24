@@ -123,6 +123,14 @@ write_if_changed() {
   fi
 }
 
+# A package is installable only when apt has a real candidate. `apt-cache show`
+# can succeed against a stale runner cache that a later `apt-get update` drops.
+has_candidate() {
+  local cand
+  cand=$(apt-cache policy "$1" 2>/dev/null | awk '/^  Candidate:/ {print $2; exit}' || true)
+  [ -n "$cand" ] && [ "$cand" != "(none)" ]
+}
+
 # GCC 15.2 and Clang 21.1.8 on every supported Ubuntu. 26.04 already has them.
 ensure_pinned_toolchain() {
   case "$VERSION_ID" in
@@ -130,27 +138,37 @@ ensure_pinned_toolchain() {
   esac
   local updated=0
   local list="/etc/apt/sources.list.d/llvm-toolchain-${VERSION_CODENAME}-21.list"
-  if ! apt-cache show g++-15 >/dev/null 2>&1; then
-    log "enabling ppa:ubuntu-toolchain-r/test for g++-15"
+  log "refreshing apt cache before the compiler check"
+  apt_retry run_apt update -qq
+  if ! has_candidate g++-15; then
+    log "g++-15 has no apt candidate; enabling ppa:ubuntu-toolchain-r/test"
     if ! command -v add-apt-repository >/dev/null 2>&1; then
-      apt_retry run_apt update -qq
       apt_retry run_apt install -y --no-install-recommends software-properties-common ca-certificates
     fi
     run_root env DEBIAN_FRONTEND=noninteractive add-apt-repository -y ppa:ubuntu-toolchain-r/test
     updated=1
+  else
+    log "g++-15 candidate already present"
   fi
-  if ! apt-cache show clang-21 >/dev/null 2>&1; then
-    log "enabling apt.llvm.org clang-21"
+  if ! has_candidate clang-21; then
+    log "clang-21 has no apt candidate; enabling apt.llvm.org"
     if [ ! -f "$list" ]; then
       curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | run_root tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
       printf 'deb http://apt.llvm.org/%s/ llvm-toolchain-%s-21 main\n' \
         "$VERSION_CODENAME" "$VERSION_CODENAME" | run_root tee "$list" >/dev/null
     fi
     updated=1
+  else
+    log "clang-21 candidate already present"
   fi
   if [ "$updated" -eq 1 ]; then
     log "apt-get update after toolchain repos"
     apt_retry run_apt update -qq
+  fi
+  if ! has_candidate g++-15 || ! has_candidate clang-21; then
+    log "pinned compilers still have no apt candidate"
+    apt-cache policy g++-15 clang-21 >&2 || true
+    exit 1
   fi
 }
 
