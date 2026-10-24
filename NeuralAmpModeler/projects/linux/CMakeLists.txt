@@ -240,6 +240,7 @@ add_executable(VoLum-app
   "${IPLUG}/Dependencies/IPlug/RTAudio/RtAudio.cpp"
   "${IPLUG}/Dependencies/IPlug/RTMidi/RtMidi.cpp"
   "${CMAKE_CURRENT_LIST_DIR}/VoLumJackPulseDlopen.cpp"
+  "${CMAKE_CURRENT_LIST_DIR}/VoLumSwellHeadless.cpp"
   ${VOLUM_SWELL_SOURCES}
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
