@@ -1,16 +1,16 @@
 # 09 File dialogs, clipboard, OpenURL, message boxes
 
-Status: **PASS** on code head `912018a9`. The ticket Status line is unchanged.
+Status: **PASS** on code head `516cf043`. The ticket Status line is unchanged.
 
 ## Heads
 
 | | Branch | Sha |
 | --- | --- | --- |
-| Superproject code | `feature/linux-09-dialogs` | `912018a982d2b063df9292ed5ec30e7ddd9dd073` |
+| Superproject code | `feature/linux-09-dialogs` | `516cf04308a41b38abb52360890eeb71ad665824` |
 | iPlug2 | `volum/linux-09` | `81096efce99a3b6df11fcb714ed0451cc06c0166` |
 | This report | a later commit on the same branch | see `git log -1` |
 
-`volum/linux-09` is `volum/linux` `72593f1` plus the dialog commits. It is pushed to `https://github.com/guitarlum/iPlug2.git`. Not merged into `volum/linux`, `feature/linux-support`, or `dev`.
+`volum/linux-09` is `volum/linux` `72593f1` plus the dialog commits. It is pushed to `https://github.com/guitarlum/iPlug2.git`. The fix round did not change it. Not merged into `volum/linux`, `feature/linux-support`, or `dev`.
 
 ## Design
 
@@ -32,25 +32,50 @@ A missing binary, a failed spawn, or a portal response other than success or can
 
 **Clipboard.** X11 `CLIPBOARD`. A selection this window owns is returned from the cache. Otherwise `XConvertSelection` plus `poll` on the X connection, deadline `kWaitMs` (100). Other events stay queued. `SelectionRequest` is answered from `ProcessX11Events`.
 
-**Call sites.** Pack export, pack import, Manage import and Builder "add .nam" on Linux continue in the completion (import re-enters the same function with the paths stashed). Those branches are `#if defined(OS_LINUX)`. The Windows and macOS source paths are the previous synchronous calls.
+**Call sites.** Linux-only `#if defined(OS_LINUX)` forks. A cross-platform completion handler would switch the macOS `NSSavePanel` to `beginSheetModalForWindow`. Pack export and pack open share one writer and one opener with the synchronous path. Manage import and Builder "add .nam" stash the paths and re-enter the same function; that re-entry does not copy the import or builder body.
 
 New units: `IGraphicsLinuxDialogs.cpp`, `IGraphicsLinuxClipboard.cpp`. `IGraphicsLinux.cpp` only forwards. The blank line with trailing spaces in `IPlugVST3.cpp` `createView` is gone.
 
-## Evidence
+## Coordinator fix round
 
-Box: WSL2, GCC and Clang, one build lock, localai guard passed. Worktree `912018a9`, iPlug2 `81096efce`.
+1. **Windows and macOS dialog sequence.** A stripper treats `#if defined(OS_LINUX)` as false, drops that branch and the guard lines, keeps the `#else` body, and compares the result with `git show 43ecf015:<file>` after newline normalization.
+
+   - `VoLumCustomOverlay.h`: match, 2130 lines. Manage import and Builder add both compile to the original macOS comment, one `ReleaseMouseCapture()`, and `PromptForFiles`.
+   - `VoLumPackOverlay.h`: match, 936 lines. `OpenPickedPack` sits in the Linux branch.
+   - Linux arms, read in source: StartImport, Builder `kAddFile`, pack export and pack open each call `ReleaseMouseCapture()` once, inside the arm that opens the dialog. Nothing releases the mouse before the `#if`.
+
+   `VoLumPackActions.inc.cpp` is not a byte match of `43ecf015`. With `OS_LINUX` undefined the dialog lines are still the original comment, one release, and `PromptForFile` without a completion handler. The write and open bodies moved into `writeChosen` and `openChosen`. The synchronous path calls those helpers. The log strings are the same text.
+
+2. **Shared helpers.** `writeChosen` appends `.volumpack`, writes the pack, and logs `export failed` or `export wrote`. `openChosen` opens the pack and logs `opened`, `skipped on open`, or `open refused`. Both the synchronous return and the Linux completion call the same helper. The overlay re-entry only stashes paths and calls `StartImport` or `HandleBuilderAction` again.
+
+3. **Async coverage.** Carried to ticket 11. No new Xvfb check in this round. The harness hooks (`VOLUM_PACK_SAVE_PATH`, `VOLUM_PACK_OPEN_PATH`, `VOLUM_IMPORT_OPEN_PATHS`) return before `PromptForFile` / `PromptForOpenFiles`, so they never run the completion. The scenario list is in `.scratch/linux-support/issues/11-e2e-linux.md` under "Carried from ticket 09": pack export, pack open, Manage import, Builder add. Each must be shown red with the completion not invoked. Ticket 11 owns them.
+
+4. **Changelog.** The existing 1.4.0 line stays. Ticket 15 rewrites those lines.
+
+`run-tests-win.ps1` on this branch takes the named mutex `Local\VoLum-run-tests-win-build` from `feature/linux-support` `bf5ce757`, so MSBuild does not run in two worktrees at once.
+
+## Evidence (fix round, `516cf043`)
+
+Box: WSL2, GCC and Clang, one build lock, localai guard passed. Worktree `516cf043`, iPlug2 `81096efce`.
 
 | Check | Result |
 | --- | --- |
 | GCC doctest | 1496 passed, 0 failed, 1 skipped. `GCC_RC=0` |
 | Clang ASan/UBSan doctest | 1461 passed, 0 failed, 36 skipped. `CLANG_RC=0` |
+| Windows tests | 1470 passed, 0 failed, 1 skipped. exe exit 0. Serial mutex held for the build |
+| CI | [40123212253](https://github.com/guitarlum/VoLum/actions/runs/40123212253) on `516cf043`: **success**. Every `ci.yml` job completed success, including macOS tests, macOS installer upgrade, and macOS standalone e2e. None skipped |
+
+## Evidence (dialog engine, `912018a9`)
+
+REAPER smoke and the red proofs below are from the head before this fix round. That head's CI was [40117911722](https://github.com/guitarlum/VoLum/actions/runs/40117911722). The acceptance run is `40123212253`.
+
+| Check | Result |
+| --- | --- |
 | REAPER release | 2 instances x 20: PASS. 40/40 editor open/close. 0 X errors, 0 off-thread, 0 sanitizer lines |
 | REAPER ASan | same: PASS. 40/40. 0 / 0 / 0 |
 | REAPER input | PASS. 1/1 open/close. 0 / 0 / 0 |
-| Windows tests | 1470 passed, 0 failed, 1 skipped. exe exit 0 |
-| CI | [40117911722](https://github.com/guitarlum/VoLum/actions/runs/40117911722) on `912018a9`: **success**. Linux tests, macOS (including standalone e2e and installer upgrade), Windows, formatting, NAMCore, coverage |
 
-Input pixel changes on this build: click 214705, Down 200426, wheel 15265. Corner drag 900x628 to 1020x708. Space forwarded; headless play state stays 0, as in ticket 07.
+Input pixel changes on that build: click 214705, Down 200426, wheel 15265. Corner drag 900x628 to 1020x708. Space forwarded; headless play state stays 0, as in ticket 07.
 
 Clipboard, under `xvfb-run`, a second connection owning `CLIPBOARD` and not answering: `got=0 ms=99 cap=100`. The doctest skips that live wait when it cannot bind its own X server. On this box `/tmp/.X11-unix` is a read-only mount, so a raw `Xvfb` cannot create a socket; `xvfb-run` can, and that is what the one-off used. CI's Linux tests job passed, so the case did not fail there.
 
@@ -64,7 +89,7 @@ On the box, against `912018a9`, each break was rebuilt into the doctest and then
 | `DeliverNow` runs the completion before returning | `CHECK_FALSE( true )` on "every tool is missing". `RED_ASYNC_RC=1` |
 | Both restored | portal case 9/9, async case 5/5, run-loop cases 4/4. all exit 0 |
 
-An earlier head, `6b4e0515`, failed two tests (fake tools replaced `PATH`, so `basename` was missing, and a reap timer leaked into the run-loop registry). CI [40114463147](https://github.com/guitarlum/VoLum/actions/runs/40114463147) on that head failed `Linux tests`. `912018a9` is the fix. That run is not the acceptance run.
+An earlier head, `6b4e0515`, failed two tests (fake tools replaced `PATH`, so `basename` was missing, and a reap timer leaked into the run-loop registry). CI [40114463147](https://github.com/guitarlum/VoLum/actions/runs/40114463147) on that head failed `Linux tests`. `912018a9` is that fix. That run is not the acceptance run.
 
 ## Text entry and popup menus
 
@@ -75,3 +100,4 @@ An earlier head, `6b4e0515`, failed two tests (fake tools replaced `PATH`, so `b
 - `PromptForColor` still returns false.
 - With neither `zenity` nor `kdialog`, a message box completes as `kNoResult` and is not drawn.
 - The doctest does not time the clipboard on a machine where it cannot start `Xvfb`. The 99 ms measurement is the `xvfb-run` one-off above.
+- Pack export, pack open, Manage import and Builder add through the asynchronous Linux dialog are ticket 11 (see the carry-over above).
