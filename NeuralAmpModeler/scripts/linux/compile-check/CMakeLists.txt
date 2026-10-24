@@ -23,24 +23,24 @@ add_library(volum_linux_leaf OBJECT
 target_compile_features(volum_linux_leaf PRIVATE cxx_std_17)
 target_compile_definitions(volum_linux_leaf PRIVATE IGRAPHICS_NANOVG IGRAPHICS_GL2)
 # iPlug2 headers use Apple's #pragma mark. Those lines stay; they are not Linux edits.
+# Vendored headers are SYSTEM so their pre-existing -Wunused/-Wmultichar noise
+# does not fail this leaf TU. Warnings in the Linux .cpp files stay -Werror.
 target_compile_options(volum_linux_leaf PRIVATE -Wall -Wextra -Werror -Wno-unknown-pragmas)
 
-target_include_directories(volum_linux_leaf PRIVATE
-  ${CMAKE_CURRENT_LIST_DIR}
+target_include_directories(volum_linux_leaf SYSTEM PRIVATE
   ${VOLUM_ROOT}/NeuralAmpModeler
   ${IPLUG}/IPlug
   ${IPLUG}/IPlug/APP
+  ${IPLUG}/IPlug/Extras
   ${IPLUG}/IGraphics
   ${IPLUG}/IGraphics/Platforms
   ${IPLUG}/IGraphics/Drawing
   ${IPLUG}/IGraphics/Controls
-)
-
-target_include_directories(volum_linux_leaf SYSTEM PRIVATE
   ${IPLUG}/WDL
   ${IPLUG}/Dependencies/IGraphics/NanoVG/src
   ${IPLUG}/Dependencies/IGraphics/NanoSVG/src
   ${IPLUG}/Dependencies/IGraphics/glad_GL2/include
+  ${IPLUG}/Dependencies/IGraphics/STB
 )
 
 set_source_files_properties(
