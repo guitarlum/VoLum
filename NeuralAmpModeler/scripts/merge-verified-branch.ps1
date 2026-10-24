@@ -1,7 +1,8 @@
 # Merge a CI-verified branch into dev (or -Into <target>) and push it, in one call.
 #
 # Refuses unless the branch head is pushed and has a successful ci.yml run whose
-# macOS job is green (-AllowWindowsOnly accepts a `ci-watch.ps1 -WindowsOnly` run),
+# macOS job is green and every job whose name starts with Linux is green
+# (-AllowWindowsOnly accepts a `ci-watch.ps1 -WindowsOnly` run),
 # the local target matches origin, and the merge has no conflicts. Then it makes a
 # --no-ff "Merge <branch> into <target>" commit, pushes over HTTPS (SSH to GitHub
 # is blocked on this machine), and refreshes origin/<target>.
@@ -74,8 +75,19 @@ if (-not $run) {
 if ($run.status -ne "completed") {
   Stop-Refused "CI run $($run.databaseId) on $($head.Substring(0, 8)) is still $($run.status). Wait: pwsh NeuralAmpModeler/scripts/ci-watch.ps1 -RunId $($run.databaseId)"
 }
-if ($run.conclusion -ne "success") { Stop-Refused "CI run $($run.databaseId) concluded '$($run.conclusion)': $($run.url)" }
 $jobs = (& gh run view $run.databaseId --repo $Repo --json jobs | ConvertFrom-Json).jobs
+if (-not $AllowWindowsOnly) {
+  $linuxJobs = @($jobs | Where-Object { $_.name -like "Linux*" })
+  if ($linuxJobs.Count -eq 0) {
+    Stop-Refused "CI run $($run.databaseId) has no job whose name starts with Linux. Dispatch the full matrix, or pass -AllowWindowsOnly."
+  }
+  $linuxBad = @($linuxJobs | Where-Object { $_.conclusion -ne "success" })
+  if ($linuxBad.Count -gt 0) {
+    $detail = ($linuxBad | ForEach-Object { "$($_.name)=$($_.conclusion)" }) -join ", "
+    Stop-Refused "CI run $($run.databaseId) has a Linux job that is not green ($detail). Dispatch the full matrix, or pass -AllowWindowsOnly if Linux cannot be affected."
+  }
+}
+if ($run.conclusion -ne "success") { Stop-Refused "CI run $($run.databaseId) concluded '$($run.conclusion)': $($run.url)" }
 $mac = @($jobs | Where-Object { $_.name -like "macOS*" }) | Select-Object -First 1
 if (-not $AllowWindowsOnly -and (-not $mac -or $mac.conclusion -ne "success")) {
   Stop-Refused "CI run $($run.databaseId) has no green macOS job (Windows-only run?). Dispatch the full matrix, or pass -AllowWindowsOnly if macOS cannot be affected."

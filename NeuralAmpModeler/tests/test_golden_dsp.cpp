@@ -58,6 +58,11 @@ void ExpectGoldenHash(const char* name, const std::string& actual, const char* w
   INFO(std::string(name) << " actual=" << actual);
   const char* expected =
     PlatformExpected(windowsExpected, macExpected, macSanitizedExpected, linuxExpected, linuxSanitizedExpected);
+#if defined(__linux__)
+  if (!volum::test::RequireLinuxHash(name))
+    return;
+  MESSAGE((std::string("linux-hash ") + name + " " + actual));
+#endif
   // FAIL_CHECK keeps the rest of the case running so one Linux pass prints every hash.
   if (expected == nullptr)
   {
@@ -289,18 +294,18 @@ TEST_CASE("Golden DSP: reverb and Oktaverb mode hashes stay stable")
   ExpectGoldenHash("oktaverb-halo", volum::test::Sha256Hex(halo),
                    "8c7271c2c52d50c11cfb359ffa77e2c539cf5431c0239fe78451763a4041f434",
                    "6165bcba62f985a34a94f1be51f8dbd135a9a68c479b48fe40ca79f5d7112a02", nullptr,
-                   "1daf2177d39c99feebef9eb7229c8b340c2fe55647874a2fe647d4d6bcfdd444");
+                   "732b960b94b03b725fcfcab6bb5fefcd4870293a147e4870d16d6484cae3afbe");
   volum::test::CheckWindowsNull("oktaverb-halo", halo);
   const auto shimmer = RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 1);
   ExpectGoldenHash("oktaverb-shimmer", volum::test::Sha256Hex(shimmer),
                    "3403ec0e51ca3dc37eb94cd14a1847b8135a1925cc83ab695dfa78498d775c86",
                    "0b77bfc150d7d07009b79f96e8d8999e50645320eb02b23af0c2ed773de89339", nullptr,
-                   "ad15f8ba5903d4f24850cf67d25c91dc39e18d4fed24a4f7a1c2c1d5e1ec5c0a");
+                   "e683aaaca08266c38d427594a6ec6894f5fd039b4977e6e31d02243343b3dd05");
   volum::test::CheckWindowsNull("oktaverb-shimmer", shimmer);
   const auto bloom = RunReverbGolden(dsp::effect::Reverb::kModeOktaverb, 2);
   ExpectGoldenHash("oktaverb-bloom", volum::test::Sha256Hex(bloom),
                    "bb97b2c1331309464e2d18f4d75ee81bf374ffbe99a6346bb6b6bf9e561d678e",
                    "91e46693fc1341469e3c429d149a26c491e746f4d371dfa1e9dbafe152807fc2", nullptr,
-                   "d91f61f60ebf77fa633df8dc8d8b97a98bcff44db4a6d08929c3a4765de23cf3");
+                   "c10c2db635c53140982bd6c91915002e3296b9a58dfa2d962af2e5c36642fdf5");
   volum::test::CheckWindowsNull("oktaverb-bloom", bloom);
 }

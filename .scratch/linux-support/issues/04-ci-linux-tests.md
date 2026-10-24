@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: 02
 
 # 04 Linux doctest CI job

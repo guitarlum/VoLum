@@ -3,12 +3,12 @@ name: CI
 # pull_request: runs when a PR to dev/main is opened/updated.
 # push: dev is the integration gate, main is the release branch gate.
 # release/**: rehearse the full matrix on release branches before promoting to main.
-# workflow_dispatch windows_only: Windows tests + installer + zip, no macOS/pluginval/smokes.
+# workflow_dispatch windows_only: Windows tests + installer + zip, no macOS, Linux, pluginval, or smokes.
 on:
   workflow_dispatch:
     inputs:
       windows_only:
-        description: 'Windows tests + installer + zip only (skip macOS, coverage, NAMCore, pluginval, smokes)'
+        description: 'Windows tests + installer + zip only (skip macOS, Linux, coverage, NAMCore, pluginval, smokes)'
         type: boolean
         default: false
   push:
@@ -529,6 +529,40 @@ jobs:
           name: VoLum-mac-standalone-e2e
           path: ${{ runner.temp }}/volum-e2e-standalone-mac/diagnostics/
           if-no-files-found: warn
+
+  linux-tests:
+    name: Linux tests
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
+
+      - name: Get VST3 SDK
+        run: |
+          cd iPlug2/Dependencies/IPlug
+          ./download-vst3-sdk.sh master
+        shell: bash
+
+      - name: Provision Linux CI packages
+        run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci
+        shell: bash
+
+      - name: Unit tests (doctest, GCC)
+        env:
+          VOLUM_REQUIRE_LINUX_HASH_REFERENCE: "1"
+        run: bash NeuralAmpModeler/scripts/run-tests-linux.sh
+        shell: bash
+
+      - name: Sanitized unit tests (Clang ASan/UBSan)
+        run: bash NeuralAmpModeler/scripts/run-tests-linux.sh --clang --sanitize
+        shell: bash
 
   coverage:
     name: Coverage report (VoLum + AudioDSPTools, non-blocking)

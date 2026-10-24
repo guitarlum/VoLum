@@ -8,6 +8,12 @@
 # apt toolchain and test packages (including xvfb, xdotool and jackd2) and does
 # not download pluginval, REAPER or Carla.
 #
+# ubuntu-22.04 CI uses the archive compilers g++-12 and clang-15. gcc-12 could
+# not compile ResamplingContainer.h until the LanczosResampler alias was
+# qualified; that fix is in AudioDSPTools. The toolchain PPA and apt.llvm.org
+# are not used. If a previous run added those source files, this script
+# removes only those files.
+#
 # Never stops, restarts or reconfigures ~/localai-platform, llama-server,
 # Ollama or docker. Package installs only.
 set -euo pipefail
@@ -118,6 +124,27 @@ write_if_changed() {
   fi
 }
 
+# Drop only the compiler sources this script used to add. Nothing else under
+# /etc/apt is touched.
+drop_added_compiler_sources() {
+  local removed=0
+  local f
+  shopt -s nullglob
+  for f in /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test-*.list \
+           /etc/apt/sources.list.d/llvm-toolchain-*-21.list \
+           /etc/apt/trusted.gpg.d/apt.llvm.org.asc \
+           /etc/apt/trusted.gpg.d/apt.llvm.org.gpg; do
+    log "removing previously added compiler source $f"
+    run_root rm -f "$f"
+    removed=1
+  done
+  shopt -u nullglob
+  if [ "$removed" -eq 1 ]; then
+    log "apt-get update after removing compiler sources"
+    apt_retry run_apt update -qq
+  fi
+}
+
 if [ ! -r /etc/os-release ]; then
   log "missing /etc/os-release"
   exit 1
@@ -145,6 +172,7 @@ if [ "$CI" -eq 0 ]; then
 fi
 
 log "ubuntu $VERSION_ID ${VERSION_CODENAME:-} ci=$CI"
+drop_added_compiler_sources
 
 gl_pkg=$(choose_pkg libgl-dev libgl1-mesa-dev)
 alsa_pkg=$(choose_pkg libasound2-dev libasound-dev)
@@ -176,6 +204,7 @@ pkgs=(
   xvfb
   xdotool
   x11-apps
+  x11-utils
   imagemagick
   alsa-utils
   zenity
@@ -186,6 +215,9 @@ pkgs=(
   unzip
   xz-utils
 )
+if [ "$VERSION_ID" = "22.04" ]; then
+  pkgs+=(gcc-12 g++-12 clang-15)
+fi
 
 missing=()
 for pkg in "${pkgs[@]}"; do
@@ -237,13 +269,24 @@ need_cmd gcc
 need_cmd g++
 need_cmd clang
 need_cmd ld.lld
+if [ "$VERSION_ID" = "22.04" ]; then
+  need_cmd g++-12
+  need_cmd clang++-15
+fi
 
-# Clang 18+ ships the ASan/UBSan runtimes as libclang-rt-<major>-dev; older
-# releases bundle them with clang itself, so the package may not exist.
-clang_major=$(clang -dumpversion | cut -d. -f1)
-if apt-cache show "libclang-rt-$clang_major-dev" >/dev/null 2>&1 && ! have_pkg "libclang-rt-$clang_major-dev"; then
-  log "apt install libclang-rt-$clang_major-dev"
-  apt_retry run_apt install -y --no-install-recommends "libclang-rt-$clang_major-dev"
+# Clang 18+ ships the ASan runtime as libclang-rt-<major>-dev; older releases
+# bundle it with clang itself, so the package may not exist.
+install_clang_rt() {
+  local major=$1
+  local pkg="libclang-rt-${major}-dev"
+  if apt-cache show "$pkg" >/dev/null 2>&1 && ! have_pkg "$pkg"; then
+    log "apt install $pkg"
+    apt_retry run_apt install -y --no-install-recommends "$pkg"
+  fi
+}
+install_clang_rt "$(clang -dumpversion | cut -d. -f1)"
+if command -v clang++-15 >/dev/null 2>&1; then
+  install_clang_rt "$(clang++-15 -dumpversion | cut -d. -f1)"
 fi
 need_cmd cmake
 need_cmd ninja
@@ -253,6 +296,14 @@ need_cmd xdotool
 need_cmd xdpyinfo
 need_cmd jackd
 
+log "g++ $(g++ --version | head -n 1)"
+log "clang $(clang --version | head -n 1)"
+if command -v g++-12 >/dev/null 2>&1; then
+  log "g++-12 $(g++-12 --version | head -n 1)"
+fi
+if command -v clang++-15 >/dev/null 2>&1; then
+  log "clang++-15 $(clang++-15 --version | head -n 1)"
+fi
 if [ "$CI" -eq 1 ]; then
   log "ci mode: skipped pluginval, REAPER and Carla"
   log "done"
