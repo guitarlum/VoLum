@@ -285,6 +285,7 @@ TEST_CASE("Linux plug-in hides static libstdc++ and the gate rejects an exported
   CHECK(version.find("GetPluginFactory") != std::string::npos);
   CHECK(version.find("ModuleEntry") != std::string::npos);
   CHECK(version.find("ModuleExit") != std::string::npos);
+  CHECK(version.find("_ZN5iplug23IPlugLinuxCheckUIThreadEPKc") != std::string::npos);
   CHECK(version.find("local:") != std::string::npos);
 
   const std::string gate = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-linux.sh");

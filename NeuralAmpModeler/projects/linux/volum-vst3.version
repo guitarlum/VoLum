@@ -3,14 +3,12 @@
     GetPluginFactory;
     ModuleEntry;
     ModuleExit;
-    extern "C++" {
-      "iplug::IPlugLinuxCheckUIThread*";
-      "iplug::IPlugLinuxOffThreadCalls*";
-      "iplug::igraphics::IGraphicsLinux::OpenWindow*";
-      "iplug::igraphics::IGraphicsLinux::CloseWindow*";
-      "iplug::igraphics::IGraphicsLinux::ProcessX11Events*";
-      "iplug::igraphics::IGraphicsLinux::OnDisplayTimer*";
-    };
+    _ZN5iplug23IPlugLinuxCheckUIThreadEPKc;
+    _ZN5iplug24IPlugLinuxOffThreadCallsEv;
+    _ZN5iplug9igraphics14IGraphicsLinux10OpenWindowEPv;
+    _ZN5iplug9igraphics14IGraphicsLinux11CloseWindowEv;
+    _ZN5iplug9igraphics14IGraphicsLinux16ProcessX11EventsEv;
+    _ZN5iplug9igraphics14IGraphicsLinux14OnDisplayTimerEv;
   local:
     *;
 };
