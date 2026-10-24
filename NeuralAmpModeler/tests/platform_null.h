@@ -62,16 +62,15 @@ inline bool RequireLinuxHash(const char* caseName)
   if (!announced)
   {
     announced = true;
-    MESSAGE(std::string("Linux hash identity runtime=\"")
-            << LinuxRuntimeIdentity() << "\" reference=\"" << LinuxHashReferenceIdentity() << "\"");
+    MESSAGE(std::string("Linux hash identity runtime=\"") + LinuxRuntimeIdentity() + "\" reference=\""
+            + LinuxHashReferenceIdentity() + "\"");
   }
   if (LinuxRuntimeIdentity() == LinuxHashReferenceIdentity())
     return true;
   const char* require = std::getenv("VOLUM_REQUIRE_LINUX_HASH_REFERENCE");
   const bool required = require != nullptr && std::strcmp(require, "1") == 0;
-  MESSAGE(std::string("Linux hash identity mismatch for ")
-          << caseName << ": runtime=\"" << LinuxRuntimeIdentity() << "\" reference=\""
-          << LinuxHashReferenceIdentity() << "\"");
+  MESSAGE(std::string("Linux hash identity mismatch for ") + caseName + ": runtime=\"" + LinuxRuntimeIdentity()
+          + "\" reference=\"" + LinuxHashReferenceIdentity() + "\"");
   if (required)
     FAIL_CHECK("VOLUM_REQUIRE_LINUX_HASH_REFERENCE=1 but this build is not the Linux hash reference");
   return required;
