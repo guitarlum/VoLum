@@ -583,7 +583,7 @@ host_menu() {
   local before after
   before=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
   # Preset bar, then the first row under the open menu.
-  drive "key p" || { fail "popup menu: no editor window"; return; }
+  drive "click 743 22" || { fail "popup menu: no editor window"; return; }
   sleep 0.8
   drive "click 539 23" "click 450 77" "click 450 176" || { fail "popup menu: no editor window"; return; }
   sleep 0.8
@@ -601,7 +601,9 @@ host_menu() {
 host_text() {
   local work="$OUT/reaper-text"
   reaper_session "$work" "" || { fail "text entry: reaper did not start"; return; }
-  drive "key p" "key Down" || { fail "text entry: no editor window"; return; }
+  drive "click 743 22" || { fail "text entry: no editor window"; return; }
+  sleep 0.6
+  drive "key Down" || { fail "text entry: no editor window"; return; }
   sleep 0.6
   drive "click 122 575" || { fail "text entry: no editor window"; return; }
   sleep 0.7
@@ -630,7 +632,7 @@ host_red() {
     return
   fi
   before=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
-  drive "key p" || true
+  drive "click 743 22" || true
   sleep 0.6
   drive "click 539 23" "click 450 77" "click 450 176" || true
   sleep 0.8
@@ -650,7 +652,9 @@ host_red() {
     BREAK_TEXT=0
     return
   fi
-  drive "key p" "key Down" || true
+  drive "click 743 22" || true
+  sleep 0.5
+  drive "key Down" || true
   sleep 0.6
   drive "click 122 575" || true
   sleep 0.7
