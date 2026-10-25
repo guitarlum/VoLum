@@ -2,6 +2,8 @@
 
 Status: **PASS** on code head `b6d23c42`, with one skip. MIDI recall is implemented and fails closed when the sequencer is missing (`--require-midi`). The kernels available for the box and for GitHub Actions were built without an ALSA sequencer module, so that scenario is a skip, the same way the Windows harness skips a missing loopMIDI port.
 
+The follow-up on `3ef10fe0` tightens three checks that had stayed green while the feature was broken. CI on that head is green.
+
 ## Heads
 
 | | Branch | Sha |
@@ -11,6 +13,8 @@ Status: **PASS** on code head `b6d23c42`, with one skip. MIDI recall is implemen
 | This report | a later commit on the same branch | see `git log -1` |
 
 iPlug2 `3d894cd8e` only documents that `VoLumLinuxAppDataDir` is the one XDG helper. The function body is unchanged. Not merged into `volum/linux`, `feature/linux-support`, or `dev`.
+
+The tightened checks below are on a later code head, `3ef10fe0`, which also merges `feature/linux-support` `56fbdf04`.
 
 ## What runs
 
@@ -80,4 +84,20 @@ An earlier run on `090d81bf`, [40153669537](https://github.com/guitarlum/VoLum/a
 
 ## Open questions
 
-1. **MIDI cannot be executed here.** The box kernel (`6.6.114.1-microsoft-standard-WSL2`) has `# CONFIG_SND_SEQUENCER is not set`, so `snd-seq` and `snd-virmidi` do not exist to load. The GitHub `ubuntu-22.04` image (`6.8.0-1064-azure`) still has no `snd-seq.ko` after `linux-modules-extra`. `aconnect` and an RtMidi virtual port both need that device. The app's MIDI is ALSA, so a JACK MIDI port would not reach it. The scenario skips, and `--require-midi` fails. A kernel with the sequencer module is what would turn the skip into the Program Change run.
+1. **MIDI cannot be executed here.** The box kernel (`6.6.114.1-microsoft-standard-WSL2`) has `# CONFIG_SND_SEQUENCER is not set`, so `snd-seq` and `snd-virmidi` do not exist to load. The GitHub `ubuntu-22.04` image (`6.8.0-1064-azure`) still has no `snd-seq.ko` after `linux-modules-extra`. `aconnect` and an RtMidi virtual port both need that device. The app's MIDI is ALSA, so a JACK MIDI port would not reach it. The scenario skips, and `--require-midi` fails. A kernel with the sequencer module is what would turn the skip into the Program Change run. Ticket 16 owns a QEMU guest for that. This round leaves the skip and `--require-midi` as they are.
+
+## Tightened checks
+
+Code head for this round: `3ef10fe0642a30fe57fae419455b6ae52a4374fd`. It merges `feature/linux-support` `56fbdf04` and keeps both `gdb` and `tesseract-ocr` in `provision-linux.sh`. clang-format 18.1.3 from a fresh `ubuntu:24.04` container made no edits to the `.h`/`.cpp` files that differ from the merge base with `dev`. iPlug2 is still `3d894cd8e`.
+
+Three checks had stayed green while the feature was broken. On the good tree each scenario passed first: preferences 10 checks, dialog-open 8 checks (overlay AE 529838, cancel AE 7756), dialog-builder 8 checks. Each break below was restored afterwards. `git diff` on the superproject and on iPlug2 was empty, and the box worktree was clean at `3ef10fe0`.
+
+| Check | Break | Red result |
+| --- | --- | --- |
+| `dialog-open` "the import screen is showing" | The completion returns before `openChosen` | Overlay AE=7348, under the new threshold of 100000 (flicker is about 8k, the real overlay about 530k). The pixel check failed, and so did the `opened` log line. Cancel AE stayed 7756. 2 of 8 checks failed |
+| `preferences` "settings.ini still names the JACK system device" | The driver label `JACK` renamed to `Jack` | The check failed. The app had rewritten `settings.ini` (`rewritten=1`, `outdev=system`) and logged `Preferences drivers: ALSA, Jack, PulseAudio`. 4 of 10 checks failed |
+| `dialog-builder` "zenity returned the .nam" | The completion returns before `mLinuxPendingBuilder = paths` | The check failed with an empty draft, so the returned path never reached the app. The row did not change. 3 of 8 checks failed |
+
+Windows `run-tests-win.ps1` on this head: **exit 0**. 1478 passed, 0 failed, 1 skipped.
+
+CI run [40161602536](https://github.com/guitarlum/VoLum/actions/runs/40161602536) on `3ef10fe0`. **Success. Every `ci.yml` job**, including Formatting, macOS tests, macOS installer upgrade, macOS standalone e2e, Linux tests, Linux standalone, Linux plugin gates, and Linux standalone e2e.
