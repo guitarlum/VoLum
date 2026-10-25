@@ -42,7 +42,7 @@ int main(void)
     fprintf(stderr, "volum-jack-tone: activate failed\n");
     return 1;
   }
-  const char** ports = jack_get_ports(client, "VoLum", JackPortIsInput, 0);
+  const char** ports = jack_get_ports(client, "VoLum", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
   if (!ports || !ports[0])
   {
     fprintf(stderr, "volum-jack-tone: no VoLum input port\n");
