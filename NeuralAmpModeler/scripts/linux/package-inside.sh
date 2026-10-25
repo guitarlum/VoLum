@@ -363,7 +363,18 @@ log "uninstall"
 HOME="$home" XDG_DATA_HOME="$home/.local/share" "$TOP/install.sh" --uninstall | tee /out/uninstall.log
 assert_user_gone "$home" | tee /out/uninstall-left.txt
 user_paths "$home"
-if [[ -e "$DATA" ]]; then
+if [[ ! -f "$DATA/volum.log" ]]; then
+  echo "session log missing, so this uninstall is not the content case: $DATA" >&2
+  exit 1
+fi
+echo "data dir kept: session log"
+
+log "uninstall removes an empty data dir"
+empty="$home-empty"
+run_install "$empty"
+HOME="$empty" XDG_DATA_HOME="$empty/.local/share" "$TOP/install.sh" --uninstall | tee /out/uninstall-empty.log
+user_paths "$empty"
+if [[ -e "$DATA" || -e "$BIN" || -e "$VST3" ]]; then
   echo "empty data dir was kept: $DATA" >&2
   exit 1
 fi
