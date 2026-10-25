@@ -91,6 +91,33 @@ TEST_CASE("Linux settings.ini folder is the library folder and ignores a relativ
   CHECK(body.find("LinuxAbsoluteXdg") == std::string::npos);
 }
 
+TEST_CASE("Linux gate tone is read from the environment strings, not from the audio callback")
+{
+  using iplug::VoLumLinuxGateToneMode;
+  CHECK(iplug::VoLumLinuxReadGateTone(nullptr, nullptr).mode == VoLumLinuxGateToneMode::Off);
+  CHECK(iplug::VoLumLinuxReadGateTone("", "12").mode == VoLumLinuxGateToneMode::Off);
+  CHECK(iplug::VoLumLinuxReadGateTone("sine", nullptr).mode == VoLumLinuxGateToneMode::Sine);
+  CHECK(iplug::VoLumLinuxReadGateTone("1", nullptr).mode == VoLumLinuxGateToneMode::Sine);
+  CHECK(iplug::VoLumLinuxReadGateTone("mute", nullptr).mode == VoLumLinuxGateToneMode::Mute);
+  const auto drop = iplug::VoLumLinuxReadGateTone("drop", "12");
+  CHECK(drop.mode == VoLumLinuxGateToneMode::Drop);
+  CHECK(drop.dropAt == 12);
+  CHECK(iplug::VoLumLinuxReadGateTone("drop", nullptr).dropAt == 400);
+  CHECK(iplug::VoLumLinuxReadGateTone("drop", "0").dropAt == 400);
+  CHECK(iplug::VoLumLinuxReadGateTone("drop", "nope").dropAt == 400);
+
+  const std::string callback = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_linux.cpp");
+  const auto fn = callback.find("bool IPlugAPPLinuxGateTone(");
+  REQUIRE(fn != std::string::npos);
+  CHECK(callback.substr(fn).find("getenv") == std::string::npos);
+
+  const std::string host = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_host.cpp");
+  const auto init = host.find("bool IPlugAPPHost::Init()");
+  REQUIRE(init != std::string::npos);
+  const std::string initBody = host.substr(init, host.find("\nbool IPlugAPPHost::", init + 1) - init);
+  CHECK(initBody.find("VoLumLinuxReadGateTone(std::getenv(\"VOLUM_LINUX_GATE_TONE\")") != std::string::npos);
+}
+
 TEST_CASE("Linux quit signals cancel a modal first, then close, and a second one exits")
 {
   CHECK(iplug::VoLumLinuxQuitStepFor(0, false) == VoLumLinuxQuitStep::None);
