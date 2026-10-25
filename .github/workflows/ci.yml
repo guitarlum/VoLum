@@ -613,6 +613,10 @@ jobs:
         run: bash NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh --app build-linux/standalone/VoLum --out "$RUNNER_TEMP/volum-smoke-app" --require-hide --require-rt
         shell: bash
 
+      - name: UI scene diff and OUT meter
+        run: bash NeuralAmpModeler/scripts/linux/ui-scenes.sh --gate --out "$RUNNER_TEMP/volum-ui-scenes" --app build-linux/standalone/VoLum
+        shell: bash
+
       - name: Build the sanitized standalone (ASan + UBSan, g++-12)
         run: |
           cmake -S NeuralAmpModeler/projects/linux -B build-linux-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVOLUM_SANITIZE=ON -DVOLUM_BUILD_VALIDATOR=OFF

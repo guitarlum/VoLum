@@ -106,6 +106,9 @@ restore_red() {
   for f in "${REDBAK[@]}"; do
     if [[ -f "$f.redbak" ]]; then
       mv -f "$f.redbak" "$f"
+      # The backup keeps its old mtime, so a timestamp build would not
+      # recompile the restored source and the broken binary would ship.
+      touch "$f"
     fi
   done
   REDBAK=()
