@@ -471,6 +471,11 @@ steps[#steps + 1] = function()
   end
 end
 steps[#steps + 1] = function()
+  reaper.Main_SaveProjectEx(0, projectPath, 0)
+  report("STEP saved")
+  wait(0.3)
+end
+steps[#steps + 1] = function()
   reaper.TrackFX_Show(track, 0, 2)
   wait(0.5)
 end
@@ -590,11 +595,10 @@ host_menu() {
   CAP="$work/home/.local/share/VoLum/capture"
   grab reaper-menu || true
   finish_reaper "$work" "$REAPER_PID"
-  after=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
-  if [[ "$before" != "$after" ]]; then
-    pass "popup menu changed volum-settings.json"
+  if grep -a -q "V30-THC-1" "$work/smoke.rpp"; then
+    pass "popup menu saved the factory reset in the REAPER project"
   else
-    fail "popup menu left volum-settings.json unchanged"
+    fail "popup menu did not save the factory reset in the REAPER project"
   fi
 }
 
@@ -639,13 +643,12 @@ host_red() {
   drive "click 539 23" "click 450 66" || true
   sleep 0.8
   finish_reaper "$work" "$REAPER_PID"
-  after=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
-  BREAK_POPUP=0
-  if [[ "$before" == "$after" ]]; then
-    pass "popup menu is red when recall is broken"
+  if grep -a -q "V30-THC-1" "$work/smoke.rpp"; then
+    fail "popup menu still saved a reset with the menu broken"
   else
-    fail "popup menu still changed settings with recall broken"
+    pass "popup menu is red when every row is ignored"
   fi
+  BREAK_POPUP=0
 
   BREAK_TEXT=1
   work="$OUT/reaper-text-red"
