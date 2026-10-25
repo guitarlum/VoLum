@@ -190,7 +190,7 @@ $user_data/VoLumRigs
 $user_desktop
 $user_icon
 EOF
-  echo "Installed VoLum for $USER"
+  echo "Installed VoLum for ${USER:-$(id -un)}"
   echo "  VST3        $user_vst3"
   echo "  Standalone  $user_bin"
   echo "  Data        $user_data"
