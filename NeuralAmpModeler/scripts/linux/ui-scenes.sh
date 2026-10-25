@@ -72,16 +72,18 @@ need() {
 }
 
 ssim() {
-  # ImageMagick prints "<distortion> (<normalized>)". The normalized term is
-  # 1-SSIM: 0 is identical. Return SSIM so a higher number is a closer match.
-  local out paren
+  # ImageMagick 7 prints "<distortion> (<normalized>)" and the term in
+  # parentheses is 1-SSIM. ImageMagick 6 prints one number, the SSIM itself
+  # (1 is identical). Return SSIM so a higher number is a closer match.
+  local out paren bare
   out=$(compare -metric SSIM "$1" "$2" null: 2>&1) || true
   paren=$(printf '%s\n' "$out" | awk -F'[()]' 'NF >= 2 { print $2; exit }')
-  if [[ -z "${paren:-}" ]]; then
-    echo "0"
+  if [[ -n "${paren:-}" ]]; then
+    awk -v d="$paren" 'BEGIN { printf "%.6f\n", 1 - d }'
     return
   fi
-  awk -v d="$paren" 'BEGIN { printf "%.6f\n", 1 - d }'
+  bare=$(printf '%s\n' "$out" | awk 'NF { print $1; exit }')
+  awk -v d="${bare:-0}" 'BEGIN { if (d+0 >= 0 && d+0 <= 1) printf "%.6f\n", d; else print "0" }'
 }
 
 dims() { identify -format '%wx%h' "$1" 2>/dev/null || echo '?'; }
