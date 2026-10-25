@@ -782,6 +782,21 @@ jobs:
         run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci
         shell: bash
 
+      - name: Break the Program Change handoff
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("NeuralAmpModeler/NeuralAmpModeler.cpp")
+          text = p.read_text()
+          old = "if (const auto slot = mVolumMidiQueue.Drain())"
+          new = "if (const auto slot = decltype(mVolumMidiQueue.Drain()){})"
+          if old not in text:
+              raise SystemExit("handoff line not found")
+          p.write_text(text.replace(old, new, 1))
+          print("RED PROOF: Program Change handoff no longer drains the MIDI queue")
+          PY
+        shell: bash
+
       - name: Build the standalone (g++-12)
         run: |
           cmake -S NeuralAmpModeler/projects/linux -B build-linux -DCMAKE_BUILD_TYPE=Release -DVOLUM_BUILD_VALIDATOR=OFF
