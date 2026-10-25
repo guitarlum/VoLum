@@ -1,12 +1,12 @@
 # 09 File dialogs, clipboard, OpenURL, message boxes
 
-Status: **PASS** on code head `516cf043`. The ticket Status line is unchanged.
+Status: **PASS** on code head `884bf5ad`. The ticket Status line is unchanged.
 
 ## Heads
 
 | | Branch | Sha |
 | --- | --- | --- |
-| Superproject code | `feature/linux-09-dialogs` | `516cf04308a41b38abb52360890eeb71ad665824` |
+| Superproject code | `feature/linux-09-dialogs` | `884bf5ad9e559c178c0ba8a05c90b740006b58bf` |
 | iPlug2 | `volum/linux-09` | `81096efce99a3b6df11fcb714ed0451cc06c0166` |
 | This report | a later commit on the same branch | see `git log -1` |
 
@@ -54,6 +54,24 @@ New units: `IGraphicsLinuxDialogs.cpp`, `IGraphicsLinuxClipboard.cpp`. `IGraphic
 
 `run-tests-win.ps1` on this branch takes the named mutex `Local\VoLum-run-tests-win-build` from `feature/linux-support` `bf5ce757`, so MSBuild does not run in two worktrees at once.
 
+## Clipboard wait bound
+
+The no-owner doctest used to pass on `elapsed < 250`, on a sanitizer `return`, and on an Xvfb socket miss after only `CHECK(kWaitMs == 100)`. A 200 ms wait passed, and a green Linux job did not show that the wait ran.
+
+The GCC case now checks `elapsed >= kWaitMs - 10` and `elapsed < kWaitMs + 50`. The 10 ms is the truncation under the deadline. The 50 ms is one `poll` wakeup past `kWaitMs`, not a second wait: `2 * kWaitMs` is 200, and 200 is not `< 150`. The test prints the elapsed milliseconds. `run-tests-linux.sh` sets `VOLUM_REQUIRE_X=1` and runs the GCC binary under `xvfb-run`. A missing display then fails. Without the variable, the same miss prints a `MESSAGE` and returns. The sanitizer build still skips, and that skip prints a `MESSAGE`. The GCC job does not.
+
+iPlug2 was not changed. `kWaitMs` is still 100.
+
+| Check | Result |
+| --- | --- |
+| Box GCC | 1496 passed, 0 failed, 1 skipped. Printed `clipboard no-owner wait measured 99 ms (lower 90, upper 150)` |
+| Box Clang ASan/UBSan | 1461 passed, 0 failed, 36 skipped. Message: sanitizer build skips the live wait |
+| Red, no display | `VOLUM_REQUIRE_X=1` and `DISPLAY` unset. `FATAL ERROR: VOLUM_REQUIRE_X=1 and no X display; the clipboard wait was not measured`. `RED_DISPLAY_RC=1` |
+| Red, two waits | Deadline set to `kWaitMs * 2`, then restored. `CHECK( 199 < 150 )` failed. Printed `measured 199 ms`. `RED_DOUBLE_RC=1`. `git diff --exit-code -- iPlug2` was empty afterwards |
+| CI | [40143126884](https://github.com/guitarlum/VoLum/actions/runs/40143126884) on `884bf5ad`: **success**. Every `ci.yml` job, including macOS tests, macOS installer upgrade, and macOS standalone e2e. GCC log: `VOLUM_REQUIRE_X: 1` and `clipboard no-owner wait measured 99 ms (lower 90, upper 150)` |
+
+An earlier dispatch on `7547e7f2`, [40141141655](https://github.com/guitarlum/VoLum/actions/runs/40141141655), failed formatting on the `printf` wrap only. `884bf5ad` is that wrap. The wait logic is the same.
+
 ## Evidence (fix round, `516cf043`)
 
 Box: WSL2, GCC and Clang, one build lock, localai guard passed. Worktree `516cf043`, iPlug2 `81096efce`.
@@ -77,7 +95,7 @@ REAPER smoke and the red proofs below are from the head before this fix round. T
 
 Input pixel changes on that build: click 214705, Down 200426, wheel 15265. Corner drag 900x628 to 1020x708. Space forwarded; headless play state stays 0, as in ticket 07.
 
-Clipboard, under `xvfb-run`, a second connection owning `CLIPBOARD` and not answering: `got=0 ms=99 cap=100`. The doctest skips that live wait when it cannot bind its own X server. On this box `/tmp/.X11-unix` is a read-only mount, so a raw `Xvfb` cannot create a socket; `xvfb-run` can, and that is what the one-off used. CI's Linux tests job passed, so the case did not fail there.
+The first clipboard one-off, under `xvfb-run`, was `got=0 ms=99 cap=100`. That sample is what set the `kWaitMs + 50` ceiling. The GCC doctest now times the same wait; see "Clipboard wait bound".
 
 ## Red proofs
 
@@ -99,5 +117,5 @@ An earlier head, `6b4e0515`, failed two tests (fake tools replaced `PATH`, so `b
 
 - `PromptForColor` still returns false.
 - With neither `zenity` nor `kdialog`, a message box completes as `kNoResult` and is not drawn.
-- The doctest does not time the clipboard on a machine where it cannot start `Xvfb`. The 99 ms measurement is the `xvfb-run` one-off above.
+- Without `VOLUM_REQUIRE_X`, a machine with no display still skips the live clipboard wait after a `MESSAGE`. The GCC job sets the variable and does not skip.
 - Pack export, pack open, Manage import and Builder add through the asynchronous Linux dialog are ticket 11 (see the carry-over above).
