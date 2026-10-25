@@ -1111,7 +1111,7 @@ scenario_preferences() {
   if [[ -f "$DATA/settings.ini" && -f "$SESS/settings.seed" ]] && ! cmp -s "$DATA/settings.ini" "$SESS/settings.seed"; then
     rewritten=1
   fi
-  if [[ -f "$DATA/settings.ini" ]] && grep -a -q "^outdev=system$" "$DATA/settings.ini"; then ini_dev=1; fi
+  if [[ -f "$DATA/settings.ini" ]] && grep -a -q "^outdev=system" "$DATA/settings.ini"; then ini_dev=1; fi
   if [[ $label_jack == 1 && $rewritten == 1 && $ini_dev == 1 ]]; then ini_jack=1; fi
   check "settings.ini still names the JACK system device" "$ini_jack" "drivers='$(printf '%s' "$drivers_line" | tr '\n' ' ')' rewritten=$rewritten outdev=$ini_dev"
   check "volum-settings.json persisted" "$([[ -f "$DATA/volum-settings.json" ]] && echo 1 || echo 0)"
