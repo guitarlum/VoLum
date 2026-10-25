@@ -1,55 +1,60 @@
 # 13 UI acceptance on Linux
 
-Status: **review pending**. Scenes are captured. The cold visual review has not been run (the implementer is Grok; an Opus reviewer has to do it). Linux reference PNGs are not committed yet: they wait until that review accepts the pictures.
+Status: **accepted**. The cold visual review passed. The scene gate is in CI and green on the code head below. This report commit does not change that head.
 
 ## Heads
 
 | | Branch | Sha |
 | --- | --- | --- |
-| Superproject | `feature/linux-13-ui` | `8c3545e6` |
-| iPlug2 | `volum/linux-13` | `43813bc38` |
+| Code head | `feature/linux-13-ui` | `3510ed70b95063c80ebe584de09b39d460a257f7` |
+| iPlug2 | `volum/linux-13` | `43813bc38b1e2f4b6f8638e31764fb4c60d10ae8` |
+| CI | [40166926643](https://github.com/guitarlum/VoLum/actions/runs/40166926643) | same code head, success, including macOS |
 
-Sabotage switches are gone from the plug-in. `git diff fdc226e5` on `VoLumLayoutBuild.inc.cpp` is the Josefin weight line, and `VoLumCustomOverlay.h` is unchanged. Red proofs edit those files in place, rebuild, expect failure, and restore them on every exit.
+`feature/linux-support` at `9c22f005` (ticket 08) is merged. Windows `run-tests-win.ps1` on that merge: 1478 passed, 0 failed. iPlug2 did not change for this round.
 
-iPlug2 changes are Linux-only except `GetScaleForHWND`: inert unless `VOLUM_SCREEN_SCALE` is set. That hook is how the Windows shots at scale 1 and scale 2 were taken on a laptop that is not at 200% DPI.
+The Linux reference set is `NeuralAmpModeler/tests/linux-ui-refs/` (twelve PNGs and `manifest.txt`). Threshold is **0.99**. `verify-linux.sh` calls `ui-scenes.sh`, and the Linux standalone CI job runs `--gate`.
 
-## Scenes
+## SSIM, Windows at 48 kHz against the Linux references
 
-Both sides are the GL framebuffer (`VOLUM_SELF_CAPTURE_DIR`), 900x600 at scale 1 and 1800x1200 at scale 2. Linux scale 2 is `GDK_SCALE=2`. The seed library is `docs/screenshot-seed`. Audio on Linux is a private `jackd -d dummy`.
+Masked scores. ImageMagick 7, `1 - d` from the normalized term in parentheses.
 
-| Scene | Scale 1 SSIM | Scale 2 SSIM |
+| Scene | Scale 1 | Scale 2 |
 | --- | ---: | ---: |
-| main (THC Sunset) | 0.999854 | 0.999879 |
-| Settings SIGNAL | 0.999985 | 0.999986 |
-| Settings SYSTEM | 0.994605 | 0.995635 |
-| custom amp builder | 0.999978 | 0.999981 |
-| pack export | 0.998539 | 0.998731 |
-| tuner | 0.999984 | 0.999984 |
+| main (THC Sunset) | 0.999909 | 0.999953 |
+| Settings SIGNAL | 0.999994 | 0.999999 |
+| Settings SYSTEM | 0.999991 | 1.000000 |
+| custom amp builder | 0.999984 | 0.999986 |
+| pack export | 0.999998 | 1.000000 |
+| tuner | 0.999994 | 0.999999 |
 
-SSIM here is `1 - d`, where `d` is the normalized term ImageMagick 7 prints in parentheses for `compare -metric SSIM` (`0` is identical). Two Linux captures of main, one second apart, score **1.000000**. Shifting the sidebar rect 18 px in the source and rebuilding scores **0.968077**.
+Windows was recaptured from the sandbox only. `settings.ini` in that sandbox asks for `sr=48000` on the same DirectSound default devices the machine already uses. The log says `stream open: 48000 Hz, buffer 64, requested 48000 Hz`. The Windows default device and the Windows sound settings were not changed. At 48 kHz the 48 kHz model adds no resampler latency, so the line is `Plugin latency: 0.0 ms (0 samples)`.
 
-**Threshold: 0.99.** The worst real scene is SYSTEM at 0.994605. The shifted control is 0.968077. 0.99 sits between them. The SYSTEM gap is the model-information line: Windows shows plugin latency 1.8 ms and buffer 512, Linux shows round trip 16.0 ms and buffer 256, because the Linux capture is on jackd's 256-frame dummy cycle. The rest of that card matches. Shortcut text also differs by font rasterization; that is inside the 0.005 of the SYSTEM score.
+## Masks
 
-Images (Windows on the left of each pair):
+Logical 900×600 rectangles. Scale 2 multiplies them with the framebuffer. They are painted the same colour on both shots before SSIM. A control that moves leaves the rectangle, so the sidebar shift still fails.
 
-- Contact sheet: `.scratch/linux-support/reports/13-ui/pairs/contact.png`
-- Full pairs: `.scratch/linux-support/reports/13-ui/pairs/*-pair.png`
-- Linux frames: `.scratch/linux-support/reports/13-ui/linux/`
-- Windows frames: `.scratch/linux-support/reports/13-ui/windows/`
+| Mask | Scenes | Rectangle | Why |
+| --- | --- | --- | --- |
+| Sebago sidebar art | every scene | x=16, y=469, 22×22 | The icon is the Clifford attractor in `DrawSidebarMiniFractal` (2200 sin/cos steps). libm is not bit-equal across platforms, so those dots cannot match. The rectangle is the 22 px icon, not the row. |
+| Latency line | system, pack | x=68, y=338, 360×36 | Both sides are at 48 kHz. DirectSound reports no driver latency, so Windows says `Plugin latency: 0.0 ms (0 samples)` and `buffer 64; driver reports none`. JACK reports a round trip and buffer 256. The two text rows are masked. The model-rate row above them is not. |
 
-## Carried items
+## OUT meter
 
-**Unhandled key reaches the host: PASS.** An `q` sent to the editor is logged by the editor as forwarded (keysym 113) and by the standalone window as `down 81` (`VOLUM_HOST_KEY_LOG`). The send uses event mask 0 so it reaches the client that created the parent. GDK selects XInput2, and a KeyPressMask send was delivered to nobody (that failure was observed before the fix: forward log set, host log empty).
+The scene shots are idle. Linux is a private jackd dummy, so the meter is dark. The Windows default input still leaves a one-pixel gold floor on the OUT meter; that is not masked, and main stays at 0.999909.
 
-**Popup menu in REAPER: PASS, on the decoded project from this run.** Default in the preset menu resets the open editor from Sunset Crunch / channel 3 to No Preset / channel 1 / `V30-THC-1.nam`. The plug-in state lives in the REAPER project chunk, not `volum-settings.json` (that file is the standalone's). Decoding the base64 VST chunk:
+The gate then feeds a 440 Hz tone into the VoLum JACK input and reads the BUILD OUT well at logical x=789, y=430, 10×40.
 
-- positive project: contains `V30-THC-1`
-- Default handler removed in the source, then rebuilt: the chunk does not contain `V30-THC-1`
+- Green: well mean **0.9**. The meter lights.
+- Red: `NAMMeterControl::OnMsgFromDelegate` is edited to return immediately, the app is rebuilt, and the same tone scores **0.05**. The source is restored and the app rebuilt again. No product switch.
 
-**Text entry in REAPER: PASS.** The builder's name field opens the name dialog. Letters are delivered with `XSendEvent` to the deepest editor-sized window (the wrapper of the same size does not receive them: propagation goes to ancestors). `LinuxProofAmp` is in `volum-content.json`. The same sequence with `StartTextEntry` returning immediately does not write that name. The source is restored afterwards.
+## Other red proofs
 
-## Not the acceptance CI
+Each one edits the source, rebuilds, expects failure, and restores on every exit. The tree was clean afterwards.
 
-An intermediate `ci.yml` run on `4264732c` is [40149262641](https://github.com/guitarlum/VoLum/actions/runs/40149262641). That is not this head. The acceptance run waits until the review's defects are fixed.
+- Sidebar rect moved 18 px (`b.L + 6` to `b.L + 24`): SSIM **0.976326**, under 0.99, with the Sebago mask applied.
+- Preset Default handler removed: the REAPER project chunk does not contain `V30-THC-1`.
+- `StartTextEntry` returns immediately: `LinuxProofAmp` is not written to the content store.
 
-Windows `run-tests-win.ps1` on this tree: 1477 cases passed, 0 failed.
+## Not changed
+
+The Roboto fallback in SYSTEM, the tuner frame offset, hyphens versus dashes, and the "x" remove glyph are Windows UI. Windows and macOS golden hashes and the existing screenshot references were left alone.
