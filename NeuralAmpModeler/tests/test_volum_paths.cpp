@@ -321,6 +321,9 @@ TEST_CASE("Linux user paths fall back to HOME/.local/share when XDG_DATA_HOME is
 
   xdg.Set("relative/not-absolute");
   CHECK(volum::VolumDualAmpSettingsFilePath() == root / "volum-dual-amp-settings.json");
+  // The library directory is the app policy's directory, slash aside.
+  const std::string app = iplug::VoLumLinuxAppDataDir("relative/not-absolute", home.string().c_str(), "VoLum");
+  CHECK(volum::LinuxVoLumDataDir().generic_string() + "/" == app);
 
   xdg.Unset();
   homeEnv.Unset();
