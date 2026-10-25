@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Fail if a built VoLum.so exports libstdc++ / __gnu_cxx or any GNU-unique
-# binding. Static libstdc++ facet ids are STB_GNU_UNIQUE; once they are in
-# the dynamic table, a host locale binds them and num_put crashes in codecvt.
+# Fail unless the release VoLum.so exports only the VST3 entry points.
+# Anything else in the dynamic table (libstdc++ facet ids, UI-thread gate
+# hooks) can be interposed by the host or another plug-in.
 #
 #   check-stdlib-exports.sh path/to/VoLum.so
 
@@ -14,23 +14,20 @@ if [[ -z "$SO" || ! -f "$SO" ]]; then
 fi
 
 tmp="$(mktemp)"
-readelf -W --dyn-syms "$SO" | awk '
-  NF < 8 { next }
-  $7 == "UND" { next }
-  $5 == "UNIQUE" { print; next }
+nm -D --defined-only "$SO" | awk '
+  NF < 3 { next }
   {
     name = $NF
-    if (name ~ /^_Z(N|NK|NV|NVK|GVN|TIN|TSN|TVN|TTN|Thn)?St/ ||
-        name ~ /^_Z(N|NK|TVN|TIN|TSN|GVN)?9__gnu_cxx/ ||
-        name ~ /^_ZSt/)
+    sub(/@.*/, "", name)
+    if (name != "GetPluginFactory" && name != "ModuleEntry" && name != "ModuleExit")
       print
   }
 ' > "$tmp"
 
 if [[ -s "$tmp" ]]; then
-  echo "check-stdlib-exports: $SO exports std::/__gnu_cxx or GNU-unique symbols" >&2
+  echo "check-stdlib-exports: $SO exports a symbol other than GetPluginFactory, ModuleEntry, ModuleExit" >&2
   head -n 40 "$tmp" >&2
-  echo "check-stdlib-exports: $(wc -l < "$tmp") bad symbols" >&2
+  echo "check-stdlib-exports: $(wc -l < "$tmp") extra symbols" >&2
   rm -f "$tmp"
   exit 1
 fi

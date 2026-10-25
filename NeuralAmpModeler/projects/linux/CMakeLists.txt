@@ -46,6 +46,7 @@ option(VOLUM_BUILD_VALIDATOR "Build the Steinberg VST3 validator from the vendor
 # without it the ASan runtime is not first in the library list and the
 # plug-in fails to load.
 option(VOLUM_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(VOLUM_UI_THREAD_PROBE "Export UI-thread gate symbols from the VST3 (off for the shipped plug-in)" OFF)
 if(VOLUM_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
   add_link_options(-fsanitize=address,undefined)
@@ -262,12 +263,17 @@ target_link_libraries(VoLum-vst3 PRIVATE
   m
   atomic
 )
+if(VOLUM_UI_THREAD_PROBE)
+  set(VOLUM_VST3_VERSION_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/volum-vst3-probe.version")
+else()
+  set(VOLUM_VST3_VERSION_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/volum-vst3.version")
+endif()
 target_link_options(VoLum-vst3 PRIVATE
   -pthread
   -Wl,--no-undefined
-  "-Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/volum-vst3.version"
+  "-Wl,--version-script=${VOLUM_VST3_VERSION_SCRIPT}"
 )
-set_property(TARGET VoLum-vst3 APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/volum-vst3.version")
+set_property(TARGET VoLum-vst3 APPEND PROPERTY LINK_DEPENDS "${VOLUM_VST3_VERSION_SCRIPT}")
 if(NOT VOLUM_SANITIZE)
   # Static libstdc++ facet ids are GNU-unique; they must not be exported or a host locale crashes num_put.
   target_link_options(VoLum-vst3 PRIVATE -static-libstdc++ -static-libgcc "-Wl,--exclude-libs,ALL")

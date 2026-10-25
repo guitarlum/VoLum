@@ -63,7 +63,7 @@ expect_fail reaper bash "$REPO_ROOT/NeuralAmpModeler/scripts/smoke-reaper-linux.
 
 restore_cpp() {
   git -C "$REPO_ROOT/iPlug2" checkout -- "IGraphics/Platforms/IGraphicsLinux.cpp"
-  cmake --build "$REPO_ROOT/build-linux" -j "${JOBS:-10}" --target VoLum-vst3 || true
+  bash "$HERE/ui-thread-probe.sh" || true
 }
 trap restore_cpp EXIT
 perl -0pi -e 's/IPlugLinuxCheckUIThread\("IGraphicsLinux::(OpenWindow|CloseWindow|ProcessX11Events|OnDisplayTimer)"\);/\/\* REVERTED: no IPlugLinuxCheckUIThread $1 *\//g' "$REPO_ROOT/$CPP"
@@ -71,11 +71,11 @@ if ! grep -q "REVERTED: no IPlugLinuxCheckUIThread" "$REPO_ROOT/$CPP"; then
   echo "redproof: the UI-thread revert did not apply" >&2
   exit 1
 fi
-cmake --build "$REPO_ROOT/build-linux" -j "${JOBS:-10}" --target VoLum-vst3
-expect_fail ui-thread bash "$HERE/ui-thread-sites.sh" --so "$BUNDLE/Contents/x86_64-linux/VoLum.so"
+bash "$HERE/ui-thread-probe.sh"
+expect_fail ui-thread bash "$HERE/ui-thread-sites.sh" --so "$REPO_ROOT/build-linux-ui-probe/VoLum.vst3/Contents/x86_64-linux/VoLum.so"
 trap - EXIT
 git -C "$REPO_ROOT/iPlug2" checkout -- "IGraphics/Platforms/IGraphicsLinux.cpp"
-cmake --build "$REPO_ROOT/build-linux" -j "${JOBS:-10}" --target VoLum-vst3
+bash "$HERE/ui-thread-probe.sh"
 
 if [[ "$ok" != 0 ]]; then
   echo "RED PROOFS FAILED"

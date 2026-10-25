@@ -285,11 +285,17 @@ TEST_CASE("Linux plug-in hides static libstdc++ and the gate rejects an exported
   CHECK(version.find("GetPluginFactory") != std::string::npos);
   CHECK(version.find("ModuleEntry") != std::string::npos);
   CHECK(version.find("ModuleExit") != std::string::npos);
-  CHECK(version.find("_ZN5iplug23IPlugLinuxCheckUIThreadEPKc") != std::string::npos);
+  CHECK(version.find("_ZN5iplug23IPlugLinuxCheckUIThreadEPKc") == std::string::npos);
   CHECK(version.find("local:") != std::string::npos);
+  CHECK(cmake.find("VOLUM_UI_THREAD_PROBE") != std::string::npos);
+
+  const std::string probe = ReadRepoFile("NeuralAmpModeler/projects/linux/volum-vst3-probe.version");
+  CHECK(probe.find("_ZN5iplug23IPlugLinuxCheckUIThreadEPKc") != std::string::npos);
+  CHECK(probe.find("GetPluginFactory") != std::string::npos);
 
   const std::string gate = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-linux.sh");
   CHECK(gate.find("check-stdlib-exports.sh") != std::string::npos);
+  CHECK(gate.find("ui-thread-probe.sh") != std::string::npos);
 
   const std::string diag = ReadRepoFile("NeuralAmpModeler/VoLumDiagLog.h");
   const std::string io = ReadRepoFile("NeuralAmpModeler/VoLumSettingsFileIO.h");

@@ -187,7 +187,8 @@ if [[ "$SKIP_STDLIB" == 0 ]]; then
 fi
 if [[ "$ASAN" == 0 && "$PLUGINVAL_ONLY" == 0 && "$SKIP_UI" == 0 ]]; then
   echo "=== ui-thread sites ==="
-  bash "$LINUX_DIR/ui-thread-sites.sh" --so "$SO"
+  bash "$LINUX_DIR/ui-thread-probe.sh"
+  bash "$LINUX_DIR/ui-thread-sites.sh" --so "$REPO_ROOT/build-linux-ui-probe/VoLum.vst3/Contents/x86_64-linux/VoLum.so"
 fi
 if [[ "$ASAN" == 0 && "$PLUGINVAL_ONLY" == 0 && "$SKIP_VALIDATOR" == 0 ]]; then
   echo "=== validator ==="
