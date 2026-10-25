@@ -1,7 +1,7 @@
 #pragma once
 
-// Debug/test self-capture for the Windows standalone. Inert unless the process
-// starts with VOLUM_SELF_CAPTURE_DIR set: only then is the control attached.
+// Debug/test self-capture for the Windows and Linux standalones. Inert unless
+// the process starts with VOLUM_SELF_CAPTURE_DIR set: only then is the control attached.
 //
 // A driver writes <dir>\request.txt holding an output name. Within ~100 ms the
 // control reads and deletes it, marks the whole editor dirty, and on the next
@@ -17,8 +17,9 @@
 
 #include "VoLumSelfCaptureFormat.h"
 
-#if defined(OS_WIN) && defined(IGRAPHICS_NANOVG) && defined(IGRAPHICS_GL)
+#if (defined(OS_WIN) || defined(OS_LINUX)) && defined(IGRAPHICS_NANOVG) && defined(IGRAPHICS_GL)
   #include <chrono>
+  #include <cstdlib>
   #include <filesystem>
   #include <fstream>
   #include <iterator>
@@ -126,11 +127,18 @@ private:
 // Last thing the layout attaches, so its Draw runs after every standard control.
 inline void AttachIfRequested(iplug::igraphics::IGraphics* pGraphics)
 {
+#if defined(OS_WIN)
   wchar_t dir[1024] = {};
   const DWORD len = GetEnvironmentVariableW(L"VOLUM_SELF_CAPTURE_DIR", dir, 1024);
   if (!pGraphics || len == 0 || len >= 1024)
     return;
   std::filesystem::path path(dir);
+#else
+  const char* dir = std::getenv("VOLUM_SELF_CAPTURE_DIR");
+  if (!pGraphics || !dir || !dir[0])
+    return;
+  std::filesystem::path path(dir);
+#endif
   std::error_code ec;
   std::filesystem::create_directories(path, ec);
   pGraphics->AttachControl(new SelfCaptureControl(pGraphics->GetBounds(), std::move(path)));

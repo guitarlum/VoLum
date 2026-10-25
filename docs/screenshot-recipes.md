@@ -292,3 +292,39 @@ pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Clicks "10,10;743,22" -Settl
   banner; the destination toggle is a compact pill immediately left of tuner /
   metronome / gear.
 - Restore your real library from the backup created in step 0.
+
+## 5. Linux scenes
+
+`NeuralAmpModeler/scripts/linux/ui-scenes.sh` captures the same framebuffer the
+Windows `-Locked` harness writes (`VOLUM_SELF_CAPTURE_DIR`), under Xvfb, and
+compares it with ImageMagick `compare -metric SSIM`. Audio is a private
+`jackd -d dummy`. Nothing in the script opens a hardware device.
+
+Scenes, at scale 1 and scale 2 (`GDK_SCALE=2` on Linux, `VOLUM_SCREEN_SCALE`
+on Windows, unset on both otherwise):
+
+| PNG | How the script gets there |
+| --- | --- |
+| `main-sN.png` | Screenshot seed, `lastAmpIdx` 14 (THC Sunset), no clicks |
+| `signal-sN.png` | key `h` (Settings opens on SIGNAL) |
+| `system-sN.png` | key `h`, then SYSTEM at canvas `(600, 113)` |
+| `tuner-sN.png` | key `t` |
+| `custom-sN.png` | `lastAmpIdx` 15, pen at canvas `(122, 575)` |
+| `pack-sN.png` | key `h`, SYSTEM `(600, 113)`, Export Pack `(525, 346)` |
+
+Windows references use the same canvas points through `ui-drive.ps1 -Locked`
+after `.ui-sandbox-launch.ps1 -Reseed`, with `VOLUM_SCREEN_SCALE` set to `1`
+or `2` before launch. The PNGs are the GL framebuffer (900x600 at scale 1,
+1800x1200 at scale 2), not the window frame.
+
+Once `NeuralAmpModeler/tests/linux-ui-refs/` holds those Linux PNGs and a
+`threshold.txt` (minimum SSIM, one number), running the script with no
+arguments captures again and fails if a scene drops below that line. The same
+run shifts the sidebar 18 px (`VOLUM_UI_SHIFT_PROOF=1`) and fails if that shot
+does not score below an unshifted repeat. `verify-linux.sh` calls this script.
+
+`--all` also checks the two host proofs: an unhandled `q` arrives at the
+standalone window (`VOLUM_HOST_KEY_LOG`), and under REAPER a preset-menu row
+changes `volum-settings.json` and a custom-amp name committed as
+`LinuxProofAmp` lands in the content store. `VOLUM_BREAK_POPUP=1` and
+`VOLUM_BREAK_TEXT_ENTRY=1` make those two checks fail.

@@ -26,9 +26,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
   pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
   pGraphics->LoadFont("Poiret-One", POIRETONE_FN);
-#ifdef OS_WIN
-  // NanoVG/GL2 on Windows renders these small Josefin caps thinner than macOS/Metal,
-  // so load one weight heavier there to match the macOS readability.
+#if defined(OS_WIN) || defined(OS_LINUX)
+  // NanoVG/GL2 renders these small Josefin caps thinner than macOS/Metal,
+  // so Windows and Linux (the same GL2 path) load one weight heavier.
   pGraphics->LoadFont("Josefin-Sans", JOSEFINSANS_BOLD_FN);
   pGraphics->LoadFont("Josefin-Bold", JOSEFINSANS_BOLD_HEAVY_FN);
 #else
@@ -73,7 +73,13 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   for (int i = 0; i < volum::kAmpCount; i++)
     ampNames[i] = volum::kAmps[i].displayName;
 
-  const IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
+  IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
+#if defined(OS_LINUX)
+  // UI-gate red proof only. Unset, the list sits where the line above put it.
+  if (const char* shift = std::getenv("VOLUM_UI_SHIFT_PROOF"))
+    if (shift[0] == '1')
+      ampListArea.Translate(18.f, 0.f);
+#endif
   pGraphics->AttachControl(new VoLumAmpListControl(ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
                                                    [this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }),
                            kCtrlTagVoLumAmpList);
@@ -1216,6 +1222,12 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         // both the way _VolumRecallPreset splits them.
         const auto presets = volum::custom::PresetsForOwner(pPlugin->_VolumClaimPresetOps());
         const int factoryCount = static_cast<int>(pPlugin->_VolumFocusedFactoryPresets().size());
+#if defined(OS_LINUX)
+        // UI-gate red proof. Unset, a row recalls the preset.
+        if (const char* br = std::getenv("VOLUM_BREAK_POPUP"))
+          if (br[0] == '1')
+            return;
+#endif
         if (code >= 0 && code < static_cast<int>(presets.size()) + factoryCount)
           pPlugin->_VolumRecallPreset(code); // apply settings + drive the bar
       });
