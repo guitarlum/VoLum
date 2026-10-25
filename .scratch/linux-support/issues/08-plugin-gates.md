@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 Blocked by: 07
 
 # 08 Plugin gates (box + CI)

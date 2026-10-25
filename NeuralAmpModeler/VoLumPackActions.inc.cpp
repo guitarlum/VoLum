@@ -44,6 +44,31 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   }
 #endif
 
+  // One writer for the synchronous dialog and the Linux completion, so the
+  // extension rule and the log lines cannot drift.
+  auto writeChosen = [](const volum::pack::ExportPlan& planIn, const std::string& settingsIn,
+                        const char* chosen) -> std::string {
+    if (!chosen || !chosen[0])
+      return {};
+    std::string error;
+    auto out = volum::content::PathFromUtf8(chosen);
+    if (out.extension() != ".volumpack")
+      out += ".volumpack";
+    auto& live = volum::content::GlobalContentStore();
+    if (!volum::pack::WritePack(live, planIn, settingsIn, out, &error))
+    {
+      if (error.empty())
+        error = "Could not write the Pack.";
+      VOLUM_LOG("pack", "export failed: " + error);
+      return error;
+    }
+    VOLUM_LOG("pack", std::string("export wrote ") + volum::pack::JobName(planIn.job)
+                        + " Pack: " + std::to_string(planIn.ampIds.size()) + " amps, "
+                        + std::to_string(planIn.irIds.size()) + " IRs, " + std::to_string(planIn.pedalIds.size())
+                        + " pedals, " + std::to_string(planIn.presetIds.size()) + " presets");
+    return {};
+  };
+
   WDL_String fileName, dir;
   const std::string harnessPath = volum::HarnessEnv("VOLUM_PACK_SAVE_PATH");
   if (!harnessPath.empty())
@@ -51,57 +76,82 @@ std::string NeuralAmpModeler::_VolumExportPack(const volum::pack::ExportSelectio
   else
   {
     fileName.Set(plan.job == volum::pack::Job::Everything ? "VoLum library.volumpack" : "VoLum pack.volumpack");
+#if defined(OS_LINUX)
+    // The dialog returns before the user picks a file. An empty return hides the
+    // overlay; a write failure is reported by a message box.
+    const auto planCopy = plan;
+    const auto settingsCopy = settingsJson;
+    GetUI()->ReleaseMouseCapture();
+    GetUI()->PromptForFile(fileName, dir, EFileAction::Save, "volumpack",
+                           [writeChosen, planCopy, settingsCopy, this](const WDL_String& chosen, const WDL_String&) {
+                             if (!chosen.GetLength())
+                               return;
+                             const std::string error = writeChosen(planCopy, settingsCopy, chosen.Get());
+                             if (!error.empty())
+                               if (auto* gfx = GetUI())
+                                 _ShowMessageBox(gfx, error.c_str(), "VoLum", EMsgBoxType::kMB_OK);
+                           });
+    return {};
+#else
     // The macOS panel swallows the mouse-up, which would leave this press captured.
     GetUI()->ReleaseMouseCapture();
     GetUI()->PromptForFile(fileName, dir, EFileAction::Save, "volumpack");
+#endif
   }
   if (fileName.GetLength() == 0)
     return {}; // cancelled: not a failure
-
-  std::string error;
-  auto out = volum::content::PathFromUtf8(fileName.Get());
-  if (out.extension() != ".volumpack")
-    out += ".volumpack";
-  if (!volum::pack::WritePack(store, plan, settingsJson, out, &error))
-  {
-    if (error.empty())
-      error = "Could not write the Pack.";
-    VOLUM_LOG("pack", "export failed: " + error);
-    return error;
-  }
-  VOLUM_LOG("pack", std::string("export wrote ") + volum::pack::JobName(plan.job)
-                      + " Pack: " + std::to_string(plan.ampIds.size()) + " amps, " + std::to_string(plan.irIds.size())
-                      + " IRs, " + std::to_string(plan.pedalIds.size()) + " pedals, "
-                      + std::to_string(plan.presetIds.size()) + " presets");
-  return {};
+  return writeChosen(plan, settingsJson, fileName.Get());
 }
 
 volum::pack::PackContents NeuralAmpModeler::_VolumPickPack()
 {
+  // One opener for the synchronous dialog and the Linux completion.
+  auto openChosen = [this](const char* chosen) -> volum::pack::PackContents {
+    if (!chosen || !chosen[0])
+      return {};
+    auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(chosen));
+    if (pack.ok)
+    {
+      mVolumOpenedPackDualAmp.Open(pack.settingsJson);
+      VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
+      for (const auto& skipped : pack.skipped)
+        VOLUM_LOG("pack", "skipped on open: " + skipped);
+    }
+    else
+      VOLUM_LOG("pack", std::string("open refused: ") + pack.error
+                          + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
+    return pack;
+  };
+
   WDL_String fileName, dir;
   const std::string harnessPath = volum::HarnessEnv("VOLUM_PACK_OPEN_PATH");
   if (!harnessPath.empty())
     fileName.Set(harnessPath.c_str());
   else
   {
+#if defined(OS_LINUX)
+    // ShowImport treats an empty pack as a cancel and hides. OpenPickedPack
+    // brings the overlay back once the file is chosen.
+    GetUI()->ReleaseMouseCapture();
+    GetUI()->PromptForFile(
+      fileName, dir, EFileAction::Open, "volumpack", [openChosen, this](const WDL_String& chosen, const WDL_String&) {
+        if (!chosen.GetLength())
+          return;
+        auto pack = openChosen(chosen.Get());
+        if (auto* gfx = GetUI())
+          if (auto* overlay = static_cast<VoLumPackOverlayControl*>(gfx->GetControlWithTag(kCtrlTagVoLumPackOverlay)))
+            overlay->OpenPickedPack(std::move(pack));
+      });
+    return {};
+#else
     // The macOS panel swallows the mouse-up, which would leave this press captured.
     GetUI()->ReleaseMouseCapture();
     GetUI()->PromptForFile(fileName, dir, EFileAction::Open, "volumpack");
+#endif
   }
   if (fileName.GetLength() == 0)
     return volum::pack::PackContents{}; // cancelled: empty error, so the modal closes quietly
-  auto pack = volum::pack::OpenPack(volum::content::PathFromUtf8(fileName.Get()));
-  if (pack.ok)
-  {
-    mVolumOpenedPackDualAmp.Open(pack.settingsJson);
-    VOLUM_LOG("pack", std::string("opened ") + volum::pack::PackSummaryLine(pack));
-    for (const auto& skipped : pack.skipped)
-      VOLUM_LOG("pack", "skipped on open: " + skipped);
-  }
-  else
-    VOLUM_LOG("pack", std::string("open refused: ") + pack.error
-                        + (pack.detail.empty() ? std::string() : " (" + pack.detail + ")"));
-  return pack;
+  return openChosen(fileName.Get());
 }
 
 std::vector<std::string> NeuralAmpModeler::_VolumSoundingLibraryIds() const

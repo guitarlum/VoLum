@@ -3,6 +3,8 @@
 // RtAudio calls JACK and PulseAudio by name. This file defines those symbols
 // and loads the real libraries with dlopen, so libjack and libpulse are not
 // DT_NEEDED. A missing library makes that API fail at runtime; ALSA still works.
+// IPlugAPP_linux.cpp probes the same sonames to leave a missing API out of
+// Preferences.
 
 #include <dlfcn.h>
 

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 07
 
 # 09 File dialogs, clipboard, OpenURL, message boxes

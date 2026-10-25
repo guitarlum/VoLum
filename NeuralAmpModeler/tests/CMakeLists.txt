@@ -87,6 +87,8 @@ add_executable(NeuralAmpModeler-Tests
   test_iplug_app_shutdown.cpp
   test_iplug_app_host_policy.cpp
   test_iplug_linux_runloop.cpp
+  test_iplug_app_linux_policy.cpp
+  test_iplug_linux_dialogs.cpp
   test_volum_preset_bar.cpp
   test_volum_factory_presets.cpp
   test_volum_play.cpp
@@ -175,7 +177,8 @@ if(UNIX AND NOT APPLE)
   target_compile_options(NeuralAmpModeler-Tests PRIVATE -include cstdlib)
   find_package(Threads REQUIRED)
   # 16-byte std::atomic in the tuner is not inlined by GCC/Clang on x86_64.
-  target_link_libraries(NeuralAmpModeler-Tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS} atomic)
+  find_package(X11 REQUIRED)
+  target_link_libraries(NeuralAmpModeler-Tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS} atomic X11::X11)
 endif()
 
 if(VOLUM_ENABLE_SANITIZERS)

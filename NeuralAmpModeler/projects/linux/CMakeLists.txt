@@ -9,7 +9,8 @@
 #
 # JACK and Pulse are not linked. projects/linux/VoLumJackPulseDlopen.cpp
 # defines the symbols RtAudio calls and dlopens libjack / libpulse-simple.
-# ALSA, X11, GL, fontconfig and freetype are linked normally.
+# ALSA, X11, GL, fontconfig and freetype are linked normally; the standalone
+# also links GDK 3 and libXi for its SWELL windows.
 # libstdc++ and libgcc are static, except in a VOLUM_SANITIZE build.
 
 cmake_minimum_required(VERSION 3.16)
@@ -83,6 +84,8 @@ set(VOLUM_GFX_SOURCES
   "${IPLUG}/IGraphics/IGraphics.cpp"
   "${IPLUG}/IGraphics/IGraphicsEditorDelegate.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinux.cpp"
+  "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxClipboard.cpp"
+  "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxDialogs.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxFont.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxGL.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxKeys.cpp"
@@ -126,6 +129,9 @@ set(VOLUM_VST3_SDK_SOURCES
   "${VST3_SDK}/public.sdk/source/vst/vstsinglecomponenteffect.cpp"
 )
 
+# SWELL with its GDK 3 backend and LICE drawing, as WDL/swell/Makefile builds
+# it without SWELL_SUPPORT_GTK: the standalone's main window and the
+# Preferences dialog are SWELL windows. Only the app links GDK.
 set(VOLUM_SWELL_SOURCES
   "${IPLUG}/WDL/swell/swell.cpp"
   "${IPLUG}/WDL/swell/swell-ini.cpp"
@@ -136,9 +142,23 @@ set(VOLUM_SWELL_SOURCES
   "${IPLUG}/WDL/swell/swell-dlg-generic.cpp"
   "${IPLUG}/WDL/swell/swell-gdi-generic.cpp"
   "${IPLUG}/WDL/swell/swell-misc-generic.cpp"
-  "${IPLUG}/WDL/swell/swell-generic-headless.cpp"
+  "${IPLUG}/WDL/swell/swell-gdi-lice.cpp"
+  "${IPLUG}/WDL/swell/swell-generic-gdk.cpp"
   "${IPLUG}/WDL/swell/swell-appstub-generic.cpp"
+  "${IPLUG}/WDL/lice/lice.cpp"
+  "${IPLUG}/WDL/lice/lice_arc.cpp"
+  "${IPLUG}/WDL/lice/lice_colorspace.cpp"
+  "${IPLUG}/WDL/lice/lice_line.cpp"
+  "${IPLUG}/WDL/lice/lice_text.cpp"
+  "${IPLUG}/WDL/lice/lice_textnew.cpp"
+  "${IPLUG}/WDL/lice/lice_ico.cpp"
+  "${IPLUG}/WDL/lice/lice_bmp.cpp"
 )
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(VOLUM_GDK3 REQUIRED IMPORTED_TARGET gdk-3.0)
+pkg_check_modules(VOLUM_FREETYPE REQUIRED IMPORTED_TARGET freetype2)
+pkg_check_modules(VOLUM_XI REQUIRED IMPORTED_TARGET xi)
 
 function(volum_includes target)
   target_include_directories(${target} PRIVATE
@@ -253,30 +273,45 @@ if(NOT VOLUM_SANITIZE)
   target_link_options(VoLum-vst3 PRIVATE -static-libstdc++ -static-libgcc "-Wl,--exclude-libs,ALL")
 endif()
 
+add_library(volum_swell_gdk OBJECT ${VOLUM_SWELL_SOURCES})
+target_include_directories(volum_swell_gdk PRIVATE "${IPLUG}/WDL" "${IPLUG}/WDL/swell")
+target_compile_definitions(volum_swell_gdk PRIVATE
+  SWELL_TARGET_GDK=3
+  SWELL_LICE_GDI
+  SWELL_FREETYPE
+  SWELL_FONTCONFIG
+  _FILE_OFFSET_BITS=64
+)
+target_compile_options(volum_swell_gdk PRIVATE
+  -fno-math-errno -Wno-multichar -Wno-unused-function -Wno-deprecated-declarations -Wno-unused-parameter
+  -Wno-unused-result
+)
+target_link_libraries(volum_swell_gdk PRIVATE PkgConfig::VOLUM_GDK3 PkgConfig::VOLUM_FREETYPE PkgConfig::VOLUM_XI)
+
 add_executable(VoLum-app
   "${IPLUG}/IPlug/APP/IPlugAPP.cpp"
   "${IPLUG}/IPlug/APP/IPlugAPP_dialog.cpp"
   "${IPLUG}/IPlug/APP/IPlugAPP_host.cpp"
+  "${IPLUG}/IPlug/APP/IPlugAPP_linux.cpp"
   "${IPLUG}/IPlug/APP/IPlugAPP_main.cpp"
   "${IPLUG}/IPlug/IPlugPaths.cpp"
   "${IPLUG}/Dependencies/IPlug/RTAudio/RtAudio.cpp"
   "${IPLUG}/Dependencies/IPlug/RTMidi/RtMidi.cpp"
   "${CMAKE_CURRENT_LIST_DIR}/VoLumJackPulseDlopen.cpp"
-  "${CMAKE_CURRENT_LIST_DIR}/VoLumSwellHeadless.cpp"
-  ${VOLUM_SWELL_SOURCES}
   "${VOLUM_NAM}/NeuralAmpModeler.cpp"
   $<TARGET_OBJECTS:volum_dsp>
   $<TARGET_OBJECTS:volum_gfx_APP_API>
+  $<TARGET_OBJECTS:volum_swell_gdk>
 )
 volum_includes(VoLum-app)
 volum_common_defs(VoLum-app)
-target_compile_definitions(VoLum-app PRIVATE APP_API)
-set_source_files_properties("${IPLUG}/Dependencies/IPlug/RTAudio/RtAudio.cpp" PROPERTIES
-  COMPILE_DEFINITIONS "__LINUX_ALSA__;__UNIX_JACK__;__LINUX_PULSE__")
+# The RtAudio API macros go on every source: RtAudio.h sizes RtApiStream by
+# them (StreamMutex is an int without one), so a file compiled without them
+# reads and writes the stream at the wrong offsets.
+target_compile_definitions(VoLum-app PRIVATE APP_API __LINUX_ALSA__ __UNIX_JACK__ __LINUX_PULSE__)
+# MIDI is ALSA only. RtMidi.h has no API-dependent layout, so only its .cpp drops JACK.
 set_source_files_properties("${IPLUG}/Dependencies/IPlug/RTMidi/RtMidi.cpp" PROPERTIES
-  COMPILE_DEFINITIONS "__LINUX_ALSA__")
-set_source_files_properties(${VOLUM_SWELL_SOURCES} PROPERTIES
-  COMPILE_OPTIONS "-Wno-multichar;-Wno-unused-function;-Wno-deprecated-declarations;-Wno-unused-parameter")
+  COMPILE_OPTIONS "-U__UNIX_JACK__;-U__LINUX_PULSE__")
 set_target_properties(VoLum-app PROPERTIES
   OUTPUT_NAME "VoLum"
   RUNTIME_OUTPUT_DIRECTORY "${VOLUM_APP_DIR}"
@@ -289,6 +324,8 @@ target_link_libraries(VoLum-app PRIVATE
   fontconfig
   freetype
   -Wl,--as-needed
+  PkgConfig::VOLUM_GDK3
+  PkgConfig::VOLUM_XI
   ${CMAKE_DL_LIBS}
   m
   atomic
