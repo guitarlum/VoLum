@@ -188,7 +188,7 @@ drive() {
     rest=${spec#* }
     case "$op" in
       key)
-        "$XTOOL" key "$child" "$rest"
+        xdotool key --window "$child" "$rest"
         ;;
       keys)
         local tok
