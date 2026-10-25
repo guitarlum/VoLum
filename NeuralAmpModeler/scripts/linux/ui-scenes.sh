@@ -71,10 +71,16 @@ need() {
 }
 
 ssim() {
-  # ImageMagick prints the metric on stderr and exits 1 when the images differ.
-  local out
+  # ImageMagick prints "<distortion> (<normalized>)". The normalized term is
+  # 1-SSIM: 0 is identical. Return SSIM so a higher number is a closer match.
+  local out paren
   out=$(compare -metric SSIM "$1" "$2" null: 2>&1) || true
-  printf '%s\n' "$out" | awk 'NR==1 { print $1; exit }'
+  paren=$(printf '%s\n' "$out" | awk -F'[()]' 'NF >= 2 { print $2; exit }')
+  if [[ -z "${paren:-}" ]]; then
+    echo "0"
+    return
+  fi
+  awk -v d="$paren" 'BEGIN { printf "%.6f\n", 1 - d }'
 }
 
 dims() { identify -format '%wx%h' "$1" 2>/dev/null || echo '?'; }
@@ -150,6 +156,7 @@ drive() {
   # shellcheck disable=SC2086
   read -r child _x _y w h <<<"$line"
   [[ -n "${child:-}" && "${w:-0}" -gt 0 ]] || return 1
+  echo "  window $child ${w}x${h}" >&2
   local spec op rest a b px py
   for spec in "$@"; do
     op=${spec%% *}
@@ -576,8 +583,10 @@ host_menu() {
   local before after
   before=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
   # Preset bar, then the first row under the open menu.
-  drive "click 539 23" "click 450 110" || true
+  drive "click 539 23" "click 450 110" || { fail "popup menu: no editor window"; return; }
   sleep 0.8
+  CAP="$work/home/.local/share/VoLum/capture"
+  grab reaper-menu || true
   finish_reaper "$work" "$REAPER_PID"
   after=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
   if [[ "$before" != "$after" ]]; then
