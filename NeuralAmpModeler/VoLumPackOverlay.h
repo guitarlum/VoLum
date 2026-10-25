@@ -105,6 +105,33 @@ public:
     SetDirty(false);
   }
 
+#if defined(OS_LINUX)
+  // The file dialog finishes after ShowImport has already treated an empty
+  // pack as a cancel. This opens the import screen on the chosen pack.
+  void OpenPickedPack(volum::pack::PackContents pack)
+  {
+    mScreen = Screen::Import;
+    mScroll = 0.f;
+    mStatus.clear();
+    mVerb = volum::pack::ImportVerb::Overwrite;
+    mAlsoSettings = false;
+    mApply = volum::pack::PackContents{};
+    mPack = std::move(pack);
+    if (!mPack.ok)
+    {
+      if (mPack.error.empty())
+      {
+        Hide(true);
+        return;
+      }
+      mStatus = mPack.error;
+    }
+    mUserTicks = volum::pack::AllTicks(mPack);
+    _RecomputeTicks();
+    Hide(false);
+    SetDirty(false);
+  }
+#endif
   void Draw(IGraphics& g) override
   {
     g.FillRect(IColor(190, 8, 10, 14), mRECT); // scrim

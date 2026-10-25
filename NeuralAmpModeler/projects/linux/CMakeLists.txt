@@ -84,6 +84,8 @@ set(VOLUM_GFX_SOURCES
   "${IPLUG}/IGraphics/IGraphics.cpp"
   "${IPLUG}/IGraphics/IGraphicsEditorDelegate.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinux.cpp"
+  "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxClipboard.cpp"
+  "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxDialogs.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxFont.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxGL.cpp"
   "${IPLUG}/IGraphics/Platforms/IGraphicsLinuxKeys.cpp"
