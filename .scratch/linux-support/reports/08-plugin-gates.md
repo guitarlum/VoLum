@@ -6,11 +6,11 @@ Status: **PASS** after hiding static libstdc++. The shared headers are back to t
 
 | | Branch | Head |
 | --- | --- | --- |
-| Superproject | `feature/linux-08-plugin-gates` | this commit. The code is `1781e04f` (version script + `--exclude-libs,ALL`; `VoLumDiagLog.h` and `VoLumSettingsFileIO.h` match `43ecf015`). Jackd traps are `6bdc74ab`. Run 40127615876 was `22b190e6` (stdio forks) and is not this head. |
-| iPlug2 | `volum/linux` | `72593f1683be9baf2bc287af9d854e829750a152` (unchanged) |
+| Superproject | `feature/linux-08-plugin-gates` | this commit. The code is `5edf9324` (release exports are the three VST3 entry points; `VOLUM_UI_THREAD_PROBE` builds the gate variant). It merges `feature/linux-support` `fdc226e5`. |
+| iPlug2 | `volum/linux` | `ee4ce0e694fec7e57aef9e4b7f8a1277bbd3300c` |
 | AudioDSPTools | from `feature/linux-support` | `3f28127e3125adb8befbdb56e26e986aaf9c0e55` |
 
-No iPlug2 branch. The four `IPlugLinuxCheckUIThread` sites were already in `IGraphicsLinux.cpp`.
+No new iPlug2 branch. The four `IPlugLinuxCheckUIThread` sites stay in `IGraphicsLinux.cpp`.
 
 ## What was built
 
@@ -35,7 +35,7 @@ Product scripts, from the ticket 07 arena harness (those scratch copies are dele
 
 **Render null.** The bar is peak residual ≤ -100 dBFS, the same number as `platform_null.h`, with 0 dBFS = amplitude 1. It is not a bit-exact compare: the box is GCC 15 / glibc 2.43 and CI is g++-12 / glibc 2.35. The live render must also peak above -40 dBFS, so silence cannot pass. On the box the two takes and the committed file were bit-identical (`-inf`).
 
-**Carla and iostream.** Static libstdc++ (`-static-libstdc++`, still skipped when `VOLUM_SANITIZE`) puts GNU-unique facet ids in the plug-in's dynamic table, and a host locale then binds `num_put` to the host's `codecvt`. `-fno-gnu-unique` does not apply to the prebuilt `libstdc++.a`. The stdio forks only avoided two call sites. They are gone: both headers match `43ecf015`. The link hides the runtime with `--exclude-libs,ALL` and a version script (`local: *`, plus `GetPluginFactory`, `ModuleEntry`, `ModuleExit`, and the six symbols the UI-thread gate links). `ld` ignored `extern "C++"` patterns, so those six are mangled names.
+**Carla and iostream.** Static libstdc++ (`-static-libstdc++`, still skipped when `VOLUM_SANITIZE`) puts GNU-unique facet ids in the plug-in's dynamic table, and a host locale then binds `num_put` to the host's `codecvt`. `-fno-gnu-unique` does not apply to the prebuilt `libstdc++.a`. The stdio forks only avoided two call sites. They are gone: both headers match `43ecf015`. The link hides the runtime with `--exclude-libs,ALL` and a version script. The shipped plug-in exports `GetPluginFactory`, `ModuleEntry` and `ModuleExit` only. `VOLUM_UI_THREAD_PROBE` (default off) is a second build the UI-thread gate links; `ld` ignored `extern "C++"` patterns, so that script names the six harness symbols in mangled form.
 
 `nm -D --defined-only` / `readelf --dyn-syms` on the box, same reverted sources:
 
@@ -47,7 +47,28 @@ Product scripts, from the ticket 07 arena harness (those scratch copies are dele
 
 Green, forks reverted and the link options on: symbol check PASS, UI-thread PASS, validator `47 tests passed`, pluginval exit 0 (editor 5/5), Carla `transport frame 96256` exit 0, REAPER null `-inf` dBFS (editors 3/3). Red, link options removed: `check-stdlib-exports.sh` exit 1 (`4619 bad symbols`), Carla `Segmentation fault` / `carla-single exit 139`. The good link was restored afterwards and the check passed again.
 
-ASan keeps shared libstdc++ (`NEEDED libstdc++` 1, plus `libasan.so.8` and `libubsan.so.1`). The same symbol check passed on that `.so`. Host smoke: REAPER 2×20 PASS, pluginval exit 0. GCC tests 1487 passed (30251363 assertions). Clang ASan/UBSan 1452 passed, 36 skipped. Windows tests 1471 passed (30255204 assertions).
+ASan keeps shared libstdc++ (`NEEDED libstdc++` 1, plus `libasan.so.8` and `libubsan.so.1`). Host smoke on the earlier head: REAPER 2×20 PASS, pluginval exit 0.
+
+**Release versus probe, box at `5edf9324`.** `nm -D --defined-only` on the release `.so`:
+
+```
+T GetPluginFactory
+T ModuleEntry
+T ModuleExit
+```
+
+`check-stdlib-exports.sh` PASS. UI-thread on the probe `.so`: `count 0 -> 10`, PASS. Validator `47 tests passed`. pluginval exit 0, editor 5/5. Carla `transport frame 96000`, exit 0. REAPER null `-inf` dBFS, editors 3/3. The probe `.so` adds only:
+
+```
+T _ZN5iplug23IPlugLinuxCheckUIThreadEPKc
+T _ZN5iplug24IPlugLinuxOffThreadCallsEv
+T _ZN5iplug9igraphics14IGraphicsLinux10OpenWindowEPv
+T _ZN5iplug9igraphics14IGraphicsLinux11CloseWindowEv
+T _ZN5iplug9igraphics14IGraphicsLinux14OnDisplayTimerEv
+T _ZN5iplug9igraphics14IGraphicsLinux16ProcessX11EventsEv
+```
+
+Red, those six added to the release build (`-DVOLUM_UI_THREAD_PROBE=ON`): the check exited 1, `6 extra symbols`, listing those names. Turning the option off restored the three and the check passed. `redproof-plugin-gates.sh` on the probe variant removed all four sites: four `missing IGraphicsLinux::…` lines, `count 0 -> 4`, `OpenWindow signal 11`, exit 1. The script restored `IGraphicsLinux.cpp` (`grep -c` 4). GCC tests 1503 passed. Clang ASan/UBSan 1468 passed, 36 skipped. No shared C++ change in this step, so Windows tests were not re-run.
 
 **box.ps1 and jackd.** A killed local client SIGHUPs the remote session (`REMOTE_GONE` on the `sleep 90` check). jackd ignores SIGHUP. The old gate only had `trap cleanup_jack RETURN`, so a kill left the server with ppid 1. The gate now traps EXIT, HUP, INT and TERM, closes inherited lock fds 7–9, and starts jackd with `PR_SET_PDEATHSIG` so the kernel sends SIGTERM when that shell dies.
 
@@ -106,7 +127,7 @@ The same invocation also re-failed the other gates: validator exit 255, pluginva
 
 ## CI
 
-[Run 40127615876](https://github.com/guitarlum/VoLum/actions/runs/40127615876) on `22b190e6` was green, including Linux plugin gates and macOS. That head still had the stdio forks and did not hide libstdc++. The run for this commit is dispatched with `ci-watch.ps1 -Dispatch` and is the one that has to be green. The numeric id is the run whose `headSha` is this commit; it is not written back into a later commit.
+[Run 40143690185](https://github.com/guitarlum/VoLum/actions/runs/40143690185) on `d21ad10a` was green, including Linux plugin gates and macOS. That head still exported the six UI-thread symbols from the shipped `.so`, and it did not contain `feature/linux-support`. The run for this commit is dispatched with `ci-watch.ps1 -Dispatch` and is the one that has to be green. The numeric id is the run whose `headSha` is this commit; it is not written back into a later commit.
 
 [Run 40117645281](https://github.com/guitarlum/VoLum/actions/runs/40117645281) jobs, for the record:
 
