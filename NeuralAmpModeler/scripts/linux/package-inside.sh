@@ -273,77 +273,81 @@ if [[ "$vrc" -ne 0 ]]; then
 fi
 log "validator exit 0"
 
-launch_under_xvfb() {
-  export LIBGL_ALWAYS_SOFTWARE=1
-  export GALLIUM_DRIVER=llvmpipe
-  local app="$1" pid="" rc=0 opened=0 i
-  "$app" > /tmp/app.log 2>&1 &
-  pid=$!
-  for i in $(seq 1 90); do
-    if xdotool search --name VoLum >/dev/null 2>&1; then
-      opened=1
-      break
-    fi
-    if xwininfo -root -tree 2>/dev/null | grep -q VoLum; then
-      opened=1
-      break
-    fi
-    if ! kill -0 "$pid" 2>/dev/null; then
-      break
-    fi
-    sleep 1
-  done
-  if [[ "$opened" -ne 1 ]]; then
-    echo "launch: window did not open" >&2
-    xwininfo -root -tree >&2 || true
-    tail -80 /tmp/app.log >&2 || true
-    kill -KILL "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-    return 1
-  fi
-  echo "launch: window open after ${i}s"
-  kill -TERM "$pid" 2>/dev/null || true
-  for _ in $(seq 1 20); do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      break
-    fi
-    sleep 1
-  done
-  if kill -0 "$pid" 2>/dev/null; then
-    echo "launch: did not quit on SIGTERM" >&2
-    kill -KILL "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-    return 1
-  fi
-  wait "$pid" || rc=$?
-  local diag="${HOME}/.local/share/VoLum/volum.log"
-  cp /tmp/app.log /out/app.log 2>/dev/null || true
-  cp "$diag" /out/volum.log 2>/dev/null || true
-  if [[ "$rc" -ne 0 ]]; then
-    echo "launch: exit $rc" >&2
-    tail -40 /tmp/app.log >&2 || true
-    tail -40 "$diag" >&2 || true
-    return 1
-  fi
-  if [[ ! -f "$diag" ]] || ! grep -q 'audio teardown complete' "$diag"; then
-    echo "launch: missing audio teardown" >&2
-    tail -40 /tmp/app.log >&2 || true
-    tail -40 "$diag" >&2 || true
-    return 1
-  fi
-  echo "launch: quit 0"
-}
-
 log "standalone launch"
-export -f launch_under_xvfb
 export HOME XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache"
+export LIBGL_ALWAYS_SOFTWARE=1
+export GALLIUM_DRIVER=llvmpipe
+cat > /tmp/launch-volum.sh << 'EOF'
+#!/bin/bash
+set -euo pipefail
+app="$1"
+"$app" > /tmp/app.log 2>&1 &
+pid=$!
+opened=0
+i=0
+for i in $(seq 1 90); do
+  if xdotool search --name VoLum >/dev/null 2>&1; then
+    opened=1
+    break
+  fi
+  if xwininfo -root -tree 2>/dev/null | grep -q VoLum; then
+    opened=1
+    break
+  fi
+  if ! kill -0 "$pid" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+if [[ "$opened" -ne 1 ]]; then
+  echo "launch: window did not open" >&2
+  xwininfo -root -tree >&2 || true
+  tail -80 /tmp/app.log >&2 || true
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  exit 1
+fi
+echo "launch: window open after ${i}s"
+kill -TERM "$pid" 2>/dev/null || true
+for _ in $(seq 1 20); do
+  if ! kill -0 "$pid" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+if kill -0 "$pid" 2>/dev/null; then
+  echo "launch: did not quit on SIGTERM" >&2
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  exit 1
+fi
+rc=0
+wait "$pid" || rc=$?
+diag="${HOME}/.local/share/VoLum/volum.log"
+cp /tmp/app.log /out/app.log 2>/dev/null || true
+cp "$diag" /out/volum.log 2>/dev/null || true
+if [[ "$rc" -ne 0 ]]; then
+  echo "launch: exit $rc" >&2
+  tail -40 /tmp/app.log >&2 || true
+  tail -40 "$diag" >&2 || true
+  exit 1
+fi
+if [[ ! -f "$diag" ]] || ! grep -q 'audio teardown complete' "$diag"; then
+  echo "launch: missing audio teardown" >&2
+  tail -40 /tmp/app.log >&2 || true
+  tail -40 "$diag" >&2 || true
+  exit 1
+fi
+echo "launch: quit 0"
+EOF
+chmod 755 /tmp/launch-volum.sh
 if command -v xvfb-run >/dev/null 2>&1; then
-  xvfb-run -a -s '-screen 0 1280x800x24' bash -c 'launch_under_xvfb "$0"' "$BIN"
+  xvfb-run -a -s '-screen 0 1280x800x24' /tmp/launch-volum.sh "$BIN"
 else
   Xvfb :99 -screen 0 1280x800x24 >/tmp/xvfb.log 2>&1 &
   xvfb_pid=$!
   sleep 0.5
-  DISPLAY=:99 bash -c 'launch_under_xvfb "$0"' "$BIN"
+  DISPLAY=:99 /tmp/launch-volum.sh "$BIN"
   kill "$xvfb_pid" 2>/dev/null || true
   wait "$xvfb_pid" 2>/dev/null || true
 fi
