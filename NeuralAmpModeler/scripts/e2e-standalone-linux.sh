@@ -211,8 +211,14 @@ begin_session() {
   fi
   echo "  jackd up${jack_rt:+ (no realtime)}"
 
+  # ALSA_CONFIG_PATH replaces the system config, including the sequencer.
+  # The default PCM stays null so nothing opens a speaker. seq.default is what
+  # snd_seq_open("default") looks up; the MIDI sender and RtMidi both use that
+  # name, and without it they fail even when /dev/snd/seq exists.
   cat >"$SESS/asound.conf" <<'ALSA'
 pcm.!default { type null }
+seq.hw { type hw }
+seq.default { type hw }
 ALSA
   export ALSA_CONFIG_PATH="$SESS/asound.conf"
   export PULSE_SERVER="unix:$SESS/no-pulse-server"
@@ -883,6 +889,13 @@ int main(void) {
     int a = 0, b = 0, c = 0;
     int n = sscanf(line, "%15s %d %d %d", cmd, &a, &b, &c);
     if (n < 2) continue;
+    if (!strcmp(cmd, "quit")) {
+      snd_seq_delete_simple_port(seq, port);
+      snd_seq_close(seq);
+      printf("SENT quit\n");
+      fflush(stdout);
+      return 0;
+    }
     snd_seq_event_t ev;
     snd_seq_ev_clear(&ev);
     snd_seq_ev_set_source(&ev, port);
@@ -1040,9 +1053,19 @@ print(json.load(open(sys.argv[1])).get("midiCh",""))
 PY
 )
   check_eq "[one channel 2] One channel = 2 survives the quit" 2 "$mch"
+  # Drop the sequencer client while the process can still run userspace, then
+  # stop tracking it. A blocking wait here used to hang the guest after the checks.
+  echo "quit 0" >&8 || true
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if ! kill -0 "$midi_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  kill -9 "$midi_pid" 2>/dev/null || true
   exec 8>&- || true
-  kill "$midi_pid" 2>/dev/null || true
-  wait "$midi_pid" 2>/dev/null || true
+  disown "$midi_pid" 2>/dev/null || true
   end_session
 }
 

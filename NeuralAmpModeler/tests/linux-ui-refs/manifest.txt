@@ -1,0 +1,20 @@
+threshold 0.99
+scene main 1
+scene main 2
+scene signal 1
+scene signal 2
+scene system 1
+scene system 2
+scene custom 1
+scene custom 2
+scene pack 1
+scene pack 2
+scene tuner 1
+scene tuner 2
+# Logical 900x600 rectangles. Scale 2 multiplies them with the framebuffer.
+# Sebago's sidebar icon is a Clifford attractor; libm sin/cos is not bit-equal.
+mask * 16 469 22 22 sebago sidebar art
+# DirectSound reports no driver latency, so this line is "Plugin latency" and
+# the buffer the driver opened. JACK reports a round trip. Same 48 kHz.
+mask system 68 338 360 36 latency line
+mask pack 68 338 360 36 latency line
