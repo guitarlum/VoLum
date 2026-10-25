@@ -97,28 +97,11 @@ if (-not $msbuild) {
   Write-Error "MSBuild.exe not found."
 }
 
-# Every worktree runs its own /m build; three at once ran a 16 GB laptop out of commit
-# (MSB4018, C1060 out of heap space). The build waits for any other worktree's build.
-function Invoke-SerialBuild([string[]] $msbuildArgs) {
-  $mutex = [System.Threading.Mutex]::new($false, "Local\VoLum-run-tests-win-build")
-  $owned = $false
-  try {
-    try { $owned = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
-    if (-not $owned) {
-      Write-Host "Waiting for another worktree's test build to finish..."
-      try { $owned = $mutex.WaitOne() } catch [System.Threading.AbandonedMutexException] { $owned = $true }
-    }
-    & $msbuild @msbuildArgs
-  }
-  finally {
-    if ($owned) { $mutex.ReleaseMutex() }
-    $mutex.Dispose()
-  }
-}
+. (Join-Path $PSScriptRoot "serial-build.ps1")
 
 if ($Asan) {
   $asanOut = Join-Path $slnDir "build-win\tests-asan"
-  Invoke-SerialBuild @("NeuralAmpModeler.sln", "/t:NeuralAmpModeler-Tests", "/p:Configuration=Release", "/p:Platform=x64", "/p:EnableASAN=true", "/p:OutDir=$asanOut\", "/p:IntDir=$asanOut\obj\", "/m", "/v:minimal")
+  Invoke-SerialBuild $msbuild @("NeuralAmpModeler.sln", "/t:NeuralAmpModeler-Tests", "/p:Configuration=Release", "/p:Platform=x64", "/p:EnableASAN=true", "/p:OutDir=$asanOut\", "/p:IntDir=$asanOut\obj\", "/m", "/v:minimal")
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   $runtime = Get-ChildItem (Join-Path (Split-Path (Split-Path (Split-Path $msbuild))) "..\VC\Tools\MSVC\*\bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll") -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $runtime) { Write-Error "clang_rt.asan_dynamic-x86_64.dll not found next to the MSVC toolset." }
@@ -132,7 +115,7 @@ if ($Asan) {
   exit $LASTEXITCODE
 }
 
-Invoke-SerialBuild @("NeuralAmpModeler.sln", "/t:NeuralAmpModeler-Tests", "/p:Configuration=Release", "/p:Platform=x64", "/m", "/v:minimal")
+Invoke-SerialBuild $msbuild @("NeuralAmpModeler.sln", "/t:NeuralAmpModeler-Tests", "/p:Configuration=Release", "/p:Platform=x64", "/m", "/v:minimal")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $exe = Join-Path $slnDir "build-win\tests\x64\Release\NeuralAmpModeler-Tests.exe"
