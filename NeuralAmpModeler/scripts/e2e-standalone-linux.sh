@@ -211,8 +211,14 @@ begin_session() {
   fi
   echo "  jackd up${jack_rt:+ (no realtime)}"
 
+  # ALSA_CONFIG_PATH replaces the system config, including the sequencer.
+  # The default PCM stays null so nothing opens a speaker. seq.default is what
+  # snd_seq_open("default") looks up; the MIDI sender and RtMidi both use that
+  # name, and without it they fail even when /dev/snd/seq exists.
   cat >"$SESS/asound.conf" <<'ALSA'
 pcm.!default { type null }
+seq.hw { type hw }
+seq.default { type hw }
 ALSA
   export ALSA_CONFIG_PATH="$SESS/asound.conf"
   export PULSE_SERVER="unix:$SESS/no-pulse-server"
