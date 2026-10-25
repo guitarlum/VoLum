@@ -1,5 +1,6 @@
 #include "third_party/doctest.h"
 
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -456,8 +457,12 @@ TEST_CASE("release publish steps stay closed unless the dry run is off")
   // refused. The gate is the step condition. GitHub Actions rejects inputs in
   // permissions, so the dry run is its own Build caller with contents: read
   // and the shipping Build caller is contents: write. Both run release-build.yml.
-  const std::string native = ReadRepoFile(".github/workflows/release-native.yml");
-  const std::string build = ReadRepoFile(".github/workflows/release-build.yml");
+  std::string native = ReadRepoFile(".github/workflows/release-native.yml");
+  std::string build = ReadRepoFile(".github/workflows/release-build.yml");
+  // Windows CI checks the files out with CRLF. Compare the gate text after
+  // the carriage returns are removed.
+  native.erase(std::remove(native.begin(), native.end(), '\r'), native.end());
+  build.erase(std::remove(build.begin(), build.end(), '\r'), build.end());
   CHECK(native.find("linux_dry_run") == std::string::npos);
   CHECK(native.find("-X POST") == std::string::npos);
   CHECK(build.find("-X POST") == std::string::npos);
