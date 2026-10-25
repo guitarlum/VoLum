@@ -493,9 +493,7 @@ jobs:
           exit 1
         fi
         # contents:read cannot create a release. 201 would mean this run can publish.
-        cat > /tmp/dry-release-body.json <<'EOF'
-{"tag_name":"v0.0.0-linux-dry-run-must-not-publish","name":"dry-run must not publish","draft":true,"prerelease":true}
-EOF
+        printf '%s\n' '{"tag_name":"v0.0.0-linux-dry-run-must-not-publish","name":"dry-run must not publish","draft":true,"prerelease":true}' > /tmp/dry-release-body.json
         code="$(curl -s -o /tmp/dry-release.json -w '%{http_code}' \
           -X POST \
           -H "Authorization: Bearer ${GH_TOKEN}" \
