@@ -377,7 +377,8 @@ bool LinePublishes(const std::string& raw)
     return true;
   if (!has("curl"))
     return false;
-  return has("-X POST") || has("-X PUT") || has("-X PATCH") || has("-X DELETE") || has("--data") || has(" -d ") || has("-d @");
+  return has("-X POST") || has("-X PUT") || has("-X PATCH") || has("-X DELETE") || has("--data") || has(" -d ")
+         || has("-d @");
 }
 
 bool StepIsPublishGated(const std::string& body)
