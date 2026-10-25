@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: 11
 
 # 16 Linux MIDI recall through the real ALSA stack, in a CI guest

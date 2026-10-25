@@ -211,8 +211,14 @@ begin_session() {
   fi
   echo "  jackd up${jack_rt:+ (no realtime)}"
 
+  # ALSA_CONFIG_PATH replaces the system config, including the sequencer.
+  # The default PCM stays null so nothing opens a speaker. seq.default is what
+  # snd_seq_open("default") looks up; the MIDI sender and RtMidi both use that
+  # name, and without it they fail even when /dev/snd/seq exists.
   cat >"$SESS/asound.conf" <<'ALSA'
 pcm.!default { type null }
+seq.hw { type hw }
+seq.default { type hw }
 ALSA
   export ALSA_CONFIG_PATH="$SESS/asound.conf"
   export PULSE_SERVER="unix:$SESS/no-pulse-server"
@@ -1040,9 +1046,11 @@ print(json.load(open(sys.argv[1])).get("midiCh",""))
 PY
 )
   check_eq "[one channel 2] One channel = 2 survives the quit" 2 "$mch"
+  # The sender blocks in fgets until its fifo writer closes. Closing that fd
+  # and waiting reaped it on the desktop and hung the guest, after the checks.
+  kill -9 "$midi_pid" 2>/dev/null || true
   exec 8>&- || true
-  kill "$midi_pid" 2>/dev/null || true
-  wait "$midi_pid" 2>/dev/null || true
+  disown "$midi_pid" 2>/dev/null || disown -a 2>/dev/null || true
   end_session
 }
 
