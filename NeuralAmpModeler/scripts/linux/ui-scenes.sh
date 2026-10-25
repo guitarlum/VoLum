@@ -318,20 +318,26 @@ start_display() {
   JACK_NAME="volum-ui-$$"
   export JACK_DEFAULT_SERVER="$JACK_NAME"
   export JACK_NO_AUDIO_RESERVATION=1
+  # Same real-time limits the audio smoke uses, on this process only.
+  if [[ "$(ulimit -r)" == 0 ]] && command -v prlimit >/dev/null && sudo -n true 2>/dev/null; then
+    sudo -n prlimit --pid $$ --rtprio=95:95 --memlock=unlimited:unlimited || true
+  fi
   jackd --name "$JACK_NAME" -d dummy -r 48000 -p 256 >"$OUT/jackd.log" 2>&1 &
   JACK_PID=$!
   local up=0 i
-  for i in $(seq 50); do
+  for i in $(seq 80); do
+    if ! kill -0 "$JACK_PID" 2>/dev/null; then
+      break
+    fi
     if command -v jack_lsp >/dev/null && jack_lsp >/dev/null 2>&1; then
       up=1
       break
     fi
-    if grep -a -q "started" "$OUT/jackd.log" 2>/dev/null; then
-      up=1
-      break
-    fi
-    sleep 0.1
+    sleep 0.25
   done
+  if [[ "$up" != 1 ]] && kill -0 "$JACK_PID" 2>/dev/null; then
+    up=1
+  fi
   [[ "$up" == 1 ]] || { echo "ui-scenes: jackd did not start" >&2; cat "$OUT/jackd.log" >&2; exit 2; }
 
   cat >"$OUT/asound.conf" <<'ALSA'
