@@ -43,7 +43,8 @@ if (-not $msbuild) {
 if (-not $msbuild) {
   Write-Error "MSBuild.exe not found. Install Visual Studio Build Tools."
 }
-& $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-app /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+. (Join-Path $PSScriptRoot "serial-build.ps1")
+Invoke-SerialBuild $msbuild @("NeuralAmpModeler.sln", "/t:NeuralAmpModeler-app", "/p:Configuration=Release", "/p:Platform=x64", "/m", "/v:minimal")
 if ($LASTEXITCODE -ne 0) {
   Write-Host "Build failed (exit $LASTEXITCODE)." -ForegroundColor Yellow
   exit $LASTEXITCODE

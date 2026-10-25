@@ -1,9 +1,12 @@
 #include "third_party/doctest.h"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 // Source-guard pins over the Windows test-runner script. Nothing here executes
 // PowerShell; these lock in two facts about $LASTEXITCODE that were each got wrong
@@ -262,13 +265,347 @@ TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step 
   CHECK(mesa < validate);
 }
 
+TEST_CASE("clang-format CI checks a dispatched branch from its merge base with dev")
+{
+  // A workflow_dispatch has no github.event.before. Falling back to HEAD^ checked
+  // only the last commit, so a feature branch went green with unformatted files
+  // and dev's push run failed after the merge.
+  const std::string workflow = ReadRepoFile(".github/workflows/ci.yml");
+  const auto step = workflow.find("name: Check clang-format output");
+  REQUIRE(step != std::string::npos);
+  const auto end = workflow.find("shell: bash", step);
+  REQUIRE(end != std::string::npos);
+  const std::string body = workflow.substr(step, end - step);
+  const auto fallback = body.find("0000000000000000000000000000000000000000");
+  const auto mergeBase = body.find("git merge-base origin/dev HEAD");
+  const auto headParent = body.find("BASE=\"HEAD^\"");
+  REQUIRE(fallback != std::string::npos);
+  CHECK(mergeBase != std::string::npos);
+  CHECK(mergeBase > fallback);
+  CHECK(headParent > mergeBase);
+
+  const auto job = workflow.find("name: Formatting");
+  REQUIRE(job != std::string::npos);
+  CHECK(workflow.substr(job, step - job).find("fetch-depth: 0") != std::string::npos);
+}
+
+TEST_CASE("Linux plug-in hides static libstdc++ and the gate rejects an exported copy")
+{
+  // Facet ids in libstdc++.a are STB_GNU_UNIQUE. Exporting them makes a host
+  // locale bind the plug-in's num_put to the host codecvt, which crashes Carla.
+  // The stdio forks in the shared headers were a workaround; the link line is
+  // the constraint, and the headers stay on the shared ostream path.
+  const std::string cmake = ReadRepoFile("NeuralAmpModeler/projects/linux/CMakeLists.txt");
+  const auto vst3 = cmake.find("add_library(VoLum-vst3 SHARED");
+  const auto app = cmake.find("add_executable(VoLum-app");
+  REQUIRE(vst3 != std::string::npos);
+  REQUIRE(app != std::string::npos);
+  const std::string vst3Body = cmake.substr(vst3, app - vst3);
+  const std::string appBody = cmake.substr(app);
+  CHECK(vst3Body.find("-Wl,--exclude-libs,ALL") != std::string::npos);
+  CHECK(vst3Body.find("volum-vst3.version") != std::string::npos);
+  CHECK(appBody.find("-Wl,--exclude-libs,ALL") != std::string::npos);
+  CHECK(appBody.find("volum-app.version") != std::string::npos);
+  CHECK(cmake.find("if(NOT VOLUM_SANITIZE)") != std::string::npos);
+
+  const std::string version = ReadRepoFile("NeuralAmpModeler/projects/linux/volum-vst3.version");
+  CHECK(version.find("GetPluginFactory") != std::string::npos);
+  CHECK(version.find("ModuleEntry") != std::string::npos);
+  CHECK(version.find("ModuleExit") != std::string::npos);
+  CHECK(version.find("_ZN5iplug23IPlugLinuxCheckUIThreadEPKc") == std::string::npos);
+  CHECK(version.find("local:") != std::string::npos);
+  CHECK(cmake.find("VOLUM_UI_THREAD_PROBE") != std::string::npos);
+
+  const std::string probe = ReadRepoFile("NeuralAmpModeler/projects/linux/volum-vst3-probe.version");
+  CHECK(probe.find("_ZN5iplug23IPlugLinuxCheckUIThreadEPKc") != std::string::npos);
+  CHECK(probe.find("GetPluginFactory") != std::string::npos);
+
+  const std::string gate = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-linux.sh");
+  CHECK(gate.find("check-stdlib-exports.sh") != std::string::npos);
+  CHECK(gate.find("ui-thread-probe.sh") != std::string::npos);
+
+  const std::string diag = ReadRepoFile("NeuralAmpModeler/VoLumDiagLog.h");
+  const std::string io = ReadRepoFile("NeuralAmpModeler/VoLumSettingsFileIO.h");
+  CHECK(diag.find("snprintf") == std::string::npos);
+  CHECK(io.find("snprintf") == std::string::npos);
+}
+
 TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
 {
   // The build steps are gated on matrix.os. Pinning the runner to macos-15
   // without the same gate skips the Mac build and still reports success.
-  const std::string workflow = ReadRepoFile(".github/workflows/release-native.yml");
+  const std::string workflow = ReadRepoFile(".github/workflows/release-build.yml");
   CHECK(workflow.find("matrix.os == 'macos-15'") != std::string::npos);
   CHECK(workflow.find("matrix.os == 'macos-latest'") == std::string::npos);
   CHECK(workflow.find("rebuild_assets") != std::string::npos);
   CHECK(workflow.find("[{\"os\":\"macos-15\",\"build_dir\":\"build-mac\"}]") != std::string::npos);
+}
+
+namespace
+{
+std::string TrimCopy(std::string s)
+{
+  while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
+    s.erase(s.begin());
+  while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())))
+    s.pop_back();
+  return s;
+}
+
+int LeadingSpaces(const std::string& line)
+{
+  int n = 0;
+  while (n < static_cast<int>(line.size()) && line[static_cast<std::size_t>(n)] == ' ')
+    ++n;
+  return n;
+}
+
+bool IsStepsKey(const std::string& line, int& indent)
+{
+  indent = LeadingSpaces(line);
+  return TrimCopy(line) == "steps:";
+}
+
+// A release step publishes when its script or action creates a release, pushes
+// a ref, or writes the update feed. Comments do not count.
+bool LinePublishes(const std::string& raw)
+{
+  const std::string trimmed = TrimCopy(raw);
+  if (trimmed.empty() || trimmed[0] == '#')
+    return false;
+  std::string line = raw;
+  const auto comment = line.find(" #");
+  if (comment != std::string::npos)
+    line.resize(comment);
+  const auto has = [&](const char* needle) { return line.find(needle) != std::string::npos; };
+  if (has("gh release") || has("git push") || has("git tag") || has("gh api"))
+    return true;
+  if (has("appcast") || has("update-feed") || has("update_feed"))
+    return true;
+  const auto usesAt = line.find("uses:");
+  if (usesAt != std::string::npos)
+  {
+    const auto uses = line.substr(usesAt);
+    if (uses.find("softprops/action-gh-release") != std::string::npos)
+      return true;
+    if (uses.find("release") != std::string::npos && uses.find("upload") != std::string::npos)
+      return true;
+  }
+  if (!has("curl"))
+    return false;
+  const char* methods[] = {"POST", "PUT", "PATCH", "DELETE"};
+  for (const char* method : methods)
+  {
+    if (has((std::string("-X ") + method).c_str()) || has((std::string("-X") + method).c_str())
+        || has((std::string("--request ") + method).c_str()) || has((std::string("--request=") + method).c_str()))
+      return true;
+  }
+  if (has("--data") || has("-F"))
+    return true;
+  for (std::size_t i = 0; i + 2 <= line.size(); ++i)
+  {
+    if (line.compare(i, 2, "-d") != 0)
+      continue;
+    if (i > 0 && line[i - 1] != ' ' && line[i - 1] != '\t')
+      continue;
+    if (i + 2 == line.size() || line[i + 2] == ' ' || line[i + 2] == '\t' || line[i + 2] == '@' || line[i + 2] == '\''
+        || line[i + 2] == '"')
+      return true;
+  }
+  return false;
+}
+
+// The gate is the step's if: expression. A phrase in the script or a comment
+// does not close the step.
+std::string StepIfExpression(const std::string& body)
+{
+  std::string expr;
+  bool block = false;
+  int ifIndent = -1;
+  std::size_t pos = 0;
+  while (pos <= body.size())
+  {
+    const auto nl = body.find('\n', pos);
+    std::string line = body.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+    const bool last = nl == std::string::npos;
+    pos = last ? body.size() + 1 : nl + 1;
+    const std::string trimmed = TrimCopy(line);
+    if (!block)
+    {
+      if (trimmed.empty() || trimmed[0] == '#' || trimmed.compare(0, 3, "if:") != 0)
+      {
+        if (last)
+          break;
+        continue;
+      }
+      std::string rest = TrimCopy(trimmed.substr(3));
+      const auto hash = rest.find(" #");
+      if (hash != std::string::npos)
+        rest.resize(hash);
+      rest = TrimCopy(rest);
+      if (rest == "|" || rest == ">" || rest == "|-" || rest == ">-" || rest.empty())
+      {
+        block = true;
+        ifIndent = LeadingSpaces(line);
+        if (last)
+          break;
+        continue;
+      }
+      return rest;
+    }
+    if (!trimmed.empty() && LeadingSpaces(line) <= ifIndent)
+      break;
+    if (!trimmed.empty() && trimmed[0] != '#')
+      expr += line + "\n";
+    if (last)
+      break;
+  }
+  return expr;
+}
+
+bool StepIsPublishGated(const std::string& ifExpr)
+{
+  return ifExpr.find("inputs.dry_run != true") != std::string::npos
+         || ifExpr.find("publish == 'true'") != std::string::npos
+         || ifExpr.find("publish == true") != std::string::npos;
+}
+} // namespace
+
+int CountGatedPublishSteps(const std::string& workflow)
+{
+  std::vector<std::string> lines;
+  std::string cur;
+  for (char ch : workflow)
+  {
+    if (ch == '\n')
+    {
+      if (!cur.empty() && cur.back() == '\r')
+        cur.pop_back();
+      lines.push_back(std::move(cur));
+      cur.clear();
+    }
+    else
+      cur.push_back(ch);
+  }
+  if (!cur.empty())
+    lines.push_back(std::move(cur));
+
+  int publishSteps = 0;
+  bool inSteps = false;
+  bool open = false;
+  int stepsIndent = -1;
+  int itemIndent = -1;
+  std::string stepBody;
+  const auto finish = [&]() {
+    if (!open)
+      return;
+    bool publishes = false;
+    std::size_t pos = 0;
+    while (pos < stepBody.size())
+    {
+      const auto nl = stepBody.find('\n', pos);
+      const auto line = stepBody.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+      if (LinePublishes(line))
+        publishes = true;
+      if (nl == std::string::npos)
+        break;
+      pos = nl + 1;
+    }
+    if (publishes)
+    {
+      ++publishSteps;
+      const auto nameAt = stepBody.find("- name:");
+      const auto firstNl = stepBody.find('\n');
+      const std::string stepName =
+        nameAt != std::string::npos && (firstNl == std::string::npos || nameAt < firstNl)
+          ? TrimCopy(
+              stepBody.substr(nameAt + 7, firstNl == std::string::npos ? std::string::npos : firstNl - (nameAt + 7)))
+          : TrimCopy(stepBody.substr(0, firstNl));
+      INFO("step " << stepName);
+      CHECK(StepIsPublishGated(StepIfExpression(stepBody)));
+    }
+    open = false;
+    stepBody.clear();
+  };
+  for (const auto& line : lines)
+  {
+    int keyIndent = 0;
+    if (IsStepsKey(line, keyIndent))
+    {
+      finish();
+      inSteps = true;
+      stepsIndent = keyIndent;
+      itemIndent = -1;
+      continue;
+    }
+    if (!inSteps)
+      continue;
+    if (TrimCopy(line).empty())
+    {
+      if (open)
+        stepBody += line + "\n";
+      continue;
+    }
+    const int lead = LeadingSpaces(line);
+    const bool item =
+      lead < static_cast<int>(line.size()) && line.compare(static_cast<std::size_t>(lead), 2, "- ") == 0;
+    if (itemIndent < 0)
+    {
+      if (item && lead >= stepsIndent)
+      {
+        itemIndent = lead;
+        open = true;
+        stepBody = line + "\n";
+      }
+      else if (lead <= stepsIndent)
+        inSteps = false;
+      continue;
+    }
+    if (item && lead == itemIndent)
+    {
+      finish();
+      open = true;
+      stepBody = line + "\n";
+      continue;
+    }
+    if (lead < itemIndent)
+    {
+      finish();
+      inSteps = false;
+      continue;
+    }
+    if (open)
+      stepBody += line + "\n";
+  }
+  finish();
+  return publishSteps;
+}
+
+TEST_CASE("release publish steps stay closed unless the dry run is off")
+{
+  // A dry run used to POST a real create-release call and hope the token was
+  // refused. The gate is the step condition. GitHub Actions rejects inputs in
+  // permissions, so the dry run is its own Build caller with contents: read
+  // and the shipping Build caller is contents: write. Both run release-build.yml.
+  std::string native = ReadRepoFile(".github/workflows/release-native.yml");
+  std::string build = ReadRepoFile(".github/workflows/release-build.yml");
+  // Windows CI checks the files out with CRLF. Compare the gate text after
+  // the carriage returns are removed.
+  native.erase(std::remove(native.begin(), native.end(), '\r'), native.end());
+  build.erase(std::remove(build.begin(), build.end(), '\r'), build.end());
+  CHECK(native.find("linux_dry_run") == std::string::npos);
+  CHECK(native.find("-X POST") == std::string::npos);
+  CHECK(build.find("-X POST") == std::string::npos);
+  CHECK(native.find("github.ref != 'refs/heads/main'") == std::string::npos);
+  CHECK(native.find("contents: read") != std::string::npos);
+  CHECK(native.find("name: Prepare release (dry run)") != std::string::npos);
+  CHECK(native.find("name: Build (dry run)") != std::string::npos);
+  CHECK(native.find("name: Prepare release\n") != std::string::npos);
+  const auto dryBuild = native.find("if: inputs.dry_run == true\n    permissions:\n      contents: read");
+  CHECK(dryBuild != std::string::npos);
+
+  const int nativeSteps = CountGatedPublishSteps(native);
+  const int buildSteps = CountGatedPublishSteps(build);
+  CHECK(nativeSteps >= 3);
+  CHECK(buildSteps >= 3);
 }

@@ -19,7 +19,7 @@ When you want to change a tone, switch to **BUILD**. A **Tweak your sound** note
 - **Dual Amp:** two amps at once, each with its own channel, cab or IR, knobs and pan.
 - **15 curated amps, 21 Factory presets:** put any of them on PLAY without saving first.
 - **Your own content:** load your own NAM amps, IRs and pedals. A `.volumpack` backs up, moves or shares all of it in one file.
-- **Standalone, VST3 and AU:** runs on the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core, on Windows and macOS.
+- **Standalone, VST3 and AU:** runs on the [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore) core, on Windows, macOS and, as a beta, Linux.
 - **Update reminder only:** VoLum can tell you a newer release exists. It never downloads anything itself.
 
 ## Download
@@ -36,6 +36,7 @@ Get stable packages from **[Releases](https://github.com/guitarlum/VoLum/release
 | macOS | `VoLum-vX.Y.Z-macos-standalone.dmg` | Standalone app only. |
 | macOS | `VoLum-vX.Y.Z-macos-vst3.zip` | Manual VST3 install. |
 | macOS | `VoLum-vX.Y.Z-macos-component.zip` | Manual AU install, for Logic Pro and GarageBand. |
+| Linux | `VoLum-X.Y.Z-linux-x86_64.tar.gz` | Beta: standalone and VST3. The name has no leading `v`. See the [user guide](docs/user-guide.en.md#linux). |
 
 Not every release has every asset. Open the release page and pick the package for your system.
 
@@ -110,7 +111,7 @@ Restart your DAW so it finds the new AU.
 
 ### Linux
 
-There is no native Linux build. Some users report that the Windows VST3 works well on Linux through [yabridge](https://github.com/robbert-vdh/yabridge), but VoLum does not test that path.
+Native Linux support is a beta (64-bit, X11 or XWayland). Download `VoLum-X.Y.Z-linux-x86_64.tar.gz`, extract it and run `./install.sh`. Install paths, audio and the known limits are in the [user guide](docs/user-guide.en.md#linux).
 
 ## Bundled Amps
 

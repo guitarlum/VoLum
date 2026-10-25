@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 08, 11
 
 # 14 Tarball, portability and the release leg

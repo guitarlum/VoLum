@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 09, 10
 
 # 11 Linux standalone e2e
@@ -22,6 +22,25 @@ Scenarios:
   otherwise `aconnect` with a RtMidi virtual output or JACK MIDI);
 - the Preferences dialog opens and lists the dummy JACK device;
 - clean shutdown with settings persisted.
+
+## Carried from ticket 09 (coordinator, 2026-10-24)
+
+The Linux dialogs are asynchronous. The `VOLUM_*` harness hooks return before
+`PromptForFile` / `PromptForOpenFiles`, so they do not exercise the completion.
+These scenarios use a fake `zenity` (and, for one case, a missing `zenity` so
+`kdialog` runs) on `PATH`. Each must be shown red with the completion not
+invoked.
+
+- **Pack export.** Settings, Export, choose a path the fake `zenity` prints
+  (spaces in the name). The `.volumpack` is written, and the log line is the
+  same `export wrote` text as the synchronous path. Cancel (zenity exit 1)
+  writes nothing.
+- **Pack open.** Import, the fake returns a pack path. The import screen shows
+  that pack. Cancel leaves the overlay hidden and the library unchanged.
+- **Manage import.** Add IRs or pedals. The fake returns two paths. Both are
+  imported. Cancel imports nothing.
+- **Builder add.** Add `.nam`. The fake returns one path. The draft lists that
+  file. Cancel leaves the draft unchanged.
 
 ## Acceptance
 

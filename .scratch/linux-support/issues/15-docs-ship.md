@@ -1,5 +1,5 @@
-Status: ready-for-agent
-Blocked by: 12, 13, 14
+Status: resolved
+Blocked by: 12, 13, 14, 16
 
 # 15 Docs, changelog, release notes, final predicate
 

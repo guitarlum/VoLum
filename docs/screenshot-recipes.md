@@ -292,3 +292,43 @@ pwsh NeuralAmpModeler/scripts/ui-drive.ps1 -Locked -Clicks "10,10;743,22" -Settl
   banner; the destination toggle is a compact pill immediately left of tuner /
   metronome / gear.
 - Restore your real library from the backup created in step 0.
+
+## 5. Linux scenes
+
+`NeuralAmpModeler/scripts/linux/ui-scenes.sh` captures the same framebuffer the
+Windows `-Locked` harness writes (`VOLUM_SELF_CAPTURE_DIR`), under Xvfb, and
+compares it with ImageMagick `compare -metric SSIM`. Audio is a private
+`jackd -d dummy`. Nothing in the script opens a hardware device.
+
+Scenes, at scale 1 and scale 2 (`GDK_SCALE=2` on Linux, `VOLUM_SCREEN_SCALE`
+on Windows, unset on both otherwise):
+
+| PNG | How the script gets there |
+| --- | --- |
+| `main-sN.png` | Screenshot seed, `lastAmpIdx` 14 (THC Sunset), no clicks |
+| `signal-sN.png` | key `h` (Settings opens on SIGNAL) |
+| `system-sN.png` | key `h`, then SYSTEM at canvas `(600, 113)` |
+| `tuner-sN.png` | key `t` |
+| `custom-sN.png` | key Down from THC Sunset (wraps onto the custom row), pen at canvas `(122, 575)` |
+| `pack-sN.png` | key `h`, SYSTEM `(600, 113)`, Export Pack `(525, 346)` |
+
+Windows references use the same canvas points through `ui-drive.ps1 -Locked`
+after `.ui-sandbox-launch.ps1 -Reseed`, with `VOLUM_SCREEN_SCALE` set to `1`
+or `2` before launch. The PNGs are the GL framebuffer (900x600 at scale 1,
+1800x1200 at scale 2), not the window frame.
+
+Once `NeuralAmpModeler/tests/linux-ui-refs/` holds those Linux PNGs and
+`manifest.txt` (threshold 0.99, one line per scene and scale, and the mask
+rectangles), running the script with no arguments captures again, checks that
+a 440 Hz tone lights the OUT meter, and fails if a scene drops below 0.99.
+Masked rectangles are the Sebago sidebar icon and, when the latency line
+cannot match, that line. `verify-linux.sh` and the Linux standalone CI job
+call this script.
+
+`--host` checks that an unhandled `q` arrives at the standalone window, that
+REAPER's saved project chunk records a preset-menu Default reset, and that a
+name typed into the custom-amp field is in the content store. `--red` proves
+each of those fails when the source is broken: it edits the sidebar rect, the
+meter update, the Default handler, `StartTextEntry`, or the `XSendEvent` key
+forward in place, rebuilds, expects the gate to fail, and restores every file
+on exit. The shift is scored against `tests/linux-ui-refs/main-s1.png`.

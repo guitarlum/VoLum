@@ -2,7 +2,7 @@
 
 **Sprachen:** [English](user-guide.en.md) | Deutsch
 
-VoLum ist eine Gitarren-Amp-Sammlung für Bühne, Studio und Übungsplatz. In **BUILD** baust du einen Sound, in **PLAY** spielst du deine Sounds. Dieses Handbuch beschreibt VoLum 1.3. Downloads und Installation stehen in der [README](../README.de.md).
+VoLum ist eine Gitarren-Amp-Sammlung für Bühne, Studio und Übungsplatz. In **BUILD** baust du einen Sound, in **PLAY** spielst du deine Sounds. Dieses Handbuch beschreibt VoLum 1.3 unter Windows und macOS sowie die Linux-Beta. Downloads und Installation stehen in der [README](../README.de.md).
 
 ## Inhalt
 
@@ -20,6 +20,7 @@ VoLum ist eine Gitarren-Amp-Sammlung für Bühne, Studio und Übungsplatz. In **
 - [Sichern und Teilen mit Packs](#sichern-und-teilen-mit-packs)
 - [Einstellungen](#einstellungen)
 - [VoLum in einer DAW](#volum-in-einer-daw)
+- [Linux](#linux)
 - [Tastenkürzel](#tastenkürzel)
 - [Fehlerbehebung](#fehlerbehebung)
 - [Wo VoLum deine Dateien ablegt](#wo-volum-deine-dateien-ablegt)
@@ -271,7 +272,7 @@ Eine Programmnummer ohne Sound wird ignoriert; der aktuelle Sound spielt weiter.
 
 ### Controller anschließen
 
-- **Standalone:** wähle den MIDI-Eingang des Controllers unter **Einstellungen > SIGNAL > Audio & MIDI devices...**.
+- **Standalone:** wähle den MIDI-Eingang des Controllers unter **Einstellungen > SIGNAL > Audio & MIDI devices...**. Unter Linux sind das ALSA-Sequencer-Ports.
 - **DAW:** leite das MIDI des Controllers auf die VoLum-Spur. Gibt dein Host Program Change nicht weiter, sende stattdessen den Recall CC.
 
 ### Der MIDI-Tab
@@ -399,19 +400,82 @@ Siehe [MIDI-Fußcontroller](#der-midi-tab).
 
 ### Update-Prüfung und Datenschutz
 
-VoLum sucht höchstens einmal am Tag nach einer neuen Version. Ein goldener Punkt am Zahnrad heißt, dass eine verfügbar ist; die Einstellungen verlinken zur Release-Seite. VoLum lädt oder installiert nie selbst etwas, und die Prüfung sendet keine Tracking-Daten. Abschalten kannst du sie mit **Check for updates automatically**.
+VoLum sucht höchstens einmal am Tag nach einer neuen Version. Ein goldener Punkt am Zahnrad heißt, dass eine verfügbar ist; die Einstellungen verlinken zur Release-Seite. VoLum lädt oder installiert nie selbst etwas, und die Prüfung sendet keine Tracking-Daten. Abschalten kannst du sie mit **Check for updates automatically**. Unter Linux lädt die Prüfung libcurl, wenn die Bibliothek installiert ist, und bleibt sonst aus.
 
 ### Audio- und MIDI-Geräte (Standalone)
 
-Öffne das Fenster mit **Audio & MIDI devices...** auf dem SIGNAL-Tab (oder `Strg+,` unter Windows, **VoLum > Preferences...** unter macOS). Wähle Treiber, Ein- und Ausgabegerät, Samplerate, Puffergröße und MIDI-Eingang. Nimm einen Mono-Eingang für die Gitarre. Ein kleinerer Puffer bedeutet weniger Verzögerung, aber mehr CPU-Last.
+Öffne das Fenster mit **Audio & MIDI devices...** auf dem SIGNAL-Tab (oder `Strg+,` unter Windows, **VoLum > Preferences...** unter macOS). Wähle Treiber, Ein- und Ausgabegerät, Samplerate, Puffergröße und MIDI-Eingang. Nimm einen Mono-Eingang für die Gitarre. Ein kleinerer Puffer bedeutet weniger Verzögerung, aber mehr CPU-Last. Unter Linux heißen die Treiber ALSA, JACK und PulseAudio; siehe [Linux](#linux).
 
 ## VoLum in einer DAW
 
-- VoLum läuft als VST3 und unter macOS als AU (Logic Pro und GarageBand brauchen das AU).
+- VoLum läuft als VST3 und unter macOS als AU (Logic Pro und GarageBand brauchen das AU). Unter Linux ist es ein VST3; siehe [Linux](#linux).
 - Ein neues Plug-in startet mit den Amp-Einstellungen aus deiner Standalone-App. Danach behält das DAW-Projekt seine eigenen Einstellungen.
 - Deine eigene Bibliothek und die PLAY-Programmliste teilen sich alle VoLums auf dem Rechner.
 - Im Plug-in schaltet `B` das gewählte Pedal ein und aus, damit `Space` für Play/Stop frei bleibt.
 - VoLum meldet seine Verzögerung an die DAW, die sie ausgleicht.
+
+## Linux
+
+Die Linux-Fassung ist eine Beta für 64-Bit-PCs (x86_64).
+
+### Installieren
+
+Lade `VoLum-<version>-linux-x86_64.tar.gz` herunter. Anders als die Windows- und macOS-Pakete hat der Name kein führendes `v`. Entpacke das Archiv und starte `install.sh` in diesem Ordner:
+
+```bash
+tar -xzf VoLum-<version>-linux-x86_64.tar.gz
+cd VoLum-<version>-linux-x86_64
+./install.sh
+```
+
+Im Archiv liegen `VoLum` (die Standalone), `resources/`, `VoLum.vst3/`, `VoLumRigs/`, `install.sh`, eine Desktop-Datei, ein Symbol, `LICENSE` und `THIRD_PARTY_LICENSES.md`. `./VoLum` in diesem Ordner startet die App. `install.sh` trägt das VST3 und den Menüeintrag ein.
+
+`./install.sh` installiert für den aktuellen Benutzer:
+
+- das VST3 nach `~/.vst3/VoLum.vst3`
+- einen Starter nach `~/.local/bin/VoLum`
+- App, Ressourcen und die mitgelieferten Rigs nach `$XDG_DATA_HOME/VoLum` (ist die Variable nicht gesetzt, leer oder kein absoluter Pfad, nach `~/.local/share/VoLum`)
+- einen Menüeintrag nach `$XDG_DATA_HOME/applications/VoLum.desktop` (Standard `~/.local/share/applications/VoLum.desktop`)
+
+`./install.sh --system` installiert nach `/usr/lib/vst3`, `/usr/local/bin`, `/usr/share/VoLum` und `/usr/share/applications`. Dafür brauchst du Root. Das Skript hebt die Rechte nicht selbst an; ohne Root bricht `--system` ab, bevor es schreibt.
+
+`./install.sh --uninstall` entfernt VST3, Starter, App, mitgelieferte Rigs und Menüeintrag dieser Installation. Bibliothek, Einstellungen und Log bleiben; ist der Datenordner danach leer, wird er entfernt. `./install.sh --system --uninstall` entfernt die Systeminstallation.
+
+GTK 3 braucht nur die Standalone. Fehlt es, installiert `install.sh` das VST3 trotzdem und nennt das Paket: `libgtk-3-0` unter Ubuntu 22.04, `libgtk-3-0t64` unter Ubuntu 24.04, `gtk3` unter Fedora.
+
+### Voraussetzungen
+
+- **CPU:** x86_64. Eine ARM-Fassung liegt in dieser Beta nicht bei.
+- **glibc:** gebaut auf Ubuntu 22.04 (glibc 2.35), das System braucht also glibc 2.35 oder neuer. Dasselbe Archiv wurde in Containern mit Ubuntu 22.04, Ubuntu 24.04 und Fedora installiert, die Standalone gestartet und die Installation wieder entfernt.
+- **Anzeige:** X11, auf einem Wayland-Desktop XWayland. Ohne X-Anzeige beendet sich die Standalone. Natives Wayland liegt außerhalb dieser Beta.
+- **Bibliotheken:** das VST3 braucht X11, OpenGL, fontconfig und FreeType. Die Standalone braucht zusätzlich ALSA, GTK 3 und libXi. JACK (`libjack.so.0`), PulseAudio (`libpulse-simple.so.0`) und libcurl (die Update-Prüfung) werden nur geladen, wenn sie installiert sind.
+
+### Audio und MIDI
+
+Öffne **Audio & MIDI devices...** auf dem SIGNAL-Tab. **ALSA** steht immer in der Liste. **JACK** erscheint, wenn `libjack.so.0` sich laden lässt, **PulseAudio**, wenn `libpulse-simple.so.0` sich laden lässt. PipeWire hat keine eigene Zeile: wähle JACK oder PulseAudio, dann nutzt VoLum die JACK- oder Pulse-Schicht dieses Systems. Fehlt die Bibliothek eines gespeicherten Treibers, startet VoLum mit ALSA.
+
+`~/.local/bin/VoLum --list-audio-devices` listet Treiber, Geräte und die ALSA-MIDI-Eingänge. Der JACK-Client heißt `VoLum`. Die Wahl landet in `settings.ini` im [Bibliotheksordner](#deine-bibliothek).
+
+MIDI-Eingänge der Standalone sind ALSA-Sequencer-Ports. Ein JACK-MIDI-Port gehört nicht dazu. Program Change und der Recall CC rufen Sounds über diesen Port auf, und **One channel** gilt wie in den anderen Standalone-Fassungen.
+
+### Das VST3 im Host
+
+Die Benutzer-Installation legt das Plug-in nach `~/.vst3/VoLum.vst3`. `--system` legt es nach `/usr/lib/vst3/VoLum.vst3`. Im Bundle heißt die Datei `Contents/x86_64-linux/VoLum.so`. Scanne die Plug-ins im Host neu. Öffnen und Speichern fragen zuerst das Datei-Portal des Desktops, dann zenity, dann kdialog.
+
+### Deine Bibliothek
+
+`$XDG_DATA_HOME/VoLum`, oder `~/.local/share/VoLum`, wenn die Variable nicht gesetzt, leer oder relativ ist. In dem Ordner liegen `volum-settings.json`, `settings.ini`, die eigene Bibliothek unter `content`, `volum.log`, `volum-dual-amp-settings.json` und `volum-update-state.json`. Siehe [Wo VoLum deine Dateien ablegt](#wo-volum-deine-dateien-ablegt).
+
+### Bekannte Grenzen
+
+- Das ist eine Beta.
+- Editor und Standalone laufen über X11. Ein Wayland-Desktop braucht XWayland. Natives Wayland liegt außerhalb dieser Beta.
+- Die Latenz auf bestimmter Hardware ist nicht zertifiziert.
+- Diese Beta bringt ein VST3 und eine Standalone-App. AU, CLAP, LV2 und eine ARM-Fassung liegen außerhalb.
+- MIDI der Standalone braucht den ALSA-Sequencer. Ein Kernel ohne ihn zeigt keine MIDI-Eingänge. JACK-MIDI erreicht die Standalone nicht.
+- Das Gerätefenster ist der schlichte Systemdialog, nicht die dunkle Einstellungsansicht.
+- Ohne Datei-Portal, zenity oder kdialog haben Öffnen und Speichern nichts, das sie fragen können.
+- Ohne libcurl bleibt die Update-Prüfung aus. VoLum läuft trotzdem.
 
 ## Tastenkürzel
 
@@ -466,14 +530,16 @@ Tasten wirken, solange kein Textfeld offen ist.
 - **Windows: VoLum meldet, dass schon eine Kopie läuft:** beende diese Kopie im Task-Manager und starte VoLum neu.
 - **macOS: ein AU aus einer älteren VoLum-Version verhält sich nach dem Update seltsam:** entferne es von der Spur und füge es neu ein.
 - **macOS: das Plug-in erscheint nach der Installation aus einem Zip nicht:** siehe [README](../README.de.md#wichtiger-sicherheitshinweis).
+- **Linux: die Standalone beendet sich sofort:** sie braucht eine X-Anzeige (X11 oder XWayland) und GTK 3. `install.sh` nennt das GTK-Paket und installiert das VST3 trotzdem.
+- **Linux: die MIDI-Liste ist leer:** die Standalone nutzt den ALSA-Sequencer. Ein Kernel ohne ihn hat keine Ports.
 
 ## Wo VoLum deine Dateien ablegt
 
-| Was | Windows | macOS |
-| --- | --- | --- |
-| Einstellungen | `%LOCALAPPDATA%\VoLum\volum-settings.json` | `~/Library/Application Support/VoLum/volum-settings.json` |
-| Eigene Bibliothek | `%LOCALAPPDATA%\VoLum\content` | `~/Library/Application Support/VoLum/content` |
-| Diagnose-Log | `%LOCALAPPDATA%\VoLum\volum.log` | `~/Library/Application Support/VoLum/volum.log` |
+| Was | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| Einstellungen | `%LOCALAPPDATA%\VoLum\volum-settings.json` | `~/Library/Application Support/VoLum/volum-settings.json` | `$XDG_DATA_HOME/VoLum/volum-settings.json` (Standard `~/.local/share/VoLum/volum-settings.json`) |
+| Eigene Bibliothek | `%LOCALAPPDATA%\VoLum\content` | `~/Library/Application Support/VoLum/content` | `$XDG_DATA_HOME/VoLum/content` |
+| Diagnose-Log | `%LOCALAPPDATA%\VoLum\volum.log` | `~/Library/Application Support/VoLum/volum.log` | `$XDG_DATA_HOME/VoLum/volum.log` |
 
 ## Fehler melden oder Feature vorschlagen
 

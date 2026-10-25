@@ -1,5 +1,6 @@
 *.sh text eol=lf
 *.bash text eol=lf
+*.version text eol=lf
 # git apply matches context lines byte for byte, so a patch checked out with CRLF
 # on Windows stops applying to the LF sources it was generated from.
 *.patch text eol=lf
