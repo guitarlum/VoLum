@@ -1,5 +1,0 @@
-# The only UBSan suppression in the ticket 07 gates. Not Linux-specific and
-# outside ticket 07's scope: NanoVG's vendored stb_image.h JPEG decoder
-# left-shifts negative coefficients (stbi__build_fast_ac, stbi__extend_receive,
-# the IDCT) while it loads VoLum's .jpg art.
-shift-base:stb_image.h

@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: 07
 
 # 08 Plugin gates (box + CI)
