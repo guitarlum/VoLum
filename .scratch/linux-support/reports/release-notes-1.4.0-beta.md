@@ -11,7 +11,7 @@ Draft for the owner to publish. This is the Linux part of the 1.4.0-beta notes, 
 - **Linux VST3.** The editor draws on X11, on the host's UI thread. A user install puts it in `~/.vst3/VoLum.vst3` (`Contents/x86_64-linux/VoLum.so`).
 - **Linux standalone.** ALSA, JACK and PulseAudio in **Audio & MIDI devices...**. JACK appears when `libjack.so.0` loads, PulseAudio when `libpulse-simple.so.0` loads. On a PipeWire system, pick JACK or PulseAudio: VoLum uses that layer and has no PipeWire driver of its own.
 - **ALSA MIDI.** The standalone recalls PLAY Sounds from an ALSA sequencer port: Program Change, the Recall CC (102), an empty program, a burst, and One channel.
-- **Your library** lives in `$XDG_DATA_HOME/VoLum`, or `~/.local/share/VoLum` when that variable is unset or relative. The same folder on Windows and macOS is unchanged.
+- **Your library** lives in `$XDG_DATA_HOME/VoLum`, or `~/.local/share/VoLum` when that variable is unset, empty or relative. The same folder on Windows and macOS is unchanged.
 - **Open and Save** ask the desktop file portal, then zenity, then kdialog. The update check loads libcurl when it is installed and stays off when it is missing.
 
 ### Install
@@ -28,7 +28,7 @@ The archive contains `VoLum`, `resources/`, `VoLum.vst3/`, `VoLumRigs/`, `instal
 
 - `./install.sh` installs for the current user: `~/.vst3/VoLum.vst3`, `~/.local/bin/VoLum`, `$XDG_DATA_HOME/VoLum` (default `~/.local/share/VoLum`) and a menu entry.
 - `./install.sh --system` installs under `/usr/lib/vst3`, `/usr/local/bin`, `/usr/share/VoLum` and `/usr/share/applications`. Run it as root. The script does not elevate.
-- `./install.sh --uninstall` removes the program, the VST3, the bundled rigs and the menu entry. The library, settings and log stay. Add `--system` to remove the system install.
+- `./install.sh --uninstall` removes the program, the VST3, the bundled rigs and the menu entry. The library, settings and log stay; a data folder left empty is removed. Add `--system` to remove the system install.
 
 GTK 3 is required for the standalone only. When it is missing, `install.sh` still installs the VST3 and prints the package name (`libgtk-3-0` on Ubuntu 22.04, `libgtk-3-0t64` on Ubuntu 24.04, `gtk3` on Fedora).
 

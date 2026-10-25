@@ -439,7 +439,7 @@ The archive holds `VoLum` (the standalone), `resources/`, `VoLum.vst3/`, `VoLumR
 
 `./install.sh --system` installs under `/usr/lib/vst3`, `/usr/local/bin`, `/usr/share/VoLum` and `/usr/share/applications`. Run it as root. The script does not elevate; without root, `--system` stops before it writes.
 
-`./install.sh --uninstall` removes that user's VST3, launcher, app, bundled rigs and menu entry. The library, settings and log stay. `./install.sh --system --uninstall` removes the system install.
+`./install.sh --uninstall` removes that user's VST3, launcher, app, bundled rigs and menu entry. The library, settings and log stay; a data folder left empty is removed. `./install.sh --system --uninstall` removes the system install.
 
 GTK 3 is required for the standalone only. When it is missing, `install.sh` still installs the VST3 and prints the package name: `libgtk-3-0` on Ubuntu 22.04, `libgtk-3-0t64` on Ubuntu 24.04, `gtk3` on Fedora.
 

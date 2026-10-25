@@ -434,12 +434,12 @@ Im Archiv liegen `VoLum` (die Standalone), `resources/`, `VoLum.vst3/`, `VoLumRi
 
 - das VST3 nach `~/.vst3/VoLum.vst3`
 - einen Starter nach `~/.local/bin/VoLum`
-- App, Ressourcen und die mitgelieferten Rigs nach `$XDG_DATA_HOME/VoLum` (ist die Variable leer oder kein absoluter Pfad, nach `~/.local/share/VoLum`)
+- App, Ressourcen und die mitgelieferten Rigs nach `$XDG_DATA_HOME/VoLum` (ist die Variable nicht gesetzt, leer oder kein absoluter Pfad, nach `~/.local/share/VoLum`)
 - einen Menüeintrag nach `$XDG_DATA_HOME/applications/VoLum.desktop` (Standard `~/.local/share/applications/VoLum.desktop`)
 
 `./install.sh --system` installiert nach `/usr/lib/vst3`, `/usr/local/bin`, `/usr/share/VoLum` und `/usr/share/applications`. Dafür brauchst du Root. Das Skript hebt die Rechte nicht selbst an; ohne Root bricht `--system` ab, bevor es schreibt.
 
-`./install.sh --uninstall` entfernt VST3, Starter, App, mitgelieferte Rigs und Menüeintrag dieser Installation. Bibliothek, Einstellungen und Log bleiben. `./install.sh --system --uninstall` entfernt die Systeminstallation.
+`./install.sh --uninstall` entfernt VST3, Starter, App, mitgelieferte Rigs und Menüeintrag dieser Installation. Bibliothek, Einstellungen und Log bleiben; ist der Datenordner danach leer, wird er entfernt. `./install.sh --system --uninstall` entfernt die Systeminstallation.
 
 GTK 3 braucht nur die Standalone. Fehlt es, installiert `install.sh` das VST3 trotzdem und nennt das Paket: `libgtk-3-0` unter Ubuntu 22.04, `libgtk-3-0t64` unter Ubuntu 24.04, `gtk3` unter Fedora.
 
@@ -464,13 +464,13 @@ Die Benutzer-Installation legt das Plug-in nach `~/.vst3/VoLum.vst3`. `--system`
 
 ### Deine Bibliothek
 
-`$XDG_DATA_HOME/VoLum`, oder `~/.local/share/VoLum`, wenn die Variable leer oder relativ ist. In dem Ordner liegen `volum-settings.json`, `settings.ini`, die eigene Bibliothek unter `content`, `volum.log`, `volum-dual-amp-settings.json` und `volum-update-state.json`. Siehe [Wo VoLum deine Dateien ablegt](#wo-volum-deine-dateien-ablegt).
+`$XDG_DATA_HOME/VoLum`, oder `~/.local/share/VoLum`, wenn die Variable nicht gesetzt, leer oder relativ ist. In dem Ordner liegen `volum-settings.json`, `settings.ini`, die eigene Bibliothek unter `content`, `volum.log`, `volum-dual-amp-settings.json` und `volum-update-state.json`. Siehe [Wo VoLum deine Dateien ablegt](#wo-volum-deine-dateien-ablegt).
 
 ### Bekannte Grenzen
 
 - Das ist eine Beta.
 - Editor und Standalone laufen über X11. Ein Wayland-Desktop braucht XWayland. Natives Wayland liegt außerhalb dieser Beta.
-- Die Latenz auf bestimmter Hardware ist nicht geprüft.
+- Die Latenz auf bestimmter Hardware ist nicht zertifiziert.
 - Diese Beta bringt ein VST3 und eine Standalone-App. AU, CLAP, LV2 und eine ARM-Fassung liegen außerhalb.
 - MIDI der Standalone braucht den ALSA-Sequencer. Ein Kernel ohne ihn zeigt keine MIDI-Eingänge. JACK-MIDI erreicht die Standalone nicht.
 - Das Gerätefenster ist der schlichte Systemdialog, nicht die dunkle Einstellungsansicht.
