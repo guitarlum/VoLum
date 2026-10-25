@@ -936,12 +936,6 @@ private:
 
   void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current, const IText* style = nullptr)
   {
-#if defined(OS_LINUX)
-    // UI-gate red proof. Unset, the dialog opens as usual.
-    if (const char* br = std::getenv("VOLUM_BREAK_TEXT_ENTRY"))
-      if (br[0] == '1')
-        return;
-#endif
     auto* ui = GetUI();
     if (!ui)
       return;

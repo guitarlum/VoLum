@@ -319,12 +319,12 @@ or `2` before launch. The PNGs are the GL framebuffer (900x600 at scale 1,
 
 Once `NeuralAmpModeler/tests/linux-ui-refs/` holds those Linux PNGs and a
 `threshold.txt` (minimum SSIM, one number), running the script with no
-arguments captures again and fails if a scene drops below that line. The same
-run shifts the sidebar 18 px (`VOLUM_UI_SHIFT_PROOF=1`) and fails if that shot
-does not score below an unshifted repeat. `verify-linux.sh` calls this script.
+arguments captures again and fails if a scene drops below that line.
+`verify-linux.sh` calls this script.
 
-`--all` also checks the two host proofs: an unhandled `q` arrives at the
-standalone window (`VOLUM_HOST_KEY_LOG`), and under REAPER a preset-menu row
-changes `volum-settings.json` and a custom-amp name committed as
-`LinuxProofAmp` lands in the content store. `VOLUM_BREAK_POPUP=1` and
-`VOLUM_BREAK_TEXT_ENTRY=1` make those two checks fail.
+`--host` checks that an unhandled `q` arrives at the standalone window, that
+REAPER's saved project chunk records a preset-menu Default reset, and that a
+name typed into the custom-amp field is in the content store. `--red` proves
+each of those fails when the source is broken: it edits the sidebar rect, the
+Default handler, or `StartTextEntry` in place, rebuilds, expects the gate to
+fail, and restores the file on every exit.

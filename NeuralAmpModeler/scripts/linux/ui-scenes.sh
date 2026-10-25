@@ -40,7 +40,7 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --capture|--compare|--all|--gate|--host) MODE="${1#--}" ;;
+    --capture|--compare|--all|--gate|--host|--red) MODE="${1#--}" ;;
     --out) OUT="$2"; shift ;;
     --app) APP="$2"; shift ;;
     --windows) WIN="$2"; shift ;;
@@ -96,11 +96,36 @@ JACK_NAME=""
 ALSA_CONF=""
 PULSE=""
 XDG=""
-SHIFT_PROOF=0
-BREAK_TEXT=0
-BREAK_POPUP=0
+REDBAK=()
+
+restore_red() {
+  local f
+  for f in "${REDBAK[@]}"; do
+    if [[ -f "$f.redbak" ]]; then
+      mv -f "$f.redbak" "$f"
+    fi
+  done
+  REDBAK=()
+}
+
+# Replace one exact snippet. The backup is restored on every exit.
+mutate_once() {
+  local file="$1" old="$2" new="$3"
+  cp -a "$file" "$file.redbak"
+  REDBAK+=("$file")
+  python3 - "$file" "$old" "$new" <<'PY'
+import pathlib, sys
+path, old, new = sys.argv[1:]
+file = pathlib.Path(path)
+text = file.read_text()
+if old not in text:
+    raise SystemExit("redproof: snippet missing in " + path)
+file.write_text(text.replace(old, new, 1))
+PY
+}
 
 cleanup() {
+  restore_red
   [[ -n "$APP_PID" ]] && kill -KILL "$APP_PID" 2>/dev/null || true
   [[ -n "$JACK_PID" ]] && kill "$JACK_PID" 2>/dev/null || true
   [[ -n "$XVFB_PID" ]] && kill "$XVFB_PID" 2>/dev/null || true
@@ -172,6 +197,15 @@ drive() {
         py=$((b * h / 600))
         xdotool mousemove --window "$child" --sync "$px" "$py" click 1
         ;;
+      wheel)
+        a=${rest%% *}
+        rest=${rest#* }
+        b=${rest%% *}
+        rest=${rest#* }
+        px=$((a * w / 900))
+        py=$((b * h / 600))
+        xdotool mousemove --window "$child" --sync "$px" "$py" click --repeat "$rest" 5
+        ;;
       type)
         xdotool type --window "$child" --delay 20 "$rest"
         ;;
@@ -238,9 +272,6 @@ run_scene() {
   CAP="$DATA/capture"
   local -a extra=()
   [[ "$scale" == 2 ]] && extra+=(GDK_SCALE=2)
-  [[ "$SHIFT_PROOF" == 1 ]] && extra+=(VOLUM_UI_SHIFT_PROOF=1)
-  [[ "$BREAK_TEXT" == 1 ]] && extra+=(VOLUM_BREAK_TEXT_ENTRY=1)
-  [[ "$BREAK_POPUP" == 1 ]] && extra+=(VOLUM_BREAK_POPUP=1)
   # shellcheck disable=SC2086
   env "${extra[@]}" \
     XDG_DATA_HOME="$XDG" \
@@ -264,7 +295,7 @@ run_scene() {
   park
   sleep 0.7
   grab "$tag" || { quit_app; return 1; }
-  if [[ "$name" == main && "$scale" == 1 && "$SHIFT_PROOF" != 1 ]]; then
+  if [[ "$name" == main && "$scale" == 1 ]]; then
     sleep 1
     park
     grab main-s1-repeat || true
@@ -296,6 +327,7 @@ start_display() {
   fi
 
   trap cleanup EXIT
+  trap 'exit 1' INT TERM
   local n
   for n in $(seq 90 189); do
     [[ -e "/tmp/.X$n-lock" ]] && continue
@@ -369,28 +401,34 @@ capture_all() {
   done
 }
 
+rebuild_target() {
+  echo "  rebuild $1"
+  cmake --build "$ROOT/build-linux" -j "${JOBS:-14}" --target "$1"
+}
+
 prove_shift() {
-  [[ -f "$OUT/main-s1.png" ]] || { fail "shift proof has no main-s1"; return; }
-  cp -f "$OUT/main-s1.png" "$OUT/main-s1-keep.png"
-  [[ -f "$OUT/main-s1-repeat.png" ]] && cp -f "$OUT/main-s1-repeat.png" "$OUT/main-s1-repeat-keep.png"
-  SHIFT_PROOF=1
+  local ref="${1:-$OUT/main-s1.png}"
+  local layout="$ROOT/NeuralAmpModeler/VoLumLayoutBuild.inc.cpp"
+  local old='const IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);'
+  local new='const IRECT ampListArea(b.L + 24.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);'
+  [[ -f "$ref" ]] || { fail "shift proof has no reference $ref"; return; }
+  mutate_once "$layout" "$old" "$new" || { fail "shift proof could not edit the sidebar"; return; }
+  if ! rebuild_target VoLum-app; then
+    fail "shift proof rebuild"
+    return
+  fi
   if run_scene 1 main ""; then
     mv -f "$OUT/main-s1.png" "$OUT/main-s1-shifted.png"
   fi
-  SHIFT_PROOF=0
-  mv -f "$OUT/main-s1-keep.png" "$OUT/main-s1.png"
-  [[ -f "$OUT/main-s1-repeat-keep.png" ]] && mv -f "$OUT/main-s1-repeat-keep.png" "$OUT/main-s1-repeat.png"
+  restore_red
+  rebuild_target VoLum-app || fail "shift proof restore rebuild"
   [[ -f "$OUT/main-s1-shifted.png" ]] || { fail "shifted capture missing"; return; }
-  local same="1" moved
-  if [[ -f "$OUT/main-s1-repeat.png" ]]; then
-    same=$(ssim "$OUT/main-s1.png" "$OUT/main-s1-repeat.png")
-    echo "  SSIM main repeat (noise floor) $same"
-  fi
-  moved=$(ssim "$OUT/main-s1.png" "$OUT/main-s1-shifted.png")
-  echo "  SSIM main vs shifted sidebar $moved"
-  awk -v a="$same" -v b="$moved" 'BEGIN { exit !(b + 0.01 < a + 0) }' \
-    && pass "shifted sidebar scores below the repeat ($moved < $same)" \
-    || fail "shifted sidebar did not drop SSIM ($moved vs repeat $same)"
+  local moved
+  moved=$(ssim "$ref" "$OUT/main-s1-shifted.png")
+  echo "  SSIM reference vs shifted sidebar $moved"
+  awk -v b="$moved" 'BEGIN { exit !(b + 0 < 0.99) }' \
+    && pass "shifted sidebar is below 0.99 ($moved)" \
+    || fail "shifted sidebar stayed at or above 0.99 ($moved)"
 }
 
 host_keys() {
@@ -524,10 +562,7 @@ newprojtmpl=
 lastt=$(date +%s)
 EOF
   write_reaper_lua "$work/cfg/Scripts/__startup.lua"
-  local -a extra=()
-  [[ "$BREAK_TEXT" == 1 ]] && extra+=(VOLUM_BREAK_TEXT_ENTRY=1)
-  [[ "$BREAK_POPUP" == 1 ]] && extra+=(VOLUM_BREAK_POPUP=1)
-  env "${extra[@]}" \
+  env \
     HOME="$work/home" \
     XDG_CONFIG_HOME="$work/home/.config" \
     XDG_DATA_HOME="$work/home/.local/share" \
@@ -626,19 +661,23 @@ host_menu() {
 host_text() {
   local work="$OUT/reaper-text"
   reaper_session "$work" "" || { fail "text entry: reaper did not start"; return; }
+  # Plugin editors open in PLAY. The header toggle is the BUILD switch.
   drive "click 743 22" || { fail "text entry: no editor window"; return; }
-  sleep 0.6
-  drive "key Down" || { fail "text entry: no editor window"; return; }
-  sleep 0.6
+  sleep 0.8
+  # One wheel notch brings the custom row up to the pen.
+  drive "wheel 90 400 1" || { fail "text entry: no editor window"; return; }
+  sleep 0.4
   drive "click 122 575" || { fail "text entry: no editor window"; return; }
-  sleep 0.7
-  drive "click 277 123" || true
-  sleep 0.4
-  drive "backs 48" "type LinuxProofAmp" "key Return" || true
-  sleep 0.4
-  drive "click 656 526" || true
-  sleep 1
+  sleep 0.8
   CAP="$work/home/.local/share/VoLum/capture"
+  grab reaper-text-builder || true
+  # The name field opens with the current name selected, so typing replaces it.
+  drive "click 277 123" || { fail "text entry: no editor window"; return; }
+  sleep 0.5
+  drive "type LinuxProofAmp" "key Return" || { fail "text entry: no editor window"; return; }
+  sleep 0.5
+  drive "click 656 526" || { fail "text entry: no editor window"; return; }
+  sleep 1.2
   grab reaper-text || true
   finish_reaper "$work" "$REAPER_PID"
   local content="$work/home/.local/share/VoLum/content/volum-content.json"
@@ -650,53 +689,70 @@ host_text() {
 }
 
 host_red() {
-  BREAK_POPUP=1
+  local layout="$ROOT/NeuralAmpModeler/VoLumLayoutBuild.inc.cpp"
+  local overlay="$ROOT/NeuralAmpModeler/VoLumCustomOverlay.h"
+  local reset='pPlugin->_VolumResetAmpToFactory();'
+  local reset_off='/* redproof */ (void) 0;'
+  mutate_once "$layout" "$reset" "$reset_off" || { fail "popup red could not edit the menu"; return; }
+  if ! rebuild_target VoLum-vst3; then
+    fail "popup red rebuild"
+    return
+  fi
   local work="$OUT/reaper-menu-red"
-  local before after
-  if ! reaper_session "$work" ""; then
+  if reaper_session "$work" ""; then
+    drive "click 743 22" || true
+    sleep 0.6
+    drive "click 539 23" "click 450 66" || true
+    sleep 0.8
+    finish_reaper "$work" "$REAPER_PID"
+    if chunk_has "$work/smoke.rpp" "V30-THC-1"; then
+      fail "popup menu still saved a reset with Default removed"
+    else
+      pass "popup menu is red when Default is removed"
+    fi
+  else
     fail "popup red: reaper did not start"
-    BREAK_POPUP=0
-    return
   fi
-  before=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
-  drive "click 743 22" || true
-  sleep 0.6
-  drive "click 539 23" "click 450 66" || true
-  sleep 0.8
-  finish_reaper "$work" "$REAPER_PID"
-  if chunk_has "$work/smoke.rpp" "V30-THC-1"; then
-    fail "popup menu still saved a reset with the menu broken"
-  else
-    pass "popup menu is red when every row is ignored"
-  fi
-  BREAK_POPUP=0
+  restore_red
+  rebuild_target VoLum-vst3 || { fail "popup red restore rebuild"; return; }
 
-  BREAK_TEXT=1
-  work="$OUT/reaper-text-red"
-  if ! reaper_session "$work" ""; then
-    fail "text red: reaper did not start"
-    BREAK_TEXT=0
+  local entry='void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current, const IText* style = nullptr)
+  {
+    auto* ui = GetUI();'
+  local entry_off='void StartTextEntry(TextTarget target, const IRECT& bounds, const std::string& current, const IText* style = nullptr)
+  {
+    return;
+    auto* ui = GetUI();'
+  mutate_once "$overlay" "$entry" "$entry_off" || { fail "text red could not edit text entry"; return; }
+  if ! rebuild_target VoLum-vst3; then
+    fail "text red rebuild"
     return
   fi
-  drive "click 743 22" || true
-  sleep 0.5
-  drive "key Down" || true
-  sleep 0.6
-  drive "click 122 575" || true
-  sleep 0.7
-  drive "click 277 123" || true
-  sleep 0.4
-  drive "backs 48" "type LinuxProofAmp" "key Return" || true
-  sleep 0.4
-  drive "click 656 526" || true
-  sleep 1
-  finish_reaper "$work" "$REAPER_PID"
-  BREAK_TEXT=0
-  if grep -a -q "LinuxProofAmp" "$work/home/.local/share/VoLum/content/volum-content.json" 2>/dev/null; then
-    fail "text entry still committed with the field broken"
+  work="$OUT/reaper-text-red"
+  if reaper_session "$work" ""; then
+    drive "click 743 22" || true
+    sleep 0.8
+    drive "wheel 90 400 1" || true
+    sleep 0.4
+    drive "click 122 575" || true
+    sleep 0.8
+    drive "click 277 123" || true
+    sleep 0.5
+    drive "type LinuxProofAmp" "key Return" || true
+    sleep 0.5
+    drive "click 656 526" || true
+    sleep 1.2
+    finish_reaper "$work" "$REAPER_PID"
+    if grep -a -q "LinuxProofAmp" "$work/home/.local/share/VoLum/content/volum-content.json" 2>/dev/null; then
+      fail "text entry still committed with StartTextEntry removed"
+    else
+      pass "text entry is red when StartTextEntry returns immediately"
+    fi
   else
-    pass "text entry is red when the field is broken"
+    fail "text red: reaper did not start"
   fi
+  restore_red
+  rebuild_target VoLum-vst3 || fail "text red restore rebuild"
 }
 
 compare_pair() {
@@ -776,12 +832,10 @@ case "$MODE" in
     echo "ui-scenes out $OUT"
     start_display
     capture_all
-    prove_shift
     if [[ "$MODE" == all ]]; then
       host_keys
       host_menu
       host_text
-      host_red
     fi
     if [[ "$MODE" == gate ]]; then
       gate_refs
@@ -797,7 +851,18 @@ case "$MODE" in
     host_keys
     host_menu
     host_text
+    ;;
+  red)
+    [[ -n "$OUT" ]] || OUT=$(mktemp -d /tmp/volum-ui-scenes.XXXXXX)
+    echo "ui-scenes out $OUT"
+    start_display
+    prove_shift "${RED_MAIN_REF:-$HOME/volum-linux/out/13/scenes/main-s1.png}"
     host_red
+    if git -C "$ROOT" diff --exit-code -- NeuralAmpModeler/VoLumLayoutBuild.inc.cpp NeuralAmpModeler/VoLumCustomOverlay.h >/dev/null; then
+      pass "red proofs restored the source"
+    else
+      fail "red proofs left the source dirty"
+    fi
     ;;
   *)
     usage

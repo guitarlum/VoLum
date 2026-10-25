@@ -73,13 +73,7 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   for (int i = 0; i < volum::kAmpCount; i++)
     ampNames[i] = volum::kAmps[i].displayName;
 
-  IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
-#if defined(OS_LINUX)
-  // UI-gate red proof only. Unset, the list sits where the line above put it.
-  if (const char* shift = std::getenv("VOLUM_UI_SHIFT_PROOF"))
-    if (shift[0] == '1')
-      ampListArea.Translate(18.f, 0.f);
-#endif
+  const IRECT ampListArea(b.L + 6.f, logoArea.B + 4.f, b.L + sidebarW - 6.f, b.B - 8.f);
   pGraphics->AttachControl(new VoLumAmpListControl(ampListArea, volum::kAmpCount, ampNames, ampAbbrs,
                                                    [this](int ampIdx) { _VolumSelectFactoryAmp(ampIdx); }),
                            kCtrlTagVoLumAmpList);
@@ -1175,12 +1169,6 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     {
       auto* presetMenu = new VoLumListMenuControl(b);
       presetMenu->SetCallback([pPlugin](int code) {
-#if defined(OS_LINUX)
-        // UI-gate red proof. Unset, a row does what it says.
-        if (const char* br = std::getenv("VOLUM_BREAK_POPUP"))
-          if (br[0] == '1')
-            return;
-#endif
         auto* pGfx = pPlugin->GetUI();
         if (!pGfx)
           return;
