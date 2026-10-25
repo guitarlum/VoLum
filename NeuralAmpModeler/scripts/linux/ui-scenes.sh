@@ -578,6 +578,31 @@ finish_reaper() {
   wait "$rpid" 2>/dev/null || true
 }
 
+chunk_has() {
+  # REAPER stores the plug-in state as base64 under the VST line.
+  python3 - "$1" "$2" <<'PY'
+import base64, pathlib, sys
+text = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+lines, grab = [], False
+for line in text.splitlines():
+    if "<VST " in line:
+        grab = True
+        continue
+    if grab:
+        s = line.strip()
+        if s.startswith("<") or s == ">":
+            break
+        lines.append(s)
+raw = "".join(lines)
+raw += "=" * ((4 - len(raw) % 4) % 4)
+try:
+    data = base64.b64decode(raw)
+except Exception:
+    sys.exit(1)
+sys.exit(0 if sys.argv[2].encode() in data else 1)
+PY
+}
+
 host_menu() {
   local work="$OUT/reaper-menu"
   reaper_session "$work" "" || { fail "popup menu: reaper did not start"; return; }
@@ -591,7 +616,7 @@ host_menu() {
   CAP="$work/home/.local/share/VoLum/capture"
   grab reaper-menu || true
   finish_reaper "$work" "$REAPER_PID"
-  if grep -a -q "V30-THC-1" "$work/smoke.rpp"; then
+  if chunk_has "$work/smoke.rpp" "V30-THC-1"; then
     pass "popup menu saved the factory reset in the REAPER project"
   else
     fail "popup menu did not save the factory reset in the REAPER project"
@@ -639,7 +664,7 @@ host_red() {
   drive "click 539 23" "click 450 66" || true
   sleep 0.8
   finish_reaper "$work" "$REAPER_PID"
-  if grep -a -q "V30-THC-1" "$work/smoke.rpp"; then
+  if chunk_has "$work/smoke.rpp" "V30-THC-1"; then
     fail "popup menu still saved a reset with the menu broken"
   else
     pass "popup menu is red when every row is ignored"
