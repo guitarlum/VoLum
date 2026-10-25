@@ -1,17 +1,18 @@
 # 14 Tarball, portability and the release leg
 
-Status: **PASS** on code head `14d23c14`. The Linux package job and the release dry run are green on that commit. iPlug2 was not changed.
+Status: **PASS** on code head `5066de03`. The branch now contains `feature/linux-support` at `6641c2f3` (tickets 13 and 16). The Linux package job, the QEMU MIDI job, and the release dry run are green on this commit.
 
 ## Heads
 
 | | Sha |
 | --- | --- |
-| Code head | `14d23c1403842b875fd673a82bde9c64957b30b2` |
+| Code head | `5066de030689460af6dc9c3057c6086a7208b1ff` |
 | Report commit | the commit that updates this file |
-| iPlug2 `volum/linux` | `3d894cd8e7a4185e7b5b28d24e7c149d587ab1ba` (unchanged) |
-| CI | [40178869338](https://github.com/guitarlum/VoLum/actions/runs/40178869338) success, every `ci.yml` job, including Formatting, macOS, macOS standalone e2e, and macOS installer upgrade |
-| Release dry run | [40178867357](https://github.com/guitarlum/VoLum/actions/runs/40178867357) success |
-| Windows tests | `run-tests-win.ps1` exit 0, 1479 passed, 30255274 assertions. The Windows CI job on this same head is also green |
+| Merged `feature/linux-support` | `6641c2f30ace3c249a558f390269086390c4ea17` |
+| iPlug2 | `98519e71f28f813a316f8d7d03d7da5b3d56a2b8` (the pointer `feature/linux-support` already had) |
+| CI | [40187833567](https://github.com/guitarlum/VoLum/actions/runs/40187833567) success, every `ci.yml` job, including Formatting, Linux package, Linux MIDI (QEMU guest), macOS, macOS standalone e2e, and macOS installer upgrade |
+| Release dry run | [40187850470](https://github.com/guitarlum/VoLum/actions/runs/40187850470) success |
+| Windows tests | `run-tests-win.ps1` exit 0, 1480 passed, 30255281 assertions. The Windows CI job on this same head is also green |
 
 The spec's portability list now includes the standalone's GDK 3 set. Changelog and user docs were left for ticket 15.
 
@@ -71,27 +72,43 @@ The uninstall copy still removed the wrapper and the other installed files. Only
 
 ## Publish guard
 
-`test_build_script_guards.cpp` reads `release-native.yml` and `release-build.yml` and fails if a step that runs `gh release`, `git push`, `git tag`, `gh api`, or a writing `curl` is missing `inputs.dry_run != true` or `publish == true`. There is no create-release call in the workflow.
+`test_build_script_guards.cpp` reads `release-native.yml` and `release-build.yml`. A step is every list entry at the step indent, including an unnamed `- run:` and a `- uses:`. The gate has to be in that step's `if:` expression. A comment does not count. A step publishes when it runs `gh release`, `git push`, `git tag`, `gh api`, a writing `curl` (`-X` or `--request` POST/PUT/PATCH/DELETE, or `--data` / `-d` / `-F`), or a `uses:` action that publishes (`softprops/action-gh-release`, or a name that contains both `release` and `upload`). There is no create-release call in the workflow.
 
-Red proof: the `if` on `Push release commit` lost `&& inputs.dry_run != true`. The suite then failed with `CHECK( StepIsPublishGated(stepBody) ) is NOT correct!` and `step Push release commit`. Restoring the line made that test case pass again (15/15, 2437 assertions).
+The dry-run callers are named **Prepare release (dry run)** and **Build (dry run)**. The real release jobs stay **Prepare release** and **Build**.
+
+Red proofs mutated `release-native.yml`, ran the test, and restored the file before the next case. Each failed at `test_build_script_guards.cpp(525)` with `CHECK( StepIsPublishGated(StepIfExpression(stepBody)) ) is NOT correct!`.
+
+| Mutation | Logged step | Result |
+| --- | --- | --- |
+| Unnamed `- run: git push origin HEAD:main` with no `if` | `- run: git push origin HEAD:main` | exit 1 |
+| The push step's `if` dropped the dry-run phrase, and the phrase was left only in a `#` comment | `Push release commit` | exit 1 |
+| Ungated `curl --request POST` | `Ungated request` | exit 1 |
+
+The same test on the restored files exited 0.
+
+## Uninstall
+
+`--uninstall` removes the installed binary, resources, and rigs, then removes `$XDG_DATA_HOME/VoLum` only when that directory is empty. A preset or the owner's library left in the directory keeps it. `--system` does the same for `/usr/share/VoLum` instead of deleting that directory outright. The launch smoke writes `volum.log`, so that home is a content case. The package matrix also installs a fresh home, uninstalls it, and checks the data directory is gone, then installs again, drops `presets/mine.nam`, uninstalls, and checks that file is still there. It repeats both cases for the system directory. The Linux package job ran that matrix and succeeded.
 
 ## Dry run
 
-[Release Native 40178867357](https://github.com/guitarlum/VoLum/actions/runs/40178867357) was `workflow_dispatch` on `feature/linux-14-package` with `dry_run=true` only. Head `14d23c14`. A dispatch from another branch with `dry_run` left false still releases `main`.
+[Release Native 40187850470](https://github.com/guitarlum/VoLum/actions/runs/40187850470) was `workflow_dispatch` on `feature/linux-14-package` with `dry_run=true` only. Head `5066de03`. A dispatch from another branch with `dry_run` left false still releases `main`.
 
 GitHub Actions rejects `inputs` and `github` inside `permissions`, so the dry run and the real release are two callers of one step list, `.github/workflows/release-build.yml`. That file holds the checkout, the VST3 SDK and prebuilt-lib steps, and the macOS, Windows, and Linux steps.
 
 On this run:
 
-- The write **Prepare release** job was skipped. The read-only one only checked out this ref and exported `publish=false`.
-- The write **Build** job was skipped. The read-only **Build** job ran `release-build.yml`.
-- Unguarded steps ran on `ubuntu-22.04`: checkout, submodules, Get VST3 SDK, Get Prebuilt Libs.
+- **Prepare release** was skipped. **Prepare release (dry run)** only checked out this ref and exported `publish=false`.
+- **Build** was skipped. **Build (dry run)** ran `release-build.yml` on `ubuntu-22.04`.
+- Unguarded steps ran: checkout, submodules, Get VST3 SDK, Get Prebuilt Libs.
 - macOS and Windows steps were skipped, including **Upload macOS release assets** and **Upload Windows release assets**.
 - **Provision Linux build packages** and **Build Linux tarball** ran.
-- **Upload Linux tarball artifact** uploaded `VoLum-linux-tarball` (74,557,133 bytes).
+- **Upload Linux tarball artifact** uploaded `VoLum-linux-tarball` (74,572,389 bytes).
 - **Upload Linux release asset** was skipped.
 
 No tag was pushed, no GitHub release was created, and the appcast workflow did not run.
+
+The macOS unit-test job on the same CI run failed once on `test_volum_pitch_burst.cpp` (`ratio` 0.381 against 0.35) and the failed jobs were rerun. That rerun is the green conclusion of run 40187833567. The threshold was not changed.
 
 ## What a real release changes
 
