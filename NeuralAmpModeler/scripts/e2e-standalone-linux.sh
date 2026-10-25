@@ -318,9 +318,21 @@ quit_app() {
   case "$how" in
     term) kill -TERM "$APP_PID" 2>/dev/null || true ;;
     term2)
+      # The first handler only sets the flag. A second SIGTERM, once that
+      # handler has returned and before the quit finishes, _exit(3). Standard
+      # signals coalesce, so the second one has to be a separate delivery.
       kill -TERM "$APP_PID" 2>/dev/null || true
-      sleep 0.05
-      kill -TERM "$APP_PID" 2>/dev/null || true
+      local i sent=0
+      for i in 1 2 3 4 5 6 7 8; do
+        sleep 0.005
+        if kill -0 "$APP_PID" 2>/dev/null; then
+          kill -TERM "$APP_PID" 2>/dev/null || true
+          sent=1
+          echo "  second SIGTERM about $((i * 5)) ms after the first; the process was still alive"
+          break
+        fi
+      done
+      [[ $sent == 1 ]] || echo "  process exited before a second SIGTERM could be delivered"
       ;;
     kill) kill -KILL "$APP_PID" 2>/dev/null || true ;;
   esac
@@ -1088,7 +1100,21 @@ dialog_env() {
   export VOLUM_E2E_TOOL_LOG="$SESS/tools.log"
   : >"$VOLUM_E2E_TOOL_LOG"
   printf '%s\n' "$stdout" >"$SESS/dialog-stdout.txt"
-  LAUNCH_ENV=("PATH=$dir:$PATH" "VOLUM_E2E_TOOL_LOG=$VOLUM_E2E_TOOL_LOG" "VOLUM_E2E_DIALOG_FILE=$SESS/dialog-stdout.txt" "VOLUM_E2E_DIALOG_CANCEL=$cancel")
+  # kdialog is the case with zenity missing. Which() searches the whole PATH,
+  # so the real zenity has to be absent, not merely later than the fake directory.
+  local path_rest="$PATH"
+  if [[ "$mode" == kdialog ]]; then
+    path_rest=""
+    local d
+    local dirs=()
+    IFS=: read -ra dirs <<< "$PATH"
+    for d in "${dirs[@]}"; do
+      [[ -z "$d" ]] && continue
+      [[ -x "$d/zenity" || -x "$d/kdialog" || -x "$d/gdbus" ]] && continue
+      path_rest+="${path_rest:+:}$d"
+    done
+  fi
+  LAUNCH_ENV=("PATH=$dir:$path_rest" "VOLUM_E2E_TOOL_LOG=$VOLUM_E2E_TOOL_LOG" "VOLUM_E2E_DIALOG_FILE=$SESS/dialog-stdout.txt" "VOLUM_E2E_DIALOG_CANCEL=$cancel")
 }
 
 scenario_dialog_export() {
@@ -1167,9 +1193,11 @@ scenario_dialog_open() {
   id=$(wait_gfx || true)
   check "open launch opened" "$([[ -n "$id" ]] && echo 1 || echo 0)"
   sleep 2
+  click_at 869 22 0.8
+  click_at 600 113 0.8
   shot "$SESS/before-open.png"
   log_mark
-  pack_clicks_import
+  click_at 718 346 0.4
   local opened=0
   if wait_log "\[pack\] opened " 8; then opened=1; fi
   check "log line is opened" "$opened"
@@ -1192,9 +1220,11 @@ scenario_dialog_open() {
   id=$(wait_gfx || true)
   check "cancel launch opened" "$([[ -n "$id" ]] && echo 1 || echo 0)"
   sleep 2
+  click_at 869 22 0.8
+  click_at 600 113 0.8
   shot "$SESS/before-cancel.png"
   log_mark
-  pack_clicks_import
+  click_at 718 346 0.4
   sleep 1.5
   shot "$SESS/after-cancel.png"
   local opened2=0
@@ -1205,7 +1235,8 @@ scenario_dialog_open() {
     local ae2
     ae2=$(compare -metric AE "$SESS/before-cancel.png" "$SESS/after-cancel.png" null: 2>&1 || true)
     echo "  cancel overlay AE=$ae2"
-    if [[ "${ae2%% *}" -lt 400 ]]; then same=1; fi
+    # The Import button's hover is a few thousand pixels. The pack overlay is most of the window.
+    if [[ "${ae2%% *}" -lt 40000 ]]; then same=1; fi
   fi
   check "cancel leaves the overlay hidden" "$same"
   quit_app term >/dev/null
@@ -1323,8 +1354,9 @@ scenario_dialog_builder() {
   fi
   local ocr=""
   if [[ -f "$SESS/row-added.png" ]]; then
-    convert "$SESS/row-added.png" -resize 400% "$SESS/row-added-big.png" 2>/dev/null || true
-    ocr=$(tesseract "$SESS/row-added-big.png" stdout --psm 6 2>/dev/null || true)
+    # Josefin on a dark row is too thin for tesseract until it is scaled, flattened and inverted.
+    convert "$SESS/row-added.png" -resize 600% -colorspace Gray -contrast-stretch 2%x2% -threshold 40% -negate "$SESS/row-added-big.png" 2>/dev/null || true
+    ocr=$(tesseract "$SESS/row-added-big.png" stdout --psm 7 2>/dev/null || true)
     printf '%s\n' "$ocr" >"$SESS/row.txt"
   fi
   local saw=0
