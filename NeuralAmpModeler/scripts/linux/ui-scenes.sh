@@ -209,6 +209,10 @@ drive() {
       type)
         xdotool type --window "$child" --delay 20 "$rest"
         ;;
+      keys)
+        # shellcheck disable=SC2086
+        xdotool key --window "$child" --delay 30 $rest
+        ;;
       backs)
         xdotool key --window "$child" --repeat "$rest" BackSpace
         ;;
@@ -672,10 +676,12 @@ host_text() {
   CAP="$work/home/.local/share/VoLum/capture"
   grab reaper-text-builder || true
   # The name field opens with the current name selected, so typing replaces it.
-  drive "click 277 123" || { fail "text entry: no editor window"; return; }
-  sleep 0.5
-  drive "type LinuxProofAmp" "key Return" || { fail "text entry: no editor window"; return; }
-  sleep 0.5
+  drive "click 200 121" || { fail "text entry: no editor window"; return; }
+  sleep 0.6
+  grab reaper-text-dialog || true
+  drive "keys shift+l i n u x shift+p r o o f shift+a m p Return" || { fail "text entry: no editor window"; return; }
+  sleep 0.6
+  grab reaper-text-typed || true
   drive "click 656 526" || { fail "text entry: no editor window"; return; }
   sleep 1.2
   grab reaper-text || true
@@ -736,9 +742,9 @@ host_red() {
     sleep 0.4
     drive "click 122 575" || true
     sleep 0.8
-    drive "click 277 123" || true
-    sleep 0.5
-    drive "type LinuxProofAmp" "key Return" || true
+    drive "click 200 121" || true
+    sleep 0.6
+    drive "keys shift+l i n u x shift+p r o o f shift+a m p Return" || true
     sleep 0.5
     drive "click 656 526" || true
     sleep 1.2
