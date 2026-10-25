@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       # A dry run, and any dispatch that is not on main, cannot push or create releases.
-      contents: ${{ (inputs.dry_run == true || github.ref != 'refs/heads/main') && 'read' || 'write' }}
+      contents: ${{ github.ref == 'refs/heads/main' && 'write' || 'read' }}
     outputs:
       release_tag: ${{steps.meta.outputs.tag}}
       release_version: ${{steps.meta.outputs.version}}
@@ -159,7 +159,7 @@ jobs:
     needs: prepare_release
     runs-on: ${{matrix.os}}
     permissions:
-      contents: ${{ (inputs.dry_run == true || github.ref != 'refs/heads/main') && 'read' || 'write' }}
+      contents: ${{ github.ref == 'refs/heads/main' && 'write' || 'read' }}
     strategy:
       # A release is shipped as a single multi-platform unit. Aborting the other
       # leg on the first failure avoids uploading a half-broken release.
@@ -493,23 +493,29 @@ jobs:
           exit 1
         fi
         # contents:read cannot create a release. 201 would mean this run can publish.
-        printf '%s\n' '{"tag_name":"v0.0.0-linux-dry-run-must-not-publish","name":"dry-run must not publish","draft":true,"prerelease":true}' > /tmp/dry-release-body.json
-        code="$(curl -s -o /tmp/dry-release.json -w '%{http_code}' \
-          -X POST \
-          -H "Authorization: Bearer ${GH_TOKEN}" \
-          -H "Accept: application/vnd.github+json" \
-          "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
-          --data @/tmp/dry-release-body.json)"
-        echo "release create HTTP ${code}"
-        cat /tmp/dry-release.json
-        case "$code" in
-          401|403|404) ;;
-          *)
-            echo "ERROR: dry run was not refused (HTTP ${code})" >&2
-            exit 1
-            ;;
-        esac
-        echo "DRY_RUN_PUBLISH_BLOCKED http=${code}"
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          echo "ref is main, so this probe does not call the release API"
+          echo "DRY_RUN_PUBLISH_BLOCKED http=skipped"
+          code="skipped"
+        else
+          printf '%s\n' '{"tag_name":"v0.0.0-linux-dry-run-must-not-publish","name":"dry-run must not publish","draft":true,"prerelease":true}' > /tmp/dry-release-body.json
+          code="$(curl -s -o /tmp/dry-release.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
+            --data @/tmp/dry-release-body.json)"
+          echo "release create HTTP ${code}"
+          cat /tmp/dry-release.json
+          case "$code" in
+            401|403|404) ;;
+            *)
+              echo "ERROR: dry run was not refused (HTTP ${code})" >&2
+              exit 1
+              ;;
+          esac
+          echo "DRY_RUN_PUBLISH_BLOCKED http=${code}"
+        fi
         version="${{ needs.prepare_release.outputs.release_version }}"
         tarball="build-linux/out/VoLum-${version}-linux-x86_64.tar.gz"
         test -f "$tarball"
