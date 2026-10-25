@@ -381,22 +381,25 @@ exit 1
 EOF
   cat >"$dir/dialog-fake" <<'EOF'
 #!/bin/bash
+# Absolute paths: the kdialog scenario removes /usr/bin from PATH so the real
+# zenity is not found, and basename/cat would otherwise disappear with it.
 log="${VOLUM_E2E_TOOL_LOG:-/tmp/volum-e2e-tool.log}"
+name=$(/usr/bin/basename "$0" 2>/dev/null || echo tool)
 {
-  printf 'TOOL %s\n' "$(basename "$0")"
+  printf 'TOOL %s\n' "$name"
   printf 'ARG %s\n' "$@"
 } >> "$log"
 if [[ "${VOLUM_E2E_DIALOG_CANCEL:-}" == 1 ]]; then
   exit 1
 fi
-  if [[ -n "${VOLUM_E2E_DIALOG_FILE:-}" && -f "${VOLUM_E2E_DIALOG_FILE}" ]]; then
-  cat "${VOLUM_E2E_DIALOG_FILE}"
+if [[ -n "${VOLUM_E2E_DIALOG_FILE:-}" && -f "${VOLUM_E2E_DIALOG_FILE}" ]]; then
+  /bin/cat "${VOLUM_E2E_DIALOG_FILE}" 2>/dev/null || /usr/bin/cat "${VOLUM_E2E_DIALOG_FILE}"
   exit 0
 fi
-  if [[ -n "${VOLUM_E2E_DIALOG_STDOUT:-}" ]]; then
-    printf '%s\n' "$VOLUM_E2E_DIALOG_STDOUT"
-  fi
-  exit 0
+if [[ -n "${VOLUM_E2E_DIALOG_STDOUT:-}" ]]; then
+  printf '%s\n' "$VOLUM_E2E_DIALOG_STDOUT"
+fi
+exit 0
 EOF
   chmod +x "$dir/gdbus" "$dir/dialog-fake"
   rm -f "$dir/zenity" "$dir/kdialog"
@@ -1355,7 +1358,7 @@ scenario_dialog_builder() {
   local ocr=""
   if [[ -f "$SESS/row-added.png" ]]; then
     # Josefin on a dark row is too thin for tesseract until it is scaled, flattened and inverted.
-    convert "$SESS/row-added.png" -resize 600% -colorspace Gray -contrast-stretch 2%x2% -threshold 40% -negate "$SESS/row-added-big.png" 2>/dev/null || true
+    convert "$SESS/row-added.png" -resize 800% -colorspace Gray -negate -threshold 50% "$SESS/row-added-big.png" 2>/dev/null || true
     ocr=$(tesseract "$SESS/row-added-big.png" stdout --psm 7 2>/dev/null || true)
     printf '%s\n' "$ocr" >"$SESS/row.txt"
   fi
