@@ -309,7 +309,7 @@ on Windows, unset on both otherwise):
 | `signal-sN.png` | key `h` (Settings opens on SIGNAL) |
 | `system-sN.png` | key `h`, then SYSTEM at canvas `(600, 113)` |
 | `tuner-sN.png` | key `t` |
-| `custom-sN.png` | `lastAmpIdx` 15, pen at canvas `(122, 575)` |
+| `custom-sN.png` | key Down from THC Sunset (wraps onto the custom row), pen at canvas `(122, 575)` |
 | `pack-sN.png` | key `h`, SYSTEM `(600, 113)`, Export Pack `(525, 346)` |
 
 Windows references use the same canvas points through `ui-drive.ps1 -Locked`

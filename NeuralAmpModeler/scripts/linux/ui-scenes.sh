@@ -350,7 +350,7 @@ capture_all() {
     run_scene "$scale" signal "" "key h" || fail "scene signal-s$scale"
     run_scene "$scale" system "" "key h" "click 600 113" || fail "scene system-s$scale"
     run_scene "$scale" tuner "" "key t" || fail "scene tuner-s$scale"
-    run_scene "$scale" custom 15 "click 122 575" || fail "scene custom-s$scale"
+    run_scene "$scale" custom "" "key Down" "click 122 575" || fail "scene custom-s$scale"
     run_scene "$scale" pack "" "key h" "click 600 113" "click 525 346" || fail "scene pack-s$scale"
   done
   for scale in $SCALES; do
@@ -587,7 +587,9 @@ host_menu() {
 
 host_text() {
   local work="$OUT/reaper-text"
-  reaper_session "$work" 15 || { fail "text entry: reaper did not start"; return; }
+  reaper_session "$work" "" || { fail "text entry: reaper did not start"; return; }
+  drive "key Down" || true
+  sleep 0.6
   drive "click 122 575" || true
   sleep 0.7
   drive "click 277 123" || true
@@ -628,11 +630,13 @@ host_red() {
 
   BREAK_TEXT=1
   work="$OUT/reaper-text-red"
-  if ! reaper_session "$work" 15; then
+  if ! reaper_session "$work" ""; then
     fail "text red: reaper did not start"
     BREAK_TEXT=0
     return
   fi
+  drive "key Down" || true
+  sleep 0.6
   drive "click 122 575" || true
   sleep 0.7
   drive "click 277 123" || true
