@@ -32,7 +32,7 @@ env:
   PROJECT_NAME: NeuralAmpModeler
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-native
@@ -41,12 +41,14 @@ concurrency:
 jobs:
   prepare_release:
     name: Prepare release
+    if: inputs.dry_run != true
     runs-on: ubuntu-latest
-    permissions: ${{ inputs.dry_run == true && fromJSON('{"contents":"read"}') || fromJSON('{"contents":"write"}') }}
+    permissions:
+      contents: write
     outputs:
-      release_tag: ${{steps.meta.outputs.tag}}
-      release_version: ${{steps.meta.outputs.version}}
-      publish: ${{steps.meta.outputs.publish}}
+      release_tag: ${{ steps.meta.outputs.tag }}
+      release_version: ${{ steps.meta.outputs.version }}
+      publish: ${{ steps.meta.outputs.publish }}
     steps:
       - name: Check out repository
         if: inputs.rebuild_assets != true && inputs.dry_run != true
@@ -54,14 +56,6 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          submodules: false
-
-      - name: Check out dry-run ref
-        if: inputs.dry_run == true
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
           submodules: false
 
       - name: Check out submodules
@@ -125,18 +119,6 @@ jobs:
       - name: Export release coordinates
         id: meta
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)"/\1/p' NeuralAmpModeler/config.h | head -n 1)"
-            if [ -z "$version" ]; then
-              echo "could not read PLUG_VERSION_STR for the dry run" >&2
-              exit 1
-            fi
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "version=${version}" >> "$GITHUB_OUTPUT"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "DRY_RUN publish=false version=${version}"
-            exit 0
-          fi
           if [ "${{ inputs.rebuild_assets }}" = "true" ]; then
             version="${{ inputs.manual_version }}"
             if [ -z "$version" ]; then
@@ -152,345 +134,67 @@ jobs:
           echo "publish=true" >> "$GITHUB_OUTPUT"
         shell: bash
 
+  prepare_dry_run:
+    name: Prepare release
+    if: inputs.dry_run == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_tag: ${{ steps.meta.outputs.tag }}
+      release_version: ${{ steps.meta.outputs.version }}
+      publish: ${{ steps.meta.outputs.publish }}
+    steps:
+      - name: Check out dry-run ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          submodules: false
+
+      - name: Export release coordinates
+        id: meta
+        run: |
+          version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)"/\1/p' NeuralAmpModeler/config.h | head -n 1)"
+          if [ -z "$version" ]; then
+            echo "could not read PLUG_VERSION_STR for the dry run" >&2
+            exit 1
+          fi
+          echo "tag=" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "publish=false" >> "$GITHUB_OUTPUT"
+          echo "DRY_RUN publish=false version=${version}"
+        shell: bash
+
+  # GitHub Actions does not allow inputs in permissions, so the dry run and the
+  # real release are two callers of .github/workflows/release-build.yml.
+  # The step list, including the steps that are not tied to one OS, lives there once.
   build:
     name: Build
+    needs: prepare_dry_run
+    if: inputs.dry_run == true
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-build.yml
+    with:
+      dry_run: true
+      publish: false
+      release_tag: ${{ needs.prepare_dry_run.outputs.release_tag }}
+      release_version: ${{ needs.prepare_dry_run.outputs.release_version }}
+      rebuild_assets: false
+    secrets: inherit
+
+  release_build:
+    name: Build
     needs: prepare_release
-    runs-on: ${{matrix.os}}
-    permissions: ${{ inputs.dry_run == true && fromJSON('{"contents":"read"}') || fromJSON('{"contents":"write"}') }}
-    strategy:
-      # A release is shipped as a single multi-platform unit. Aborting the other
-      # leg on the first failure avoids uploading a half-broken release.
-      fail-fast: true
-      matrix:
-        # macos-15 matches CI. macos-latest (macOS 26) aborts an editor run in its
-        # virtual GPU, so the shipped Mac build is the one the editor tests ran on.
-        # A rebuild uploads only the Mac assets onto the existing draft.
-        # dry_run builds only the Linux leg of this same job.
-        include: ${{ fromJSON(inputs.dry_run == true && '[{"os":"ubuntu-22.04","build_dir":"build-linux"}]' || inputs.rebuild_assets == true && '[{"os":"macos-15","build_dir":"build-mac"}]' || '[{"os":"macos-15","build_dir":"build-mac"},{"os":"windows-latest","build_dir":"build-win"},{"os":"ubuntu-22.04","build_dir":"build-linux"}]') }}
-
-    steps:
-    - name: Check out repository
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ inputs.dry_run == true && github.sha || format('refs/tags/{0}', needs.prepare_release.outputs.release_tag) }}
-        submodules: false
-
-    - name: Check out submodules
-      run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
-      shell: bash
-
-    - name: Get VST3 SDK
-      run: |
-        cd iPlug2/Dependencies/IPlug
-        ./download-iplug-sdks.sh
-      shell: bash
-
-    - name: Get Prebuilt Libs
-      run: |
-        cd iPlug2/Dependencies
-        ./download-prebuilt-libs.sh
-      shell: bash
-
-    - name: Get Archive Name macOS
-      id: mac_archivename_step
-      if: matrix.os == 'macos-15'
-      run: |
-        ARCHIVE_NAME=`python3 iPlug2/Scripts/get_archive_name.py ${{env.PROJECT_NAME}} mac full`
-        echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - name: Build macOS
-      if: matrix.os == 'macos-15'
-      env:
-        PACKAGE_DSYMS: "0"
-      run: |
-        cd ${{env.PROJECT_NAME}}/scripts
-        ./makedist-mac.sh full all
-      shell: bash
-
-    - name: Verify macOS artifacts
-      if: matrix.os == 'macos-15'
-      run: |
-        APP_BIN="$HOME/Applications/VoLum.app/Contents/MacOS/VoLum"
-        VST3_BIN="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/MacOS/VoLum"
-        AU_BIN="$HOME/Library/Audio/Plug-Ins/Components/VoLum.component/Contents/MacOS/VoLum"
-        APP_PLIST="$HOME/Applications/VoLum.app/Contents/Info.plist"
-        APP_DMG="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg"
-        VST3_ZIP="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip"
-        AU_ZIP="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-component.zip"
-        INSTALLER_DMG="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg"
-        VERIFY_DIR="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/verify-mac"
-
-        app_archs=$(lipo -archs "$APP_BIN")
-        vst3_archs=$(lipo -archs "$VST3_BIN")
-        au_archs=$(lipo -archs "$AU_BIN")
-        main_nib=$(/usr/libexec/PlistBuddy -c 'Print :NSMainNibFile' "$APP_PLIST")
-
-        echo "APP architectures: $app_archs"
-        echo "VST3 architectures: $vst3_archs"
-        echo "AU architectures: $au_archs"
-        echo "APP main nib: $main_nib"
-
-        codesign --verify --deep --strict --verbose=2 "$HOME/Applications/VoLum.app"
-        codesign --verify --deep --strict --verbose=2 "$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3"
-        codesign --verify --deep --strict --verbose=2 "$HOME/Library/Audio/Plug-Ins/Components/VoLum.component"
-        [[ "$app_archs" == *arm64* && "$app_archs" == *x86_64* ]]
-        [[ "$vst3_archs" == *arm64* && "$vst3_archs" == *x86_64* ]]
-        [[ "$au_archs" == *arm64* && "$au_archs" == *x86_64* ]]
-        test -f "$HOME/Applications/VoLum.app/Contents/Resources/${main_nib}.nib"
-        test -d "$HOME/Applications/VoLum.app/Contents/Resources/VoLumRigs"
-        test -f "$APP_DMG"
-        test -f "$VST3_ZIP"
-        test -f "$AU_ZIP"
-        test -f "$INSTALLER_DMG"
-
-        rm -rf "$VERIFY_DIR"
-        mkdir -p "$VERIFY_DIR"
-        hdiutil attach "$APP_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/dmg"
-        unzip -q "$VST3_ZIP" -d "$VERIFY_DIR/vst3"
-        unzip -q "$AU_ZIP" -d "$VERIFY_DIR/au"
-
-        test -d "$VERIFY_DIR/dmg/VoLum.app"
-        test -d "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs"
-        test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
-        test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
-        test -f "$VERIFY_DIR/dmg/VoLum.app/Contents/Resources/VoLumRigs/factory-presets.json"
-        test -d "$VERIFY_DIR/vst3/VoLum.vst3"
-        test -d "$VERIFY_DIR/vst3/VoLumRigs"
-        test -f "$VERIFY_DIR/vst3/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
-        test -f "$VERIFY_DIR/vst3/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
-        test -f "$VERIFY_DIR/vst3/VoLumRigs/factory-presets.json"
-        test -d "$VERIFY_DIR/au/VoLum.component"
-        test -d "$VERIFY_DIR/au/VoLumRigs"
-        test -f "$VERIFY_DIR/au/VoLumRigs/Ampete One/AMP-Ampt-1.nam"
-        test -f "$VERIFY_DIR/au/VoLumRigs/Diezel Herbert Mk1/V30-Herb-4.nam"
-        test -f "$VERIFY_DIR/au/VoLumRigs/factory-presets.json"
-        hdiutil detach "$VERIFY_DIR/dmg"
-
-        hdiutil attach "$INSTALLER_DMG" -nobrowse -readonly -mountpoint "$VERIFY_DIR/installer-dmg"
-        test -f "$VERIFY_DIR/installer-dmg/VoLum Installer.pkg"
-        hdiutil detach "$VERIFY_DIR/installer-dmg"
-      shell: bash
-
-    - name: Validate macOS AU with auval
-      if: matrix.os == 'macos-15'
-      timeout-minutes: 15
-      run: bash NeuralAmpModeler/scripts/validate-au-mac.sh
-      shell: bash
-
-    - name: Verify macOS package metadata
-      if: matrix.os == 'macos-15'
-      env:
-        VERIFY_MAC_REQUIRE_INSTALLER: "1"
-      run: NeuralAmpModeler/scripts/verify-packaging-mac.sh auto
-      shell: bash
-
-    # Mirror the smoke coverage that ci.yml runs so a broken PKG can never ship.
-    - name: Smoke macOS upgrade install
-      if: matrix.os == 'macos-15'
-      env:
-        GH_TOKEN: ${{ github.token }}
-        VOLUM_UPGRADE_SMOKE_FROM_TAG: v1.0.0
-      run: |
-        chmod +x NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
-        bash NeuralAmpModeler/scripts/smoke-upgrade-install-mac.sh
-      shell: bash
-
-    - name: Smoke macOS installer
-      if: matrix.os == 'macos-15' && env.VOLUM_UPGRADE_SMOKE_SKIPPED == '1'
-      run: bash NeuralAmpModeler/scripts/smoke-installer-mac.sh
-      shell: bash
-
-    - name: Smoke macOS standalone launch
-      if: matrix.os == 'macos-15'
-      run: bash NeuralAmpModeler/scripts/smoke-standalone-launch-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
-      shell: bash
-
-    - name: Smoke macOS standalone audio config
-      if: matrix.os == 'macos-15'
-      run: |
-        chmod +x NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh
-        bash NeuralAmpModeler/scripts/smoke-standalone-audio-config-mac.sh "${VOLUM_INSTALLED_APP:-/Applications/VoLum.app}"
-      shell: bash
-
-    - name: Assert macOS bundle versions match release tag
-      if: matrix.os == 'macos-15'
-      run: |
-        set -euo pipefail
-        RELEASE_VERSION="${{ needs.prepare_release.outputs.release_version }}"
-        APP_PLIST="${VOLUM_INSTALLED_APP:-$HOME/Applications/VoLum.app}/Contents/Info.plist"
-        VST3_PLIST="$HOME/Library/Audio/Plug-Ins/VST3/VoLum.vst3/Contents/Info.plist"
-        read_bundle_version() {
-          local plist="$1"
-          if [ ! -f "$plist" ]; then
-            echo "ERROR: plist not found: $plist" >&2
-            return 1
-          fi
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist" 2>/dev/null \
-            || /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist" 2>/dev/null \
-            || true
-        }
-        APP_VERSION=$(read_bundle_version "$APP_PLIST")
-        VST3_VERSION=$(read_bundle_version "$VST3_PLIST")
-        echo "Release tag version : $RELEASE_VERSION"
-        echo "Standalone app      : $APP_VERSION"
-        echo "VST3 plug-in        : ${VST3_VERSION:-not declared}"
-        if [ "$APP_VERSION" != "$RELEASE_VERSION" ]; then
-          echo "ERROR: built bundle versions do not match the release tag." >&2
-          exit 1
-        fi
-        if [ -n "$VST3_VERSION" ] && [ "$VST3_VERSION" != "$RELEASE_VERSION" ]; then
-          echo "ERROR: built VST3 bundle version does not match the release tag." >&2
-          exit 1
-        fi
-      shell: bash
-
-    - name: Upload macOS release assets
-      if: matrix.os == 'macos-15' && needs.prepare_release.outputs.publish == 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        RELEASE_VERSION="${{ needs.prepare_release.outputs.release_version }}"
-        RELEASE_DIR="${{env.PROJECT_NAME}}/${{matrix.build_dir}}/release-assets"
-        rm -rf "$RELEASE_DIR"
-        mkdir -p "$RELEASE_DIR"
-
-        cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-app.dmg" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-standalone.dmg"
-        cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-vst3.zip" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-vst3.zip"
-        cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-component.zip" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-component.zip"
-        cp "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg" "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-installer.dmg"
-
-        gh release upload "${{ needs.prepare_release.outputs.release_tag }}" \
-          "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-standalone.dmg" \
-          "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-vst3.zip" \
-          "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-component.zip" \
-          "$RELEASE_DIR/VoLum-v${RELEASE_VERSION}-macos-installer.dmg" \
-          --clobber
-      shell: bash
-
-    - name: Add msbuild to PATH (Windows)
-      if: matrix.os == 'windows-latest'
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Setup Python3
-      if: matrix.os == 'windows-latest'
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-        architecture: 'x64'
-
-    - name: Install Inno Setup
-      if: matrix.os == 'windows-latest'
-      run: choco install innosetup -y
-      shell: pwsh
-
-    - name: Apply iPlug2 patches
-      if: matrix.os == 'windows-latest'
-      run: ./NeuralAmpModeler/iplug2-patches/apply-iplug2-patches.ps1
-      shell: pwsh
-
-    - name: Get Archive Name Windows
-      id: win_archivename_step
-      if: matrix.os == 'windows-latest'
-      run: |
-        ARCHIVE_NAME=`python.exe iPlug2/Scripts/get_archive_name.py ${{env.PROJECT_NAME}} win full`
-        echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - name: Build Windows
-      if: matrix.os == 'windows-latest'
-      run: |
-        cd ${{env.PROJECT_NAME}}\scripts
-        .\makedist-win.bat full installer
-      shell: pwsh
-
-    - name: Build Windows portable zip
-      if: matrix.os == 'windows-latest'
-      run: |
-        cd ${{env.PROJECT_NAME}}\scripts
-        .\makedist-win.bat full zip
-      shell: pwsh
-
-    - name: Verify Windows portable artifacts
-      if: matrix.os == 'windows-latest'
-      run: |
-        $zipPath = Join-Path "${{env.PROJECT_NAME}}\${{matrix.build_dir}}\out" "${{steps.win_archivename_step.outputs.archive_name}}.zip"
-        $verifyDir = Join-Path "${{env.PROJECT_NAME}}\${{matrix.build_dir}}" "verify-win"
-
-        Write-Host "Portable zip: $zipPath"
-        if (-not (Test-Path $zipPath)) { throw "Portable zip not found: $zipPath" }
-
-        if (Test-Path $verifyDir) { Remove-Item $verifyDir -Recurse -Force }
-        New-Item -ItemType Directory -Path $verifyDir | Out-Null
-        Expand-Archive -Path $zipPath -DestinationPath $verifyDir -Force
-
-        $exePath = Join-Path $verifyDir "VoLum_x64.exe"
-        $vst3Path = Join-Path $verifyDir "VoLum.vst3"
-        $rigsPath = Join-Path $verifyDir "VoLumRigs"
-        $sampleRig = Join-Path $rigsPath "Ampete One\AMP-Ampt-1.nam"
-        $herbertRig = Join-Path $rigsPath "Diezel Herbert Mk1\V30-Herb-4.nam"
-
-        if (-not (Test-Path $exePath)) { throw "Missing standalone exe: $exePath" }
-        if (-not (Test-Path $vst3Path)) { throw "Missing VST3 bundle: $vst3Path" }
-        if (-not (Test-Path $rigsPath)) { throw "Missing VoLumRigs folder: $rigsPath" }
-        if (-not (Test-Path $sampleRig)) { throw "Missing sample rig: $sampleRig" }
-        if (-not (Test-Path $herbertRig)) { throw "Missing Herbert rig: $herbertRig" }
-        if (-not (Test-Path (Join-Path $rigsPath "factory-presets.json"))) { throw "Missing Factory presets in $rigsPath" }
-      shell: pwsh
-
-    - name: Upload Windows release assets
-      if: matrix.os == 'windows-latest' && needs.prepare_release.outputs.publish == 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        $tag = "${{ needs.prepare_release.outputs.release_tag }}"
-        $version = "${{ needs.prepare_release.outputs.release_version }}"
-        $archive = "${{ steps.win_archivename_step.outputs.archive_name }}"
-        $releaseDir = Join-Path "${{env.PROJECT_NAME}}\${{matrix.build_dir}}" "release-assets"
-
-        if (Test-Path $releaseDir) { Remove-Item $releaseDir -Recurse -Force }
-        New-Item -ItemType Directory -Path $releaseDir | Out-Null
-
-        $setupOut = Join-Path $releaseDir ("VoLum-v{0}-windows-setup.exe" -f $version)
-        $portableOut = Join-Path $releaseDir ("VoLum-v{0}-windows-portable.zip" -f $version)
-
-        Copy-Item "${{env.PROJECT_NAME}}/build-win/installer/VoLum-Setup.exe" $setupOut
-        Copy-Item "${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/$archive.zip" $portableOut
-
-        gh release upload $tag `
-          $setupOut `
-          $portableOut `
-          --clobber
-      shell: pwsh
-
-    - name: Provision Linux build packages
-      if: matrix.os == 'ubuntu-22.04'
-      run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci
-      shell: bash
-
-    - name: Build Linux tarball
-      if: matrix.os == 'ubuntu-22.04'
-      run: |
-        export JOBS="$(nproc)"
-        bash NeuralAmpModeler/scripts/makedist-linux.sh --build
-      shell: bash
-
-    - name: Upload Linux tarball artifact
-      if: matrix.os == 'ubuntu-22.04' && needs.prepare_release.outputs.publish != 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: VoLum-linux-tarball
-        path: build-linux/out/VoLum-*-linux-x86_64.tar.gz
-
-    - name: Upload Linux release asset
-      if: matrix.os == 'ubuntu-22.04' && needs.prepare_release.outputs.publish == 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        version="${{ needs.prepare_release.outputs.release_version }}"
-        tag="${{ needs.prepare_release.outputs.release_tag }}"
-        tarball="build-linux/out/VoLum-${version}-linux-x86_64.tar.gz"
-        test -f "$tarball"
-        test -n "$tag"
-        gh release upload "$tag" "$tarball" --clobber
-      shell: bash
+    if: inputs.dry_run != true
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-build.yml
+    with:
+      dry_run: false
+      publish: ${{ needs.prepare_release.outputs.publish == 'true' }}
+      release_tag: ${{ needs.prepare_release.outputs.release_tag }}
+      release_version: ${{ needs.prepare_release.outputs.release_version }}
+      rebuild_assets: ${{ inputs.rebuild_assets }}
+    secrets: inherit

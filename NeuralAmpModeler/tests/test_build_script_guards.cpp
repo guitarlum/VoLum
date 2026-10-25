@@ -333,7 +333,7 @@ TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
 {
   // The build steps are gated on matrix.os. Pinning the runner to macos-15
   // without the same gate skips the Mac build and still reports success.
-  const std::string workflow = ReadRepoFile(".github/workflows/release-native.yml");
+  const std::string workflow = ReadRepoFile(".github/workflows/release-build.yml");
   CHECK(workflow.find("matrix.os == 'macos-15'") != std::string::npos);
   CHECK(workflow.find("matrix.os == 'macos-latest'") == std::string::npos);
   CHECK(workflow.find("rebuild_assets") != std::string::npos);
@@ -382,22 +382,13 @@ bool LinePublishes(const std::string& raw)
 
 bool StepIsPublishGated(const std::string& body)
 {
-  return body.find("inputs.dry_run != true") != std::string::npos || body.find("publish == 'true'") != std::string::npos;
+  return body.find("inputs.dry_run != true") != std::string::npos || body.find("publish == 'true'") != std::string::npos
+         || body.find("publish == true") != std::string::npos;
 }
 } // namespace
 
-TEST_CASE("release publish steps stay closed unless the dry run is off")
+int CountGatedPublishSteps(const std::string& workflow)
 {
-  // A dry run used to POST a real create-release call and hope the token was
-  // refused. The gate is the step condition: nothing that publishes runs
-  // unless publish is true or the dry-run input is off.
-  const std::string workflow = ReadRepoFile(".github/workflows/release-native.yml");
-  CHECK(workflow.find("linux_dry_run") == std::string::npos);
-  CHECK(workflow.find("-X POST") == std::string::npos);
-  CHECK(workflow.find("github.ref != 'refs/heads/main'") == std::string::npos);
-  CHECK(workflow.find("{\"contents\":\"read\"}") != std::string::npos);
-  CHECK(workflow.find("{\"contents\":\"write\"}") != std::string::npos);
-
   std::vector<std::string> lines;
   std::string cur;
   for (char ch : workflow)
@@ -406,14 +397,14 @@ TEST_CASE("release publish steps stay closed unless the dry run is off")
     {
       if (!cur.empty() && cur.back() == '\r')
         cur.pop_back();
-      lines.push_back(cur);
+      lines.push_back(std::move(cur));
       cur.clear();
     }
     else
       cur.push_back(ch);
   }
   if (!cur.empty())
-    lines.push_back(cur);
+    lines.push_back(std::move(cur));
 
   int publishSteps = 0;
   std::string stepName;
@@ -442,7 +433,6 @@ TEST_CASE("release publish steps stay closed unless the dry run is off")
     stepName.clear();
     stepBody.clear();
   };
-
   for (const auto& line : lines)
   {
     if (IsStepStart(line))
@@ -456,5 +446,27 @@ TEST_CASE("release publish steps stay closed unless the dry run is off")
       stepBody += line + "\n";
   }
   finish();
-  CHECK(publishSteps >= 6);
+  return publishSteps;
+}
+
+TEST_CASE("release publish steps stay closed unless the dry run is off")
+{
+  // A dry run used to POST a real create-release call and hope the token was
+  // refused. The gate is the step condition. GitHub Actions rejects inputs in
+  // permissions, so the dry run is its own Build caller with contents: read
+  // and the shipping Build caller is contents: write. Both run release-build.yml.
+  const std::string native = ReadRepoFile(".github/workflows/release-native.yml");
+  const std::string build = ReadRepoFile(".github/workflows/release-build.yml");
+  CHECK(native.find("linux_dry_run") == std::string::npos);
+  CHECK(native.find("-X POST") == std::string::npos);
+  CHECK(build.find("-X POST") == std::string::npos);
+  CHECK(native.find("github.ref != 'refs/heads/main'") == std::string::npos);
+  CHECK(native.find("contents: read") != std::string::npos);
+  const auto dryBuild = native.find("if: inputs.dry_run == true\n    permissions:\n      contents: read");
+  CHECK(dryBuild != std::string::npos);
+
+  const int nativeSteps = CountGatedPublishSteps(native);
+  const int buildSteps = CountGatedPublishSteps(build);
+  CHECK(nativeSteps >= 3);
+  CHECK(buildSteps >= 3);
 }
