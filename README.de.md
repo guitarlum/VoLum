@@ -19,7 +19,7 @@ Willst du einen Sound ändern, wechsle zu **BUILD**. Ein Hinweis **Tweak your so
 - **Dual Amp:** zwei Amps gleichzeitig, jeder mit eigenem Kanal, Cab oder IR, eigenen Reglern und Panorama.
 - **15 kuratierte Amps, 21 Werk-Presets:** leg jedes davon ohne Speichern auf PLAY.
 - **Eigene Inhalte:** lade eigene NAM-Amps, IRs und Pedale. Ein `.volumpack` sichert, zieht um oder teilt alles in einer Datei.
-- **Standalone, VST3 und AU:** läuft auf dem [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore)-Kern, unter Windows und macOS.
+- **Standalone, VST3 und AU:** läuft auf dem [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAmpModelerCore)-Kern, unter Windows, macOS und, als Beta, Linux.
 - **Nur Update-Hinweis:** VoLum kann dir sagen, dass es eine neuere Version gibt. Es lädt nie selbst etwas herunter.
 
 ## Download
@@ -36,6 +36,7 @@ Stabile Pakete gibt es unter **[Releases](https://github.com/guitarlum/VoLum/rel
 | macOS | `VoLum-vX.Y.Z-macos-standalone.dmg` | Nur die Standalone-App. |
 | macOS | `VoLum-vX.Y.Z-macos-vst3.zip` | Manuelle VST3-Installation. |
 | macOS | `VoLum-vX.Y.Z-macos-component.zip` | Manuelle AU-Installation, für Logic Pro und GarageBand. |
+| Linux | `VoLum-X.Y.Z-linux-x86_64.tar.gz` | Beta: Standalone und VST3. Der Name hat kein führendes `v`. Siehe das [Benutzerhandbuch](docs/user-guide.de.md#linux). |
 
 Nicht jedes Release enthält jedes Paket. Öffne die Release-Seite und wähle das Paket für dein System.
 
@@ -110,7 +111,7 @@ Starte deine DAW neu, damit sie das neue AU findet.
 
 ### Linux
 
-Es gibt keinen nativen Linux-Build. Einige Nutzer berichten, dass das Windows-VST3 unter Linux mit [yabridge](https://github.com/robbert-vdh/yabridge) gut läuft; VoLum testet diesen Weg aber nicht.
+Native Linux-Unterstützung gibt es als Beta (64-Bit, X11 oder XWayland). Lade `VoLum-X.Y.Z-linux-x86_64.tar.gz` herunter, entpacke es und starte `./install.sh`. Pfade, Audio und die bekannten Grenzen stehen im [Benutzerhandbuch](docs/user-guide.de.md#linux).
 
 ## Mitgelieferte Amps
 
