@@ -51,3 +51,5 @@ Images (Windows on the left of each pair):
 ## Not the acceptance CI
 
 An intermediate `ci.yml` run on `4264732c` is [40149262641](https://github.com/guitarlum/VoLum/actions/runs/40149262641). That is not this head. The acceptance run waits until the review's defects are fixed.
+
+Windows `run-tests-win.ps1` on this tree: 1477 cases passed, 0 failed.
