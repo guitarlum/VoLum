@@ -41,10 +41,8 @@ concurrency:
 jobs:
   prepare_release:
     name: Prepare release
+    if: github.ref == 'refs/heads/main' && inputs.dry_run != true
     runs-on: ubuntu-latest
-    permissions:
-      # A dry run, and any dispatch that is not on main, cannot push or create releases.
-      contents: ${{ github.ref == 'refs/heads/main' && 'write' || 'read' }}
     outputs:
       release_tag: ${{steps.meta.outputs.tag}}
       release_version: ${{steps.meta.outputs.version}}
@@ -157,9 +155,8 @@ jobs:
   build:
     name: Build
     needs: prepare_release
+    if: github.ref == 'refs/heads/main' && inputs.dry_run != true
     runs-on: ${{matrix.os}}
-    permissions:
-      contents: ${{ github.ref == 'refs/heads/main' && 'write' || 'read' }}
     strategy:
       # A release is shipped as a single multi-platform unit. Aborting the other
       # leg on the first failure avoids uploading a half-broken release.
@@ -550,3 +547,76 @@ jobs:
         test -n "$tag"
         gh release upload "$tag" "$tarball" --clobber
       shell: bash
+
+  linux_dry_run:
+    name: Linux dry run
+    if: github.ref != 'refs/heads/main' || inputs.dry_run == true
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
+
+      - name: Provision Linux build packages
+        run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci
+        shell: bash
+
+      - name: Build Linux tarball
+        run: |
+          export JOBS="$(nproc)"
+          bash NeuralAmpModeler/scripts/makedist-linux.sh --build
+        shell: bash
+
+      - name: Prove the dry run cannot publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
+            echo "this job ran on a real main release" >&2
+            exit 1
+          fi
+          printf '%s\n' '{"tag_name":"v0.0.0-linux-dry-run-must-not-publish","name":"dry-run must not publish","draft":true,"prerelease":true}' > /tmp/dry-release-body.json
+          code="$(curl -s -o /tmp/dry-release.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
+            --data @/tmp/dry-release-body.json)"
+          echo "release create HTTP ${code}"
+          cat /tmp/dry-release.json
+          case "$code" in
+            401|403|404) ;;
+            *)
+              echo "ERROR: dry run was not refused (HTTP ${code})" >&2
+              exit 1
+              ;;
+          esac
+          version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)"/\1/p' NeuralAmpModeler/config.h | head -n 1)"
+          tarball="build-linux/out/VoLum-${version}-linux-x86_64.tar.gz"
+          test -f "$tarball"
+          {
+            echo "DRY_RUN_PUBLISH_BLOCKED http=${code}"
+            echo "ref=${{ github.ref }}"
+            echo "dry_run=${{ inputs.dry_run }}"
+            echo "permissions=contents:read"
+            echo "tarball=${tarball}"
+            sha256sum "$tarball"
+          } | tee build-linux/out/dry-run-proof.txt
+        shell: bash
+
+      - name: Upload Linux dry-run proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-linux-dry-run
+          path: |
+            build-linux/out/VoLum-*-linux-x86_64.tar.gz
+            build-linux/out/dry-run-proof.txt
+
