@@ -40,7 +40,7 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --capture|--compare|--all|--gate) MODE="${1#--}" ;;
+    --capture|--compare|--all|--gate|--host) MODE="${1#--}" ;;
     --out) OUT="$2"; shift ;;
     --app) APP="$2"; shift ;;
     --windows) WIN="$2"; shift ;;
@@ -583,7 +583,9 @@ host_menu() {
   local before after
   before=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
   # Preset bar, then the first row under the open menu.
-  drive "click 539 23" "click 450 110" || { fail "popup menu: no editor window"; return; }
+  drive "key p" || { fail "popup menu: no editor window"; return; }
+  sleep 0.8
+  drive "click 539 23" "click 450 77" "click 450 176" || { fail "popup menu: no editor window"; return; }
   sleep 0.8
   CAP="$work/home/.local/share/VoLum/capture"
   grab reaper-menu || true
@@ -599,9 +601,9 @@ host_menu() {
 host_text() {
   local work="$OUT/reaper-text"
   reaper_session "$work" "" || { fail "text entry: reaper did not start"; return; }
-  drive "key Down" || true
+  drive "key p" "key Down" || { fail "text entry: no editor window"; return; }
   sleep 0.6
-  drive "click 122 575" || true
+  drive "click 122 575" || { fail "text entry: no editor window"; return; }
   sleep 0.7
   drive "click 277 123" || true
   sleep 0.4
@@ -628,7 +630,9 @@ host_red() {
     return
   fi
   before=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
-  drive "click 539 23" "click 450 110" || true
+  drive "key p" || true
+  sleep 0.6
+  drive "click 539 23" "click 450 77" "click 450 176" || true
   sleep 0.8
   finish_reaper "$work" "$REAPER_PID"
   after=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
@@ -646,7 +650,7 @@ host_red() {
     BREAK_TEXT=0
     return
   fi
-  drive "key Down" || true
+  drive "key p" "key Down" || true
   sleep 0.6
   drive "click 122 575" || true
   sleep 0.7
@@ -755,6 +759,15 @@ case "$MODE" in
     if [[ -n "$WIN" ]]; then
       do_compare "$OUT" "$WIN" 0 "${REPORT:-$OUT/report}"
     fi
+    ;;
+  host)
+    [[ -n "$OUT" ]] || OUT=$(mktemp -d /tmp/volum-ui-scenes.XXXXXX)
+    echo "ui-scenes out $OUT"
+    start_display
+    host_keys
+    host_menu
+    host_text
+    host_red
     ;;
   *)
     usage
