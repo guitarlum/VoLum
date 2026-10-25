@@ -76,7 +76,7 @@ try {
   $skippedMac = @($jobs | Where-Object { $_.name -match '^macOS' -and $_.conclusion -eq "skipped" })
   if ($skippedMac.Count -gt 0) { Fail "macOS jobs skipped (Windows-only run does not count)" }
   if ($Final) {
-    foreach ($need in @("Linux tests", "Linux plugin", "Linux e2e", "Linux package")) {
+    foreach ($need in @("Linux tests", "Linux plugin", "Linux standalone e2e", "Linux package")) {
       if (-not @($jobs | Where-Object { $_.name -like "$need*" -and $_.conclusion -eq "success" })) { Fail "CI job '$need' missing or not green" }
     }
   }

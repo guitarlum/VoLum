@@ -201,6 +201,8 @@ pkgs=(
   libjack-jackd2-dev
   jackd2
   libpulse-dev
+  pulseaudio-utils
+  pulseaudio
   libfontconfig-dev
   libfreetype-dev
   libgtk-3-dev
@@ -269,6 +271,14 @@ if [ "${#missing[@]}" -gt 0 ]; then
   apt_retry run_apt install -y --no-install-recommends "${missing[@]}"
 else
   log "apt: already installed"
+fi
+
+# The pulseaudio package enables a per-user daemon. WSLg already serves the
+# default devices; a second session server must not start. The binary stays,
+# for a private null sink the real-device gate starts itself.
+if [ "$CI" -eq 0 ]; then
+  run_root rm -f /etc/systemd/user/default.target.wants/pulseaudio.service \
+    /etc/systemd/user/sockets.target.wants/pulseaudio.socket
 fi
 
 need_cmd() {
