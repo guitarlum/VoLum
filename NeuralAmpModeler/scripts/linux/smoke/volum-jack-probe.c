@@ -73,7 +73,10 @@ static jack_client_t* Open(const char* name)
   return jack_client_open(name, JackNoStartServer, &status);
 }
 
-static double Dbfs(float v) { return v > 0.f ? 20.0 * log10(v) : -999.0; }
+static double Dbfs(float v)
+{
+  return v > 0.f ? 20.0 * log10(v) : -999.0;
+}
 
 static void PrintMono(const char* key)
 {
@@ -200,6 +203,7 @@ int main(int argc, char** argv)
     return 0;
   }
 
-  fprintf(stderr, "usage: volum-jack-probe wait-server <s> | wait-ports <client> <s> | measure <client> <s> [stall ms]\n");
+  fprintf(
+    stderr, "usage: volum-jack-probe wait-server <s> | wait-ports <client> <s> | measure <client> <s> [stall ms]\n");
   return 2;
 }

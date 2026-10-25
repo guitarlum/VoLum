@@ -180,20 +180,20 @@ TEST_CASE("Linux callback window classifies a jackd xrun as the driver's only wh
   const uint32_t overBudget = 3468;
   const uint32_t overPeriod = 5335;
 
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 0, false, true) ==
-        VoLumLinuxCallbackVerdict::Pass);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 3, false, true) ==
-        VoLumLinuxCallbackVerdict::DriverXrun);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 1, true, true) ==
-        VoLumLinuxCallbackVerdict::FailStrictJack);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBudget, frames, rate, 0, false, true) ==
-        VoLumLinuxCallbackVerdict::FailCallback);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBudget, frames, rate, 0, true, true) ==
-        VoLumLinuxCallbackVerdict::FailCallback);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overPeriod, frames, rate, 0, false, true) ==
-        VoLumLinuxCallbackVerdict::FailCallback);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 0, false, false) ==
-        VoLumLinuxCallbackVerdict::FailMissing);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 0, false, true)
+        == VoLumLinuxCallbackVerdict::Pass);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 3, false, true)
+        == VoLumLinuxCallbackVerdict::DriverXrun);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 1, true, true)
+        == VoLumLinuxCallbackVerdict::FailStrictJack);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBudget, frames, rate, 0, false, true)
+        == VoLumLinuxCallbackVerdict::FailCallback);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBudget, frames, rate, 0, true, true)
+        == VoLumLinuxCallbackVerdict::FailCallback);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overPeriod, frames, rate, 0, false, true)
+        == VoLumLinuxCallbackVerdict::FailCallback);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 0, false, false)
+        == VoLumLinuxCallbackVerdict::FailMissing);
 
   const std::string host = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_host.cpp");
   const auto init = host.find("bool IPlugAPPHost::Init()");
@@ -210,7 +210,8 @@ TEST_CASE("Linux callback window classifies a jackd xrun as the driver's only wh
   const std::string linuxcpp = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_linux.cpp");
   const auto record = linuxcpp.find("void RecordCallback(");
   REQUIRE(record != std::string::npos);
-  const std::string recordBody = linuxcpp.substr(record, linuxcpp.find("\nIPlugAPPLinuxCallbackSpan::", record) - record);
+  const std::string recordBody =
+    linuxcpp.substr(record, linuxcpp.find("\nIPlugAPPLinuxCallbackSpan::", record) - record);
   CHECK(recordBody.find("fprintf") == std::string::npos);
   CHECK(recordBody.find("printf") == std::string::npos);
   CHECK(recordBody.find("malloc") == std::string::npos);
@@ -226,6 +227,7 @@ TEST_CASE("Linux callback window classifies a jackd xrun as the driver's only wh
   CHECK(smoke.find("uname") == std::string::npos);
 
   const std::string ci = ReadRepoText(".github/workflows/ci.yml");
-  CHECK(ci.find("smoke-standalone-audio-linux.sh --app build-linux/standalone/VoLum --out \"$RUNNER_TEMP/volum-smoke-app\" --require-hide --require-rt --strict-xruns") !=
-        std::string::npos);
+  CHECK(ci.find("smoke-standalone-audio-linux.sh --app build-linux/standalone/VoLum --out "
+                "\"$RUNNER_TEMP/volum-smoke-app\" --require-hide --require-rt --strict-xruns")
+        != std::string::npos);
 }
