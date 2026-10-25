@@ -147,13 +147,7 @@ static int SendKey(Display* d, Window w, const char* name, int shift)
   KeyCode kc = XKeysymToKeycode(d, ks);
   if (!kc)
     return 1;
-  XWindowAttributes attrs;
   int x = 1, y = 1;
-  if (XGetWindowAttributes(d, w, &attrs))
-  {
-    x = attrs.width / 2;
-    y = attrs.height / 2;
-  }
   XKeyEvent ev;
   memset(&ev, 0, sizeof(ev));
   ev.display = d;
