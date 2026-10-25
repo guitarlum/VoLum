@@ -154,7 +154,7 @@ begin_session() {
   local n
   for n in $(seq 190 240); do
     [[ -e "/tmp/.X$n-lock" ]] && continue
-    Xvfb ":$n" -screen 0 1600x1000x24 -nolisten tcp -noreset >"$SESS/xvfb.log" 2>&1 &
+    Xvfb ":$n" -screen 0 1600x1000x24 -nolisten tcp -noreset >"$SESS/xvfb.log" 2>&1 8>&- 9>&- &
     XVFB_PID=$!
     local _
     for _ in $(seq 50); do
@@ -185,14 +185,14 @@ begin_session() {
   # Real-time first, the way the audio smoke does. WSL often refuses it; the
   # dummy server still runs with -r, and these scenarios do not count xruns.
   local jack_rt=""
-  jackd --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p 256 >"$SESS/jackd.log" 2>&1 &
+  jackd --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p 256 >"$SESS/jackd.log" 2>&1 8>&- 9>&- &
   JACK_PID=$!
   if ! "$OUT/volum-jack-probe" wait-server 8; then
     kill "$JACK_PID" 2>/dev/null || true
     wait "$JACK_PID" 2>/dev/null || true
     JACK_PID=""
     jack_rt="-r"
-    jackd -r --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p 256 >"$SESS/jackd.log" 2>&1 &
+    jackd -r --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p 256 >"$SESS/jackd.log" 2>&1 8>&- 9>&- &
     JACK_PID=$!
     if ! "$OUT/volum-jack-probe" wait-server 8; then
       echo "e2e: jackd did not come up" >&2
@@ -294,12 +294,20 @@ shot() {
 
 launch() {
   log_mark
-  # CWD is the repo so ./rigs (appended after the XDG candidates) resolves the
-  # dev factory bank. exec keeps this pid as VoLum, so SIGTERM reaches it.
+  # A direct child, not a parenthesized subshell: bash's redirection of a
+  # subshell can leave $! as a helper that exits immediately, so wait reports
+  # "not a child" and the exit code is lost. The wrapper execs VoLum, so this
+  # pid is the app and SIGTERM reaches it. CWD is the repo so ./rigs resolves.
+  cat >"$SESS/run-app.sh" <<EOF
+#!/bin/bash
+cd $(printf '%q' "$ROOT") || exit 99
+exec "\$@"
+EOF
+  chmod +x "$SESS/run-app.sh"
   if [[ ${#LAUNCH_ENV[@]} -gt 0 ]]; then
-    (cd "$ROOT" && exec env "${LAUNCH_ENV[@]}" "$APP" "$@") >"$SESS/app.out" 2>&1 &
+    "$SESS/run-app.sh" env "${LAUNCH_ENV[@]}" "$APP" "$@" >"$SESS/app.out" 2>&1 8>&- 9>&- &
   else
-    (cd "$ROOT" && exec "$APP" "$@") >"$SESS/app.out" 2>&1 &
+    "$SESS/run-app.sh" "$APP" "$@" >"$SESS/app.out" 2>&1 8>&- 9>&- &
   fi
   APP_PID=$!
 }
