@@ -567,6 +567,7 @@ lastt=$(date +%s)
 EOF
   write_reaper_lua "$work/cfg/Scripts/__startup.lua"
   env \
+    VOLUM_KEY_LOG="$work/keys.txt" \
     HOME="$work/home" \
     XDG_CONFIG_HOME="$work/home/.config" \
     XDG_DATA_HOME="$work/home/.local/share" \
