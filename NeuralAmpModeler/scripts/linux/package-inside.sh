@@ -9,6 +9,10 @@ export DEBIAN_FRONTEND=noninteractive
 
 log() { printf '[%s] %s\n' "$CASE" "$*"; }
 
+files_match() {
+  [[ "$(sha256sum "$1" | awk '{ print $1 }')" == "$(sha256sum "$2" | awk '{ print $1 }')" ]]
+}
+
 apt_install() {
   apt-get update -qq
   apt-get install -y --no-install-recommends "$@"
@@ -84,7 +88,7 @@ if [[ "$RED_NEEDED" -eq 1 ]]; then
   fi
   grep -q 'unexpected NEEDED on VST3: libgdk-3.so.0' /out/red-needed.log
   bash /in/verify-package.sh --needed "$SO" "$APP" >/dev/null
-  cmp -s "$SO" "$TOP/VoLum.vst3/Contents/x86_64-linux/VoLum.so"
+  files_match "$SO" "$TOP/VoLum.vst3/Contents/x86_64-linux/VoLum.so"
   echo "restored: VST3 NEEDED check passed on the unmutated plug-in"
 fi
 
@@ -245,7 +249,7 @@ if [[ "$MODE" == "nogtk" ]]; then
   grep -q "missing package name ${pkg}" /out/red-nogtk-gate.txt
   user_paths "$red_home"
   [[ -f "$VST3/Contents/x86_64-linux/VoLum.so" ]]
-  cmp -s "$TOP/install.sh" /out/install.sh.orig
+  files_match "$TOP/install.sh" /out/install.sh.orig
   echo "restored: install.sh byte-identical; bad copy was discarded"
   HOME="$home" XDG_DATA_HOME="$home/.local/share" "$TOP/install.sh" --uninstall | tee /out/uninstall.log
   assert_user_gone "$home" | tee /out/uninstall-left.txt
@@ -379,7 +383,7 @@ if [[ "$RED_UNINSTALL" -eq 1 ]]; then
   grep -q 'left behind: .*/\.vst3/VoLum\.vst3' /out/red-uninstall.txt
   user_paths "$red_home"
   [[ ! -e "$BIN" ]]
-  cmp -s "$TOP/install.sh" /out/install.sh.orig
+  files_match "$TOP/install.sh" /out/install.sh.orig
   echo "restored: install.sh byte-identical; bad copy was discarded"
 fi
 
@@ -389,6 +393,6 @@ assert_system_present
 log "system uninstall"
 HOME="$home" XDG_DATA_HOME="$home/.local/share" "$TOP/install.sh" --system --uninstall | tee /out/system-uninstall.log
 assert_no_system
-cmp -s "$TOP/install.sh" /out/install.sh.orig
+files_match "$TOP/install.sh" /out/install.sh.orig
 log "PASS"
 chmod -R a+rwX /out || true
