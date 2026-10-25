@@ -249,11 +249,7 @@ run_scene() {
     quit_app
     return 1
   fi
-  if ! wait_editor; then
-    echo "  editor did not open for $tag" >&2
-    quit_app
-    return 1
-  fi
+  # The window is up. The "screen scale" line is trace-only, so don't wait on it.
   sleep 4
   if [[ $# -gt 0 ]]; then
     drive "$@" || { quit_app; return 1; }
@@ -410,7 +406,7 @@ host_keys() {
     PULSE_SERVER="$PULSE" \
     "$APP" >"$OUT/keys.log" 2>&1 &
   APP_PID=$!
-  if ! "$XTOOL" wait VoLum 30 || ! wait_editor; then
+  if ! "$XTOOL" wait VoLum 30; then
     quit_app
     fail "key-forward launch"
     return
