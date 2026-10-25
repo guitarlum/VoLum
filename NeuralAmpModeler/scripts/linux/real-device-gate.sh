@@ -32,10 +32,11 @@ DROP=0
 PRIVATE=0
 SELF_TEST=0
 
-# Fixed from the Babyface calibration on 2026-10-25 (20 s, gain 2.0000,
-# residual peak -75.24 dBFS, rms -86.68, 0 dropout samples). -60 is 15 dB
-# looser than that peak and still far under a dropped buffer, which lands
-# near -24 dBFS. It is not fitted per run. Dropout samples use a fixed ratio.
+# Fixed from the Babyface calibration on 2026-10-25, after the aligner fits
+# sine and cosine and skips the opening half-second: 20 s, gain 2.0000,
+# residual peak -77.82 dBFS, rms -90.12, 0 dropout samples. -60 is about
+# 18 dB looser than that peak and still far under a dropped buffer near
+# -24 dBFS. It is not fitted per run. Dropout samples use a fixed ratio.
 NULL_PEAK_DB=-60
 DROPOUT_LIMIT=32
 

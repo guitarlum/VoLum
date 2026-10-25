@@ -276,7 +276,9 @@ static Result Measure(const float* rec, int n, int rate, double tolPeakDb, int d
   }
   r.lag = bestLag;
 
-  int skip = rate / 20;
+  /* The first half-second of the tone is the stream opening (resampler
+   * startup). It is not part of the null. A dropped buffer later still is. */
+  int skip = rate / 2;
   int a = bestLag + skip;
   int b = last - skip;
   if (a < 0)
@@ -292,16 +294,34 @@ static Result Measure(const float* rec, int n, int rate, double tolPeakDb, int d
   }
   r.overlapSeconds = (b - a) / (double)rate;
 
-  double rs = 0.0, ss = 0.0;
+  /* A time shift of a pure sine is a phase shift, so fit sin and cos. An
+   * integer lag that lands a fraction of a period off then still nulls, which
+   * is what a 5 minute file needs: the onset search can lock the start. */
+  double rs = 0.0, rc = 0.0, ss = 0.0, cc = 0.0;
+  double ps = 0.0, pc = 1.0;
   for (int i = a; i < b; ++i)
   {
-    /* Resync so a 5 minute run does not walk off the tone. */
-    double s = sin(w * (i - bestLag));
-    rs += (double)rec[i] * s;
-    ss += s * s;
+    if (((i - a) & 255) == 0)
+    {
+      const double len = hypot(ps, pc);
+      if (len > 0.0)
+      {
+        ps /= len;
+        pc /= len;
+      }
+    }
+    rs += (double)rec[i] * ps;
+    rc += (double)rec[i] * pc;
+    ss += ps * ps;
+    cc += pc * pc;
+    const double ns = ps * cs + pc * sn;
+    pc = pc * cs - ps * sn;
+    ps = ns;
   }
-  double gainSine = ss > 0.0 ? rs / ss : 0.0;
-  r.playGain = amp > 0.0 ? gainSine / amp : 0.0;
+  const double coefS = ss > 0.0 ? rs / ss : 0.0;
+  const double coefC = cc > 0.0 ? rc / cc : 0.0;
+  const double tone = hypot(coefS, coefC);
+  r.playGain = amp > 0.0 ? tone / amp : 0.0;
   if (!(r.playGain >= kGainMin && r.playGain <= kGainMax))
   {
     r.rc = 1;
@@ -311,16 +331,30 @@ static Result Measure(const float* rec, int n, int rate, double tolPeakDb, int d
 
   double errPeak = 0.0, errSq = 0.0;
   int dropouts = 0;
-  const double dropAbs = kDropoutRatio * fabs(gainSine);
+  const double dropAbs = kDropoutRatio * tone;
+  ps = 0.0;
+  pc = 1.0;
   for (int i = a; i < b; ++i)
   {
-    double err = (double)rec[i] - gainSine * sin(w * (i - bestLag));
-    double ae = fabs(err);
+    if (((i - a) & 255) == 0)
+    {
+      const double len = hypot(ps, pc);
+      if (len > 0.0)
+      {
+        ps /= len;
+        pc /= len;
+      }
+    }
+    const double err = (double)rec[i] - (coefS * ps + coefC * pc);
+    const double ae = fabs(err);
     if (ae > errPeak)
       errPeak = ae;
     errSq += err * err;
     if (ae > dropAbs)
       ++dropouts;
+    const double ns = ps * cs + pc * sn;
+    pc = pc * cs - ps * sn;
+    ps = ns;
   }
   r.residualPeakDb = Db(errPeak);
   r.residualRmsDb = Db(sqrt(errSq / (double)(b - a)));
