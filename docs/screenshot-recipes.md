@@ -317,10 +317,13 @@ after `.ui-sandbox-launch.ps1 -Reseed`, with `VOLUM_SCREEN_SCALE` set to `1`
 or `2` before launch. The PNGs are the GL framebuffer (900x600 at scale 1,
 1800x1200 at scale 2), not the window frame.
 
-Once `NeuralAmpModeler/tests/linux-ui-refs/` holds those Linux PNGs and a
-`threshold.txt` (minimum SSIM, one number), running the script with no
-arguments captures again and fails if a scene drops below that line.
-`verify-linux.sh` calls this script.
+Once `NeuralAmpModeler/tests/linux-ui-refs/` holds those Linux PNGs and
+`manifest.txt` (threshold 0.99, one line per scene and scale, and the mask
+rectangles), running the script with no arguments captures again, checks that
+a 440 Hz tone lights the OUT meter, and fails if a scene drops below 0.99.
+Masked rectangles are the Sebago sidebar icon and, when the latency line
+cannot match, that line. `verify-linux.sh` and the Linux standalone CI job
+call this script.
 
 `--host` checks that an unhandled `q` arrives at the standalone window, that
 REAPER's saved project chunk records a preset-menu Default reset, and that a

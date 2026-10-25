@@ -26,6 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 APP="${APP:-$ROOT/build-linux/standalone/VoLum}"
 REFS="$ROOT/NeuralAmpModeler/tests/linux-ui-refs"
+MANIFEST="$REFS/manifest.txt"
 SEED="$ROOT/docs/screenshot-seed"
 OUT=""
 WIN=""
@@ -40,7 +41,7 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --capture|--compare|--all|--gate|--host|--red) MODE="${1#--}" ;;
+    --capture|--compare|--all|--gate|--host|--red|--meter) MODE="${1#--}" ;;
     --out) OUT="$2"; shift ;;
     --app) APP="$2"; shift ;;
     --windows) WIN="$2"; shift ;;
@@ -89,6 +90,8 @@ XVFB_PID=""
 JACK_PID=""
 APP_PID=""
 XTOOL=""
+TONE=""
+TONE_PID=""
 DATA=""
 CAP=""
 LOG=""
@@ -126,6 +129,7 @@ PY
 
 cleanup() {
   restore_red
+  [[ -n "${TONE_PID:-}" ]] && kill "$TONE_PID" 2>/dev/null || true
   [[ -n "$APP_PID" ]] && kill -KILL "$APP_PID" 2>/dev/null || true
   [[ -n "$JACK_PID" ]] && kill "$JACK_PID" 2>/dev/null || true
   [[ -n "$XVFB_PID" ]] && kill "$XVFB_PID" 2>/dev/null || true
@@ -325,7 +329,9 @@ start_display() {
   [[ -x "$APP" ]] || { echo "ui-scenes: no app at $APP" >&2; exit 2; }
   mkdir -p "$OUT"
   cc -O2 -o "$OUT/volum-x-tool" "$SCRIPT_DIR/smoke/volum-x-tool.c" -lX11 || exit 2
+  cc -O2 -o "$OUT/volum-jack-tone" "$SCRIPT_DIR/smoke/volum-jack-tone.c" -ljack -lm || exit 2
   XTOOL="$OUT/volum-x-tool"
+  TONE="$OUT/volum-jack-tone"
 
   local lock="${VOLUM_GUI_LOCK:-$HOME/volum-linux/locks/gui.lock}"
   if [[ -e "$lock" ]]; then
@@ -434,8 +440,12 @@ prove_shift() {
   restore_red
   rebuild_target VoLum-app || fail "shift proof restore rebuild"
   [[ -f "$OUT/main-s1-shifted.png" ]] || { fail "shifted capture missing"; return; }
-  local moved
-  moved=$(ssim "$ref" "$OUT/main-s1-shifted.png")
+  local moved work
+  work=$(mktemp -d)
+  apply_masks "$ref" "$work/a.png" main
+  apply_masks "$OUT/main-s1-shifted.png" "$work/b.png" main
+  moved=$(ssim "$work/a.png" "$work/b.png")
+  rm -rf "$work"
   echo "  SSIM reference vs shifted sidebar $moved"
   awk -v b="$moved" 'BEGIN { exit !(b + 0 < 0.99) }' \
     && pass "shifted sidebar is below 0.99 ($moved)" \
@@ -769,20 +779,117 @@ host_red() {
   rebuild_target VoLum-vst3 || fail "text red restore rebuild"
 }
 
+# Feed a 440 Hz tone and look at the BUILD OUT meter well (logical 789,430 10x40).
+# want=lit expects the well to fill; want=dark expects the broken draw to stay empty.
+prove_meter() {
+  local want="$1"
+  local tag="meter-$want"
+  XDG="$OUT/xdg-$tag"
+  DATA="$XDG/VoLum"
+  seed_data "$DATA" ""
+  LOG="$DATA/volum.log"
+  CAP="$DATA/capture"
+  env \
+    XDG_DATA_HOME="$XDG" \
+    VOLUM_SELF_CAPTURE_DIR="$CAP" \
+    JACK_DEFAULT_SERVER="$JACK_NAME" \
+    JACK_NO_AUDIO_RESERVATION=1 \
+    ALSA_CONFIG_PATH="$ALSA_CONF" \
+    PULSE_SERVER="$PULSE" \
+    "$APP" >"$OUT/${tag}.log" 2>&1 &
+  APP_PID=$!
+  if ! "$XTOOL" wait VoLum 30; then
+    quit_app
+    fail "meter: no window"
+    return
+  fi
+  sleep 4
+  "$TONE" >"$OUT/${tag}-tone.log" 2>&1 &
+  TONE_PID=$!
+  sleep 1.2
+  park
+  grab "$tag" || { kill "$TONE_PID" 2>/dev/null || true; TONE_PID=""; quit_app; fail "meter: no capture"; return; }
+  kill "$TONE_PID" 2>/dev/null || true
+  TONE_PID=""
+  quit_app
+  local mean
+  mean=$(convert "$OUT/${tag}.png" -crop 10x40+789+430 -colorspace Gray -threshold 12% -format '%[fx:mean]' info: 2>/dev/null || echo 0)
+  echo "  meter well mean $mean ($want)"
+  local lit=0
+  awk -v m="$mean" 'BEGIN { exit !(m + 0 > 0.08) }' && lit=1
+  if [[ "$want" == lit && "$lit" == 1 ]]; then
+    pass "OUT meter lights under a 440 Hz tone ($mean)"
+  elif [[ "$want" == dark && "$lit" == 0 ]]; then
+    pass "OUT meter stays dark when its update is removed ($mean)"
+  elif [[ "$want" == lit ]]; then
+    fail "OUT meter did not light ($mean)"
+  else
+    fail "OUT meter still lit with drawing broken ($mean)"
+  fi
+}
+
+prove_meter_red() {
+  local header="$ROOT/NeuralAmpModeler/NeuralAmpModelerControls.h"
+  local old='if (IsDisabled() || msgTag != ISender<>::kUpdateMessage)'
+  local new='if (true || IsDisabled() || msgTag != ISender<>::kUpdateMessage)'
+  mutate_once "$header" "$old" "$new" || { fail "meter red could not edit the meter"; return; }
+  if ! rebuild_target VoLum-app; then
+    fail "meter red rebuild"
+    return
+  fi
+  prove_meter dark
+  restore_red
+  rebuild_target VoLum-app || fail "meter red restore rebuild"
+}
+
+scene_of() {
+  local label="$1" base
+  base=${label##* }
+  printf '%s\n' "${base%%-s*}"
+}
+
+# Paint manifest rectangles the same colour on both shots. Coordinates are
+# logical 900x600 and scale with the framebuffer. A shifted control leaves
+# the rectangle, so the 18 px sidebar proof still fails.
+apply_masks() {
+  local src="$1" dest="$2" scene="$3"
+  cp -f "$src" "$dest"
+  [[ -f "$MANIFEST" ]] || return 0
+  local w scale x y ww hh sc kind rest
+  w=$(identify -format '%w' "$src")
+  scale=$((w / 900))
+  [[ "$scale" -ge 1 ]] || scale=1
+  while read -r kind sc x y ww hh rest; do
+    [[ "$kind" == mask ]] || continue
+    [[ "$sc" == "*" || "$sc" == "$scene" || "$sc" == "$scene-s1" || "$sc" == "$scene-s2" ]] || continue
+    local x1 y1 x2 y2
+    x1=$((x * scale))
+    y1=$((y * scale))
+    x2=$(((x + ww) * scale - 1))
+    y2=$(((y + hh) * scale - 1))
+    convert "$dest" -fill '#101014' -draw "rectangle ${x1},${y1} ${x2},${y2}" "$dest"
+  done <"$MANIFEST"
+}
+
 compare_pair() {
   local a="$1" b="$2" label="$3" min="$4"
   if [[ ! -f "$a" || ! -f "$b" ]]; then
     fail "$label missing ($([[ -f "$a" ]] && echo have-a || echo no-a) $([[ -f "$b" ]] && echo have-b || echo no-b))"
     return
   fi
-  local da db score
+  local da db score scene work
   da=$(dims "$a")
   db=$(dims "$b")
   if [[ "$da" != "$db" ]]; then
     fail "$label size $da vs $db"
     return
   fi
-  score=$(ssim "$a" "$b")
+  scene=$(scene_of "$label")
+  work=$(mktemp -d)
+  apply_masks "$a" "$work/a.png" "$scene"
+  apply_masks "$b" "$work/b.png" "$scene"
+  score=$(ssim "$work/a.png" "$work/b.png")
+  rm -rf "$work"
   echo "  SSIM $label $score ($da)"
   awk -v s="$score" -v m="$min" 'BEGIN { exit !(s+0 >= m+0) }' \
     && pass "$label $score >= $min" \
@@ -827,7 +934,11 @@ do_compare() {
 
 gate_refs() {
   local min="0.99"
-  [[ -f "$REFS/threshold.txt" ]] && min=$(awk 'NR==1 { print $1; exit }' "$REFS/threshold.txt")
+  if [[ -f "$MANIFEST" ]]; then
+    min=$(awk '$1 == "threshold" { print $2; exit }' "$MANIFEST")
+  elif [[ -f "$REFS/threshold.txt" ]]; then
+    min=$(awk 'NR==1 { print $1; exit }' "$REFS/threshold.txt")
+  fi
   local name scale
   for name in "${SCENES[@]}"; do
     for scale in $SCALES; do
@@ -846,6 +957,9 @@ case "$MODE" in
     echo "ui-scenes out $OUT"
     start_display
     capture_all
+    if [[ "$MODE" == gate ]]; then
+      prove_meter lit
+    fi
     if [[ "$MODE" == all ]]; then
       host_keys
       host_menu
@@ -866,11 +980,18 @@ case "$MODE" in
     host_menu
     host_text
     ;;
+  meter)
+    [[ -n "$OUT" ]] || OUT=$(mktemp -d /tmp/volum-ui-scenes.XXXXXX)
+    echo "ui-scenes out $OUT"
+    start_display
+    prove_meter lit
+    ;;
   red)
     [[ -n "$OUT" ]] || OUT=$(mktemp -d /tmp/volum-ui-scenes.XXXXXX)
     echo "ui-scenes out $OUT"
     start_display
     prove_shift "${RED_MAIN_REF:-$HOME/volum-linux/out/13/scenes/main-s1.png}"
+    prove_meter_red
     host_red
     if git -C "$ROOT" diff --exit-code -- NeuralAmpModeler/VoLumLayoutBuild.inc.cpp NeuralAmpModeler/VoLumCustomOverlay.h >/dev/null; then
       pass "red proofs restored the source"
