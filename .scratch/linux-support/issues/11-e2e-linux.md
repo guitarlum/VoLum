@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 Blocked by: 09, 10
 
 # 11 Linux standalone e2e
