@@ -274,7 +274,10 @@ fi
 log "validator exit 0"
 
 log "standalone launch"
-export HOME XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache"
+export HOME="$home"
+export XDG_DATA_HOME="$HOME/.local/share"
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_CACHE_HOME="$HOME/.cache"
 export LIBGL_ALWAYS_SOFTWARE=1
 export GALLIUM_DRIVER=llvmpipe
 cat > /tmp/launch-volum.sh << 'EOF'
@@ -323,7 +326,7 @@ if kill -0 "$pid" 2>/dev/null; then
 fi
 rc=0
 wait "$pid" || rc=$?
-diag="${HOME}/.local/share/VoLum/volum.log"
+diag="${XDG_DATA_HOME:-$HOME/.local/share}/VoLum/volum.log"
 cp /tmp/app.log /out/app.log 2>/dev/null || true
 cp "$diag" /out/volum.log 2>/dev/null || true
 if [[ "$rc" -ne 0 ]]; then
