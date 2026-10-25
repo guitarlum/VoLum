@@ -23,7 +23,7 @@ on:
         type: boolean
         default: false
       dry_run:
-        description: "Build the Linux tarball from this ref and upload it only as a workflow artifact. Does not commit, tag, create a GitHub release, upload release assets, or touch the update feed. A dispatch from any branch other than main is also a dry run."
+        description: "Opt-in. Build the Linux tarball from this ref and upload it only as a workflow artifact. Does not commit, push, tag, or create a release. Leave this false to release main, whichever branch the dispatch was started from."
         required: false
         type: boolean
         default: false
@@ -41,15 +41,16 @@ concurrency:
 jobs:
   prepare_release:
     name: Prepare release
-    if: github.ref == 'refs/heads/main' && inputs.dry_run != true
     runs-on: ubuntu-latest
+    permissions:
+      contents: ${{ inputs.dry_run == true && 'read' || 'write' }}
     outputs:
       release_tag: ${{steps.meta.outputs.tag}}
       release_version: ${{steps.meta.outputs.version}}
       publish: ${{steps.meta.outputs.publish}}
     steps:
       - name: Check out repository
-        if: inputs.rebuild_assets != true && inputs.dry_run != true && github.ref == 'refs/heads/main'
+        if: inputs.rebuild_assets != true && inputs.dry_run != true
         uses: actions/checkout@v4
         with:
           ref: main
@@ -57,7 +58,7 @@ jobs:
           submodules: false
 
       - name: Check out dry-run ref
-        if: inputs.dry_run == true || github.ref != 'refs/heads/main'
+        if: inputs.dry_run == true
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -65,12 +66,12 @@ jobs:
           submodules: false
 
       - name: Check out submodules
-        if: inputs.rebuild_assets != true && inputs.dry_run != true && github.ref == 'refs/heads/main'
+        if: inputs.rebuild_assets != true && inputs.dry_run != true
         run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
         shell: bash
 
       - name: Prepare release metadata
-        if: inputs.rebuild_assets != true && inputs.dry_run != true && github.ref == 'refs/heads/main'
+        if: inputs.rebuild_assets != true && inputs.dry_run != true
         id: prepare
         run: |
           VERSION_ARGS=()
@@ -89,7 +90,7 @@ jobs:
         shell: bash
 
       - name: Commit release metadata
-        if: inputs.rebuild_assets != true && inputs.dry_run != true && github.ref == 'refs/heads/main'
+        if: inputs.rebuild_assets != true && inputs.dry_run != true
         run: |
           git add \
             NeuralAmpModeler/config.h \
@@ -100,19 +101,19 @@ jobs:
         shell: bash
 
       - name: Push release commit
-        if: inputs.rebuild_assets != true && inputs.dry_run != true && github.ref == 'refs/heads/main'
+        if: inputs.rebuild_assets != true && inputs.dry_run != true
         run: git push origin HEAD:main
         shell: bash
 
       - name: Create and push release tag
-        if: inputs.rebuild_assets != true && inputs.dry_run != true && github.ref == 'refs/heads/main'
+        if: inputs.rebuild_assets != true && inputs.dry_run != true
         run: |
           git tag "${{ steps.prepare.outputs.tag }}"
           git push origin "${{ steps.prepare.outputs.tag }}"
         shell: bash
 
       - name: Create draft release
-        if: inputs.rebuild_assets != true && inputs.dry_run != true && github.ref == 'refs/heads/main'
+        if: inputs.rebuild_assets != true && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -125,7 +126,7 @@ jobs:
       - name: Export release coordinates
         id: meta
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ] || [ "${{ github.ref }}" != "refs/heads/main" ]; then
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
             version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)"/\1/p' NeuralAmpModeler/config.h | head -n 1)"
             if [ -z "$version" ]; then
               echo "could not read PLUG_VERSION_STR for the dry run" >&2
@@ -134,7 +135,7 @@ jobs:
             echo "tag=" >> "$GITHUB_OUTPUT"
             echo "version=${version}" >> "$GITHUB_OUTPUT"
             echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "DRY_RUN publish=false version=${version} ref=${{ github.ref }}"
+            echo "DRY_RUN publish=false version=${version}"
             exit 0
           fi
           if [ "${{ inputs.rebuild_assets }}" = "true" ]; then
@@ -155,8 +156,9 @@ jobs:
   build:
     name: Build
     needs: prepare_release
-    if: github.ref == 'refs/heads/main' && inputs.dry_run != true
     runs-on: ${{matrix.os}}
+    permissions:
+      contents: ${{ inputs.dry_run == true && 'read' || 'write' }}
     strategy:
       # A release is shipped as a single multi-platform unit. Aborting the other
       # leg on the first failure avoids uploading a half-broken release.
@@ -165,14 +167,14 @@ jobs:
         # macos-15 matches CI. macos-latest (macOS 26) aborts an editor run in its
         # virtual GPU, so the shipped Mac build is the one the editor tests ran on.
         # A rebuild uploads only the Mac assets onto the existing draft.
-        # dry_run, and any ref other than main, builds only the Linux tarball.
-        include: ${{ fromJSON((inputs.dry_run == true || github.ref != 'refs/heads/main') && '[{"os":"ubuntu-22.04","build_dir":"build-linux"}]' || inputs.rebuild_assets == true && '[{"os":"macos-15","build_dir":"build-mac"}]' || '[{"os":"macos-15","build_dir":"build-mac"},{"os":"windows-latest","build_dir":"build-win"},{"os":"ubuntu-22.04","build_dir":"build-linux"}]') }}
+        # dry_run builds only the Linux leg of this same job.
+        include: ${{ fromJSON(inputs.dry_run == true && '[{"os":"ubuntu-22.04","build_dir":"build-linux"}]' || inputs.rebuild_assets == true && '[{"os":"macos-15","build_dir":"build-mac"}]' || '[{"os":"macos-15","build_dir":"build-mac"},{"os":"windows-latest","build_dir":"build-win"},{"os":"ubuntu-22.04","build_dir":"build-linux"}]') }}
 
     steps:
     - name: Check out repository
       uses: actions/checkout@v4
       with:
-        ref: ${{ (inputs.dry_run == true || github.ref != 'refs/heads/main') && github.sha || format('refs/tags/{0}', needs.prepare_release.outputs.release_tag) }}
+        ref: ${{ inputs.dry_run == true && github.sha || format('refs/tags/{0}', needs.prepare_release.outputs.release_tag) }}
         submodules: false
 
     - name: Check out submodules
@@ -346,7 +348,7 @@ jobs:
       shell: bash
 
     - name: Upload macOS release assets
-      if: matrix.os == 'macos-15' && inputs.dry_run != true && github.ref == 'refs/heads/main' && needs.prepare_release.outputs.publish == 'true'
+      if: matrix.os == 'macos-15' && needs.prepare_release.outputs.publish == 'true'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
@@ -439,7 +441,7 @@ jobs:
       shell: pwsh
 
     - name: Upload Windows release assets
-      if: matrix.os == 'windows-latest' && inputs.dry_run != true && github.ref == 'refs/heads/main' && needs.prepare_release.outputs.publish == 'true'
+      if: matrix.os == 'windows-latest' && needs.prepare_release.outputs.publish == 'true'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
@@ -475,68 +477,15 @@ jobs:
         bash NeuralAmpModeler/scripts/makedist-linux.sh --build
       shell: bash
 
-    - name: Prove the dry run cannot publish
-      if: matrix.os == 'ubuntu-22.04' && needs.prepare_release.outputs.publish != 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        set -euo pipefail
-        if [ "${{ needs.prepare_release.outputs.publish }}" = "true" ]; then
-          echo "dry run still has publish=true" >&2
-          exit 1
-        fi
-        if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
-          echo "publish proof ran on a real main release" >&2
-          exit 1
-        fi
-        # contents:read cannot create a release. 201 would mean this run can publish.
-        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          echo "ref is main, so this probe does not call the release API"
-          echo "DRY_RUN_PUBLISH_BLOCKED http=skipped"
-          code="skipped"
-        else
-          printf '%s\n' '{"tag_name":"v0.0.0-linux-dry-run-must-not-publish","name":"dry-run must not publish","draft":true,"prerelease":true}' > /tmp/dry-release-body.json
-          code="$(curl -s -o /tmp/dry-release.json -w '%{http_code}' \
-            -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
-            --data @/tmp/dry-release-body.json)"
-          echo "release create HTTP ${code}"
-          cat /tmp/dry-release.json
-          case "$code" in
-            401|403|404) ;;
-            *)
-              echo "ERROR: dry run was not refused (HTTP ${code})" >&2
-              exit 1
-              ;;
-          esac
-          echo "DRY_RUN_PUBLISH_BLOCKED http=${code}"
-        fi
-        version="${{ needs.prepare_release.outputs.release_version }}"
-        tarball="build-linux/out/VoLum-${version}-linux-x86_64.tar.gz"
-        test -f "$tarball"
-        {
-          echo "DRY_RUN_PUBLISH_BLOCKED http=${code}"
-          echo "ref=${{ github.ref }}"
-          echo "dry_run=${{ inputs.dry_run }}"
-          echo "publish=${{ needs.prepare_release.outputs.publish }}"
-          echo "tarball=${tarball}"
-          sha256sum "$tarball"
-        } | tee build-linux/out/dry-run-proof.txt
-      shell: bash
-
-    - name: Upload Linux dry-run proof
+    - name: Upload Linux tarball artifact
       if: matrix.os == 'ubuntu-22.04' && needs.prepare_release.outputs.publish != 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: VoLum-linux-dry-run
-        path: |
-          build-linux/out/VoLum-*-linux-x86_64.tar.gz
-          build-linux/out/dry-run-proof.txt
+        name: VoLum-linux-tarball
+        path: build-linux/out/VoLum-*-linux-x86_64.tar.gz
 
     - name: Upload Linux release asset
-      if: matrix.os == 'ubuntu-22.04' && inputs.dry_run != true && github.ref == 'refs/heads/main' && needs.prepare_release.outputs.publish == 'true'
+      if: matrix.os == 'ubuntu-22.04' && needs.prepare_release.outputs.publish == 'true'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
@@ -547,76 +496,3 @@ jobs:
         test -n "$tag"
         gh release upload "$tag" "$tarball" --clobber
       shell: bash
-
-  linux_dry_run:
-    name: Linux dry run
-    if: github.ref != 'refs/heads/main' || inputs.dry_run == true
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Check out submodules
-        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
-        shell: bash
-
-      - name: Provision Linux build packages
-        run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci
-        shell: bash
-
-      - name: Build Linux tarball
-        run: |
-          export JOBS="$(nproc)"
-          bash NeuralAmpModeler/scripts/makedist-linux.sh --build
-        shell: bash
-
-      - name: Prove the dry run cannot publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
-            echo "this job ran on a real main release" >&2
-            exit 1
-          fi
-          printf '%s\n' '{"tag_name":"v0.0.0-linux-dry-run-must-not-publish","name":"dry-run must not publish","draft":true,"prerelease":true}' > /tmp/dry-release-body.json
-          code="$(curl -s -o /tmp/dry-release.json -w '%{http_code}' \
-            -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
-            --data @/tmp/dry-release-body.json)"
-          echo "release create HTTP ${code}"
-          cat /tmp/dry-release.json
-          case "$code" in
-            401|403|404) ;;
-            *)
-              echo "ERROR: dry run was not refused (HTTP ${code})" >&2
-              exit 1
-              ;;
-          esac
-          version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)"/\1/p' NeuralAmpModeler/config.h | head -n 1)"
-          tarball="build-linux/out/VoLum-${version}-linux-x86_64.tar.gz"
-          test -f "$tarball"
-          {
-            echo "DRY_RUN_PUBLISH_BLOCKED http=${code}"
-            echo "ref=${{ github.ref }}"
-            echo "dry_run=${{ inputs.dry_run }}"
-            echo "permissions=contents:read"
-            echo "tarball=${tarball}"
-            sha256sum "$tarball"
-          } | tee build-linux/out/dry-run-proof.txt
-        shell: bash
-
-      - name: Upload Linux dry-run proof
-        uses: actions/upload-artifact@v4
-        with:
-          name: VoLum-linux-dry-run
-          path: |
-            build-linux/out/VoLum-*-linux-x86_64.tar.gz
-            build-linux/out/dry-run-proof.txt
-

@@ -1,9 +1,11 @@
 #include "third_party/doctest.h"
 
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 // Source-guard pins over the Windows test-runner script. Nothing here executes
 // PowerShell; these lock in two facts about $LASTEXITCODE that were each got wrong
@@ -336,4 +338,122 @@ TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
   CHECK(workflow.find("matrix.os == 'macos-latest'") == std::string::npos);
   CHECK(workflow.find("rebuild_assets") != std::string::npos);
   CHECK(workflow.find("[{\"os\":\"macos-15\",\"build_dir\":\"build-mac\"}]") != std::string::npos);
+}
+
+namespace
+{
+std::string TrimCopy(std::string s)
+{
+  while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
+    s.erase(s.begin());
+  while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())))
+    s.pop_back();
+  return s;
+}
+
+bool IsStepStart(const std::string& line)
+{
+  std::size_t i = 0;
+  while (i < line.size() && line[i] == ' ')
+    ++i;
+  return line.compare(i, 7, "- name:") == 0;
+}
+
+// A release step publishes when its script creates a release, pushes a ref,
+// or writes the update feed. Comments do not count.
+bool LinePublishes(const std::string& raw)
+{
+  const std::string trimmed = TrimCopy(raw);
+  if (trimmed.empty() || trimmed[0] == '#')
+    return false;
+  std::string line = raw;
+  const auto comment = line.find(" #");
+  if (comment != std::string::npos)
+    line.resize(comment);
+  const auto has = [&](const char* needle) { return line.find(needle) != std::string::npos; };
+  if (has("gh release") || has("git push") || has("git tag") || has("gh api"))
+    return true;
+  if (has("appcast") || has("update-feed") || has("update_feed"))
+    return true;
+  if (!has("curl"))
+    return false;
+  return has("-X POST") || has("-X PUT") || has("-X PATCH") || has("-X DELETE") || has("--data") || has(" -d ") || has("-d @");
+}
+
+bool StepIsPublishGated(const std::string& body)
+{
+  return body.find("inputs.dry_run != true") != std::string::npos || body.find("publish == 'true'") != std::string::npos;
+}
+} // namespace
+
+TEST_CASE("release publish steps stay closed unless the dry run is off")
+{
+  // A dry run used to POST a real create-release call and hope the token was
+  // refused. The gate is the step condition: nothing that publishes runs
+  // unless publish is true or the dry-run input is off.
+  const std::string workflow = ReadRepoFile(".github/workflows/release-native.yml");
+  CHECK(workflow.find("linux_dry_run") == std::string::npos);
+  CHECK(workflow.find("-X POST") == std::string::npos);
+  CHECK(workflow.find("github.ref != 'refs/heads/main'") == std::string::npos);
+  CHECK(workflow.find("inputs.dry_run == true && 'read'") != std::string::npos);
+
+  std::vector<std::string> lines;
+  std::string cur;
+  for (char ch : workflow)
+  {
+    if (ch == '\n')
+    {
+      if (!cur.empty() && cur.back() == '\r')
+        cur.pop_back();
+      lines.push_back(cur);
+      cur.clear();
+    }
+    else
+      cur.push_back(ch);
+  }
+  if (!cur.empty())
+    lines.push_back(cur);
+
+  int publishSteps = 0;
+  std::string stepName;
+  std::string stepBody;
+  const auto finish = [&]() {
+    if (stepName.empty())
+      return;
+    bool publishes = false;
+    std::size_t pos = 0;
+    while (pos < stepBody.size())
+    {
+      const auto nl = stepBody.find('\n', pos);
+      const auto line = stepBody.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+      if (LinePublishes(line))
+        publishes = true;
+      if (nl == std::string::npos)
+        break;
+      pos = nl + 1;
+    }
+    if (publishes)
+    {
+      ++publishSteps;
+      INFO("step " << stepName);
+      CHECK(StepIsPublishGated(stepBody));
+    }
+    stepName.clear();
+    stepBody.clear();
+  };
+
+  for (const auto& line : lines)
+  {
+    if (IsStepStart(line))
+    {
+      finish();
+      const auto nameAt = line.find("- name:");
+      stepName = TrimCopy(line.substr(nameAt + 7));
+      stepBody = line + "\n";
+    }
+    else if (!stepName.empty())
+      stepBody += line + "\n";
+  }
+  finish();
+  CHECK(publishSteps >= 6);
 }
