@@ -362,6 +362,30 @@ fi
 log "uninstall"
 HOME="$home" XDG_DATA_HOME="$home/.local/share" "$TOP/install.sh" --uninstall | tee /out/uninstall.log
 assert_user_gone "$home" | tee /out/uninstall-left.txt
+user_paths "$home"
+if [[ -e "$DATA" ]]; then
+  echo "empty data dir was kept: $DATA" >&2
+  exit 1
+fi
+echo "empty data dir removed"
+
+log "uninstall keeps user content"
+kept="$home-kept"
+run_install "$kept"
+user_paths "$kept"
+mkdir -p "$DATA/presets"
+printf 'owner library\n' > "$DATA/presets/mine.nam"
+HOME="$kept" XDG_DATA_HOME="$kept/.local/share" "$TOP/install.sh" --uninstall | tee /out/uninstall-kept.log
+user_paths "$kept"
+if [[ ! -f "$DATA/presets/mine.nam" || ! -d "$DATA" ]]; then
+  echo "user content was removed: $DATA" >&2
+  exit 1
+fi
+if [[ -e "$DATA/VoLum" || -e "$DATA/resources" || -e "$DATA/VoLumRigs" || -e "$BIN" || -e "$VST3" ]]; then
+  echo "installed files stayed beside user content" >&2
+  exit 1
+fi
+echo "user content kept"
 
 if [[ "$RED_UNINSTALL" -eq 1 ]]; then
   log "red proof: uninstall leaves the VST3"
@@ -393,6 +417,27 @@ assert_system_present
 log "system uninstall"
 HOME="$home" XDG_DATA_HOME="$home/.local/share" "$TOP/install.sh" --system --uninstall | tee /out/system-uninstall.log
 assert_no_system
+if [[ -e /usr/share/VoLum ]]; then
+  echo "empty system data dir was kept" >&2
+  exit 1
+fi
+echo "empty system data dir removed"
+
+log "system uninstall keeps user content"
+HOME="$home" XDG_DATA_HOME="$home/.local/share" "$TOP/install.sh" --system >/tmp/system-kept-install.log
+mkdir -p /usr/share/VoLum/presets
+printf 'owner library\n' > /usr/share/VoLum/presets/mine.nam
+HOME="$home" XDG_DATA_HOME="$home/.local/share" "$TOP/install.sh" --system --uninstall | tee /out/system-uninstall-kept.log
+if [[ ! -f /usr/share/VoLum/presets/mine.nam ]]; then
+  echo "system user content was removed" >&2
+  exit 1
+fi
+if [[ -e /usr/share/VoLum/VoLum || -e /usr/lib/vst3/VoLum.vst3 || -e /usr/local/bin/VoLum ]]; then
+  echo "system install stayed beside user content" >&2
+  exit 1
+fi
+echo "system user content kept"
+rm -rf /usr/share/VoLum
 files_match "$TOP/install.sh" /out/install.sh.orig
 log "PASS"
 chmod -R a+rwX /out || true

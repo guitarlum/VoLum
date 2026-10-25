@@ -242,6 +242,17 @@ EOF
   warn_missing_standalone_libs "$sys_data/VoLum"
 }
 
+# Presets and a library the owner copied in stay. The directory goes only when
+# uninstall left nothing behind.
+remove_data_dir_if_empty() {
+  local dir=$1
+  [[ -d "$dir" ]] || return 0
+  if [[ -n "$(find "$dir" -mindepth 1 -print -quit)" ]]; then
+    return 0
+  fi
+  rmdir -- "$dir"
+}
+
 uninstall_user() {
   refuse_outside "$user_vst3" "$HOME/.vst3"
   refuse_outside "$user_bin" "$HOME/.local"
@@ -253,6 +264,7 @@ uninstall_user() {
   rm -f -- "$user_bin"
   rm -rf -- "$user_data/VoLum" "$user_data/resources" "$user_data/VoLumRigs"
   rm -f -- "$user_data/.install-manifest" "$user_desktop" "$user_icon"
+  remove_data_dir_if_empty "$user_data"
   rmdir "$HOME/.vst3" "$HOME/.local/bin" "$(dirname "$user_desktop")" "$(dirname "$user_icon")" 2>/dev/null || true
   echo "Uninstalled user VoLum"
 }
@@ -260,13 +272,14 @@ uninstall_user() {
 uninstall_system() {
   refuse_outside "$sys_vst3" "/usr/lib/vst3"
   refuse_outside "$sys_bin" "/usr/local/bin"
-  refuse_outside "$sys_data" "/usr/share/VoLum"
+  refuse_outside "$sys_data/VoLum" "/usr/share/VoLum"
   refuse_outside "$sys_desktop" "/usr/share/applications"
   refuse_outside "$sys_icon" "/usr/share/icons"
   rm -rf -- "$sys_vst3"
   rm -f -- "$sys_bin"
-  rm -rf -- "$sys_data"
-  rm -f -- "$sys_desktop" "$sys_icon"
+  rm -rf -- "$sys_data/VoLum" "$sys_data/resources" "$sys_data/VoLumRigs"
+  rm -f -- "$sys_data/.install-manifest" "$sys_desktop" "$sys_icon"
+  remove_data_dir_if_empty "$sys_data"
   rmdir /usr/lib/vst3 /usr/local/bin "$(dirname "$sys_desktop")" "$(dirname "$sys_icon")" 2>/dev/null || true
   echo "Uninstalled system VoLum"
 }

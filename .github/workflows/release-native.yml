@@ -135,7 +135,7 @@ jobs:
         shell: bash
 
   prepare_dry_run:
-    name: Prepare release
+    name: Prepare release (dry run)
     if: inputs.dry_run == true
     runs-on: ubuntu-latest
     permissions:
@@ -170,7 +170,7 @@ jobs:
   # real release are two callers of .github/workflows/release-build.yml.
   # The step list, including the steps that are not tied to one OS, lives there once.
   build:
-    name: Build
+    name: Build (dry run)
     needs: prepare_dry_run
     if: inputs.dry_run == true
     permissions:

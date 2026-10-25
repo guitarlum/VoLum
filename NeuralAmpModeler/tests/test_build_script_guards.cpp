@@ -352,16 +352,22 @@ std::string TrimCopy(std::string s)
   return s;
 }
 
-bool IsStepStart(const std::string& line)
+int LeadingSpaces(const std::string& line)
 {
-  std::size_t i = 0;
-  while (i < line.size() && line[i] == ' ')
-    ++i;
-  return line.compare(i, 7, "- name:") == 0;
+  int n = 0;
+  while (n < static_cast<int>(line.size()) && line[static_cast<std::size_t>(n)] == ' ')
+    ++n;
+  return n;
 }
 
-// A release step publishes when its script creates a release, pushes a ref,
-// or writes the update feed. Comments do not count.
+bool IsStepsKey(const std::string& line, int& indent)
+{
+  indent = LeadingSpaces(line);
+  return TrimCopy(line) == "steps:";
+}
+
+// A release step publishes when its script or action creates a release, pushes
+// a ref, or writes the update feed. Comments do not count.
 bool LinePublishes(const std::string& raw)
 {
   const std::string trimmed = TrimCopy(raw);
@@ -376,16 +382,92 @@ bool LinePublishes(const std::string& raw)
     return true;
   if (has("appcast") || has("update-feed") || has("update_feed"))
     return true;
+  const auto usesAt = line.find("uses:");
+  if (usesAt != std::string::npos)
+  {
+    const auto uses = line.substr(usesAt);
+    if (uses.find("softprops/action-gh-release") != std::string::npos)
+      return true;
+    if (uses.find("release") != std::string::npos && uses.find("upload") != std::string::npos)
+      return true;
+  }
   if (!has("curl"))
     return false;
-  return has("-X POST") || has("-X PUT") || has("-X PATCH") || has("-X DELETE") || has("--data") || has(" -d ")
-         || has("-d @");
+  const char* methods[] = {"POST", "PUT", "PATCH", "DELETE"};
+  for (const char* method : methods)
+  {
+    if (has((std::string("-X ") + method).c_str()) || has((std::string("-X") + method).c_str())
+        || has((std::string("--request ") + method).c_str()) || has((std::string("--request=") + method).c_str()))
+      return true;
+  }
+  if (has("--data") || has("-F"))
+    return true;
+  for (std::size_t i = 0; i + 2 <= line.size(); ++i)
+  {
+    if (line.compare(i, 2, "-d") != 0)
+      continue;
+    if (i > 0 && line[i - 1] != ' ' && line[i - 1] != '\t')
+      continue;
+    if (i + 2 == line.size() || line[i + 2] == ' ' || line[i + 2] == '\t' || line[i + 2] == '@' || line[i + 2] == '\''
+        || line[i + 2] == '"')
+      return true;
+  }
+  return false;
 }
 
-bool StepIsPublishGated(const std::string& body)
+// The gate is the step's if: expression. A phrase in the script or a comment
+// does not close the step.
+std::string StepIfExpression(const std::string& body)
 {
-  return body.find("inputs.dry_run != true") != std::string::npos || body.find("publish == 'true'") != std::string::npos
-         || body.find("publish == true") != std::string::npos;
+  std::string expr;
+  bool block = false;
+  int ifIndent = -1;
+  std::size_t pos = 0;
+  while (pos <= body.size())
+  {
+    const auto nl = body.find('\n', pos);
+    std::string line = body.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+    const bool last = nl == std::string::npos;
+    pos = last ? body.size() + 1 : nl + 1;
+    const std::string trimmed = TrimCopy(line);
+    if (!block)
+    {
+      if (trimmed.empty() || trimmed[0] == '#' || trimmed.compare(0, 3, "if:") != 0)
+      {
+        if (last)
+          break;
+        continue;
+      }
+      std::string rest = TrimCopy(trimmed.substr(3));
+      const auto hash = rest.find(" #");
+      if (hash != std::string::npos)
+        rest.resize(hash);
+      rest = TrimCopy(rest);
+      if (rest == "|" || rest == ">" || rest == "|-" || rest == ">-" || rest.empty())
+      {
+        block = true;
+        ifIndent = LeadingSpaces(line);
+        if (last)
+          break;
+        continue;
+      }
+      return rest;
+    }
+    if (!trimmed.empty() && LeadingSpaces(line) <= ifIndent)
+      break;
+    if (!trimmed.empty() && trimmed[0] != '#')
+      expr += line + "\n";
+    if (last)
+      break;
+  }
+  return expr;
+}
+
+bool StepIsPublishGated(const std::string& ifExpr)
+{
+  return ifExpr.find("inputs.dry_run != true") != std::string::npos
+         || ifExpr.find("publish == 'true'") != std::string::npos
+         || ifExpr.find("publish == true") != std::string::npos;
 }
 } // namespace
 
@@ -409,10 +491,13 @@ int CountGatedPublishSteps(const std::string& workflow)
     lines.push_back(std::move(cur));
 
   int publishSteps = 0;
-  std::string stepName;
+  bool inSteps = false;
+  bool open = false;
+  int stepsIndent = -1;
+  int itemIndent = -1;
   std::string stepBody;
   const auto finish = [&]() {
-    if (stepName.empty())
+    if (!open)
       return;
     bool publishes = false;
     std::size_t pos = 0;
@@ -429,22 +514,67 @@ int CountGatedPublishSteps(const std::string& workflow)
     if (publishes)
     {
       ++publishSteps;
+      const auto nameAt = stepBody.find("- name:");
+      const auto firstNl = stepBody.find('\n');
+      const std::string stepName =
+        nameAt != std::string::npos && (firstNl == std::string::npos || nameAt < firstNl)
+          ? TrimCopy(
+              stepBody.substr(nameAt + 7, firstNl == std::string::npos ? std::string::npos : firstNl - (nameAt + 7)))
+          : TrimCopy(stepBody.substr(0, firstNl));
       INFO("step " << stepName);
-      CHECK(StepIsPublishGated(stepBody));
+      CHECK(StepIsPublishGated(StepIfExpression(stepBody)));
     }
-    stepName.clear();
+    open = false;
     stepBody.clear();
   };
   for (const auto& line : lines)
   {
-    if (IsStepStart(line))
+    int keyIndent = 0;
+    if (IsStepsKey(line, keyIndent))
     {
       finish();
-      const auto nameAt = line.find("- name:");
-      stepName = TrimCopy(line.substr(nameAt + 7));
-      stepBody = line + "\n";
+      inSteps = true;
+      stepsIndent = keyIndent;
+      itemIndent = -1;
+      continue;
     }
-    else if (!stepName.empty())
+    if (!inSteps)
+      continue;
+    if (TrimCopy(line).empty())
+    {
+      if (open)
+        stepBody += line + "\n";
+      continue;
+    }
+    const int lead = LeadingSpaces(line);
+    const bool item =
+      lead < static_cast<int>(line.size()) && line.compare(static_cast<std::size_t>(lead), 2, "- ") == 0;
+    if (itemIndent < 0)
+    {
+      if (item && lead >= stepsIndent)
+      {
+        itemIndent = lead;
+        open = true;
+        stepBody = line + "\n";
+      }
+      else if (lead <= stepsIndent)
+        inSteps = false;
+      continue;
+    }
+    if (item && lead == itemIndent)
+    {
+      finish();
+      open = true;
+      stepBody = line + "\n";
+      continue;
+    }
+    if (lead < itemIndent)
+    {
+      finish();
+      inSteps = false;
+      continue;
+    }
+    if (open)
       stepBody += line + "\n";
   }
   finish();
@@ -468,6 +598,9 @@ TEST_CASE("release publish steps stay closed unless the dry run is off")
   CHECK(build.find("-X POST") == std::string::npos);
   CHECK(native.find("github.ref != 'refs/heads/main'") == std::string::npos);
   CHECK(native.find("contents: read") != std::string::npos);
+  CHECK(native.find("name: Prepare release (dry run)") != std::string::npos);
+  CHECK(native.find("name: Build (dry run)") != std::string::npos);
+  CHECK(native.find("name: Prepare release\n") != std::string::npos);
   const auto dryBuild = native.find("if: inputs.dry_run == true\n    permissions:\n      contents: read");
   CHECK(dryBuild != std::string::npos);
 
