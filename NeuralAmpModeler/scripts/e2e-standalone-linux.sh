@@ -139,6 +139,7 @@ begin_session() {
   local name="$1"
   end_session
   lock_gui || return 1
+  SESSION=1
   SESS="$OUT/$name"
   rm -rf "$SESS"
   mkdir -p "$SESS"
@@ -172,26 +173,35 @@ begin_session() {
     return 1
   fi
 
-  if [[ "$(ulimit -r)" == 0 ]] && command -v prlimit >/dev/null && sudo -n true 2>/dev/null; then
+  if command -v prlimit >/dev/null && sudo -n true 2>/dev/null; then
     sudo -n prlimit --pid $$ --rtprio=95:95 --memlock=unlimited:unlimited || true
+  fi
+  if [[ ! -x "$OUT/volum-jack-probe" ]]; then
+    cc -O2 -o "$OUT/volum-jack-probe" "$SCRIPT_DIR/linux/smoke/volum-jack-probe.c" -ljack -lm || return 1
   fi
   export JACK_DEFAULT_SERVER="volum-e2e-$$-$name"
   export JACK_NO_AUDIO_RESERVATION=1
   export JACK_NO_START_SERVER=1
+  # Real-time first, the way the audio smoke does. WSL often refuses it; the
+  # dummy server still runs with -r, and these scenarios do not count xruns.
+  local jack_rt=""
   jackd --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p 256 >"$SESS/jackd.log" 2>&1 &
   JACK_PID=$!
-  local up=0 _
-  for _ in $(seq 50); do
-    jack_lsp >/dev/null 2>&1 && { up=1; break; }
-    kill -0 "$JACK_PID" 2>/dev/null || break
-    sleep 0.1
-  done
-  if [[ "$up" != 1 ]]; then
-    echo "e2e: jackd did not come up" >&2
-    cat "$SESS/jackd.log" >&2 || true
-    end_session
-    return 1
+  if ! "$OUT/volum-jack-probe" wait-server 8; then
+    kill "$JACK_PID" 2>/dev/null || true
+    wait "$JACK_PID" 2>/dev/null || true
+    JACK_PID=""
+    jack_rt="-r"
+    jackd -r --name "$JACK_DEFAULT_SERVER" -d dummy -r 48000 -p 256 >"$SESS/jackd.log" 2>&1 &
+    JACK_PID=$!
+    if ! "$OUT/volum-jack-probe" wait-server 8; then
+      echo "e2e: jackd did not come up" >&2
+      cat "$SESS/jackd.log" >&2 || true
+      end_session
+      return 1
+    fi
   fi
+  echo "  jackd up${jack_rt:+ (no realtime)}"
 
   cat >"$SESS/asound.conf" <<'ALSA'
 pcm.!default { type null }
@@ -213,7 +223,6 @@ out2=2
 buffer=256
 sr=48000
 INI
-  SESSION=1
   echo "  session $name DISPLAY=$DISPLAY JACK=$JACK_DEFAULT_SERVER"
 }
 
