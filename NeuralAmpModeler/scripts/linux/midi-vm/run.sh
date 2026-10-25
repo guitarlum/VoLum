@@ -14,8 +14,9 @@ ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 MODE="${1:-}"
 IMAGE="${VOLUM_MIDI_VM_IMAGE:-$ROOT/midi-vm-cache/volum-midi-vm.qcow2}"
 WORK="${VOLUM_MIDI_VM_WORK:-${RUNNER_TEMP:-/tmp}/volum-midi-vm}"
-BASE_URL="https://cloud-images.ubuntu.com/jammy/current"
-IMG_NAME="jammy-server-cloudimg-amd64.img"
+IMAGE_URL=""
+IMAGE_SHA256=""
+IMG_NAME=""
 ACCEL=tcg
 CPU=qemu64
 OUTIMG=""
@@ -55,22 +56,47 @@ install_host_packages() {
   sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils e2fsprogs
 }
 
+read_image_pin() {
+  local line key val
+  IMAGE_URL=""
+  IMAGE_SHA256=""
+  IMG_NAME=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      ''|'#'*) continue ;;
+    esac
+    key="${line%%=*}"
+    val="${line#*=}"
+    case "$key" in
+      url) IMAGE_URL="$val" ;;
+      sha256) IMAGE_SHA256="$val" ;;
+      name) IMG_NAME="$val" ;;
+    esac
+  done < "$SCRIPT_DIR/image-key.txt"
+  [[ -n "$IMAGE_URL" && -n "$IMAGE_SHA256" && -n "$IMG_NAME" ]] || {
+    log "image-key.txt needs url, sha256, and name"
+    exit 1
+  }
+  log "image pin $IMG_NAME $IMAGE_SHA256"
+  log "image url $IMAGE_URL"
+}
+
 download_base() {
   local dest="$1"
-  local dir hash sums
+  local dir
   dir="$(dirname "$dest")"
-  sums="$dir/SHA256SUMS"
   mkdir -p "$dir"
   if [[ -f "$dest" ]]; then
-    return 0
+    if echo "$IMAGE_SHA256  $IMG_NAME" | (cd "$dir" && sha256sum -c -); then
+      return 0
+    fi
+    log "cached base image does not match the pin; downloading again"
+    rm -f "$dest"
   fi
-  log "downloading $BASE_URL/$IMG_NAME"
-  curl -fL --retry 5 --retry-delay 2 -o "$dest.partial" "$BASE_URL/$IMG_NAME"
-  curl -fL --retry 5 --retry-delay 2 -o "$sums" "$BASE_URL/SHA256SUMS"
-  hash="$(awk -v name="$IMG_NAME" '$NF == name || $NF == "*" name { print $1; exit }' "$sums")"
-  [[ -n "$hash" ]] || { log "no checksum for $IMG_NAME"; exit 1; }
+  log "downloading $IMAGE_URL"
+  curl -fL --retry 5 --retry-delay 2 -o "$dest.partial" "$IMAGE_URL"
   mv "$dest.partial" "$dest"
-  echo "$hash  $IMG_NAME" | (cd "$dir" && sha256sum -c -)
+  echo "$IMAGE_SHA256  $IMG_NAME" | (cd "$dir" && sha256sum -c -)
 }
 
 write_bake_seed() {
@@ -113,7 +139,7 @@ write_files:
         blkid || true
         lsblk || true
         sync
-        systemctl poweroff || poweroff || true
+        poweroff -f || true
         exit 1
       fi
       mkdir -p /mnt/out
@@ -130,8 +156,9 @@ write_files:
       chmod -R a+rX /mnt/out || true
       sync
       log "VOLUM_MIDI_VM_GUEST_DONE rc=$rc"
-      sleep 1
-      systemctl poweroff || poweroff || true
+      # The result file is already synced. poweroff -f skips systemd's wait for
+      # a sender still stuck in the sequencer lock.
+      poweroff -f || true
       exit "$rc"
 runcmd:
   - [bash, /usr/local/sbin/volum-midi-vm-run.sh]
@@ -303,6 +330,7 @@ cleanup() {
 trap cleanup EXIT
 
 df -h
+read_image_pin
 prepare_kvm
 install_host_packages
 case "$MODE" in
