@@ -1,17 +1,17 @@
 # 14 Tarball, portability and the release leg
 
-Status: **PASS** on code head `798834db`. The Linux package job and the release dry run are green on that commit. iPlug2 was not changed.
+Status: **PASS** on code head `14d23c14`. The Linux package job and the release dry run are green on that commit. iPlug2 was not changed.
 
 ## Heads
 
 | | Sha |
 | --- | --- |
-| Code head | `798834db9919f251ce5eb586dfedd433f61cc5fd` |
-| Report commit | the commit that adds this file |
+| Code head | `14d23c1403842b875fd673a82bde9c64957b30b2` |
+| Report commit | the commit that updates this file |
 | iPlug2 `volum/linux` | `3d894cd8e7a4185e7b5b28d24e7c149d587ab1ba` (unchanged) |
-| CI | [40169128646](https://github.com/guitarlum/VoLum/actions/runs/40169128646) success, every `ci.yml` job, including Formatting, macOS, macOS standalone e2e, and macOS installer upgrade |
-| Release dry run | [40169127248](https://github.com/guitarlum/VoLum/actions/runs/40169127248) success |
-| Windows tests | `run-tests-win.ps1` exit 0, 1478 passed, 30255258 assertions. The Windows CI job on this same head is also green |
+| CI | [40178869338](https://github.com/guitarlum/VoLum/actions/runs/40178869338) success, every `ci.yml` job, including Formatting, macOS, macOS standalone e2e, and macOS installer upgrade |
+| Release dry run | [40178867357](https://github.com/guitarlum/VoLum/actions/runs/40178867357) success |
+| Windows tests | `run-tests-win.ps1` exit 0, 1479 passed, 30255274 assertions. The Windows CI job on this same head is also green |
 
 The spec's portability list now includes the standalone's GDK 3 set. Changelog and user docs were left for ticket 15.
 
@@ -69,13 +69,32 @@ Each proof mutated a copy and then checked the packaged file again.
 
 The uninstall copy still removed the wrapper and the other installed files. Only the VST3 remained, which is what the check is there to catch.
 
-## Dry run cannot publish
+## Publish guard
 
-[Release Native 40169127248](https://github.com/guitarlum/VoLum/actions/runs/40169127248) was `workflow_dispatch` on `feature/linux-14-package` with `dry_run=true`. Head `798834db`.
+`test_build_script_guards.cpp` reads `release-native.yml` and `release-build.yml` and fails if a step that runs `gh release`, `git push`, `git tag`, `gh api`, or a writing `curl` is missing `inputs.dry_run != true` or `publish == true`. There is no create-release call in the workflow.
 
-- **Prepare release** skipped.
-- **Build** skipped. That is the job that can push, tag, and upload, and it only runs when the ref is `main` and `dry_run` is not set.
-- **Linux dry run** ran with `permissions: contents: read`. It built the tarball and then tried to create a draft release.
-- The create call returned **HTTP 403**. The log line is `DRY_RUN_PUBLISH_BLOCKED http=403`.
+Red proof: the `if` on `Push release commit` lost `&& inputs.dry_run != true`. The suite then failed with `CHECK( StepIsPublishGated(stepBody) ) is NOT correct!` and `step Push release commit`. Restoring the line made that test case pass again (15/15, 2437 assertions).
 
-No tag was pushed, no GitHub release was created, and the appcast workflow did not run. A real release still uses the same Windows and macOS artifact names and signing steps. Those steps are inside the skipped Build job. Linux is an extra matrix entry there, and it uploads `VoLum-<version>-linux-x86_64.tar.gz` only when that job is actually publishing.
+## Dry run
+
+[Release Native 40178867357](https://github.com/guitarlum/VoLum/actions/runs/40178867357) was `workflow_dispatch` on `feature/linux-14-package` with `dry_run=true` only. Head `14d23c14`. A dispatch from another branch with `dry_run` left false still releases `main`.
+
+GitHub Actions rejects `inputs` and `github` inside `permissions`, so the dry run and the real release are two callers of one step list, `.github/workflows/release-build.yml`. That file holds the checkout, the VST3 SDK and prebuilt-lib steps, and the macOS, Windows, and Linux steps.
+
+On this run:
+
+- The write **Prepare release** job was skipped. The read-only one only checked out this ref and exported `publish=false`.
+- The write **Build** job was skipped. The read-only **Build** job ran `release-build.yml`.
+- Unguarded steps ran on `ubuntu-22.04`: checkout, submodules, Get VST3 SDK, Get Prebuilt Libs.
+- macOS and Windows steps were skipped, including **Upload macOS release assets** and **Upload Windows release assets**.
+- **Provision Linux build packages** and **Build Linux tarball** ran.
+- **Upload Linux tarball artifact** uploaded `VoLum-linux-tarball` (74,557,133 bytes).
+- **Upload Linux release asset** was skipped.
+
+No tag was pushed, no GitHub release was created, and the appcast workflow did not run.
+
+## What a real release changes
+
+With `dry_run` false, `prepare_release` still checks out `main`, bumps, commits, pushes, tags, and opens the draft, including when the dispatch was started from `dev`. The macOS and Windows build, verify, and smoke steps are the same commands as before. Their `gh release upload` steps stay, and the added `inputs.publish == true` is true for that path, including a rebuild. A rebuild is still macOS only.
+
+The new pieces are the Linux entry in the matrix (`ubuntu-22.04`, `build-linux`) and **Upload Linux release asset**, which uploads `VoLum-<version>-linux-x86_64.tar.gz`. The workflow token defaults to `contents: read`. The real prepare job and the real Build caller set `contents: write`. The dry-run callers set `contents: read`.
