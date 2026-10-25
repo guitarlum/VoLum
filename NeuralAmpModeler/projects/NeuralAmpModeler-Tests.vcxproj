@@ -182,6 +182,9 @@
     <ClCompile Include="..\tests\test_iplug_app_vector_accumulator.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_shutdown.cpp" />
     <ClCompile Include="..\tests\test_iplug_app_host_policy.cpp" />
+    <ClCompile Include="..\tests\test_iplug_linux_runloop.cpp" />
+    <ClCompile Include="..\tests\test_iplug_app_linux_policy.cpp" />
+    <ClCompile Include="..\tests\test_iplug_linux_dialogs.cpp" />
     <ClCompile Include="..\tests\test_volum_preset_bar.cpp" />
     <ClCompile Include="..\tests\test_volum_factory_presets.cpp" />
     <ClCompile Include="..\tests\test_volum_play.cpp" />

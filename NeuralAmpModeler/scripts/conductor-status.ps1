@@ -185,14 +185,14 @@ if (-not [string]::IsNullOrWhiteSpace($ledger)) {
 
 $effortDir = Split-Path -Parent $loopPath
 $issuesDir = Join-Path $effortDir "issues"
-$claimedRel = "none"
+$claimed = @()
 $ready = @()
 $resolved = 0
 if (Test-Path -LiteralPath $issuesDir) {
   foreach ($t in Get-ChildItem -LiteralPath $issuesDir -Filter "*.md" -File) {
     $st = Get-TicketStatus $t.FullName
     $rel = Get-Rel $t.FullName
-    if ($st -eq "claimed") { $claimedRel = $rel }
+    if ($st -eq "claimed") { $claimed += $rel }
     elseif ($st -eq "ready-for-agent") { $ready += $rel }
     elseif ($st -eq "resolved") { $resolved++ }
   }
@@ -213,7 +213,7 @@ else { foreach ($line in ($goal -split "\r?\n")) { Write-Output ("  {0}" -f $lin
 Write-Output "predicate:"
 if (Test-BlankSection $predicate) { Write-Output "  (missing — AskQuestion; do not invent)" }
 else { foreach ($line in ($predicate -split "\r?\n")) { Write-Output ("  {0}" -f $line) } }
-Write-Output ("claimed: {0}" -f $claimedRel)
+Write-Output ("claimed: {0}" -f $(if ($claimed.Count -gt 0) { $claimed -join ", " } else { "none" }))
 if ($ready.Count -gt 0) {
   Write-Output ("ready_for_agent: {0}" -f ($ready -join ", "))
 }

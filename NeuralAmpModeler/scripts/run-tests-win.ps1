@@ -97,9 +97,11 @@ if (-not $msbuild) {
   Write-Error "MSBuild.exe not found."
 }
 
+. (Join-Path $PSScriptRoot "serial-build.ps1")
+
 if ($Asan) {
   $asanOut = Join-Path $slnDir "build-win\tests-asan"
-  & $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-Tests /p:Configuration=Release /p:Platform=x64 /p:EnableASAN=true "/p:OutDir=$asanOut\" "/p:IntDir=$asanOut\obj\" /m /v:minimal
+  Invoke-SerialBuild $msbuild @("NeuralAmpModeler.sln", "/t:NeuralAmpModeler-Tests", "/p:Configuration=Release", "/p:Platform=x64", "/p:EnableASAN=true", "/p:OutDir=$asanOut\", "/p:IntDir=$asanOut\obj\", "/m", "/v:minimal")
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   $runtime = Get-ChildItem (Join-Path (Split-Path (Split-Path (Split-Path $msbuild))) "..\VC\Tools\MSVC\*\bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll") -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $runtime) { Write-Error "clang_rt.asan_dynamic-x86_64.dll not found next to the MSVC toolset." }
@@ -113,7 +115,7 @@ if ($Asan) {
   exit $LASTEXITCODE
 }
 
-& $msbuild "NeuralAmpModeler.sln" /t:NeuralAmpModeler-Tests /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+Invoke-SerialBuild $msbuild @("NeuralAmpModeler.sln", "/t:NeuralAmpModeler-Tests", "/p:Configuration=Release", "/p:Platform=x64", "/m", "/v:minimal")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $exe = Join-Path $slnDir "build-win\tests\x64\Release\NeuralAmpModeler-Tests.exe"

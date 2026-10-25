@@ -11,6 +11,12 @@
 # `bash -s` with CRs stripped and a sacrificial trailing comment line. The
 # remote command is base64 so a `$` in it is never expanded by PowerShell or
 # by the local ssh argument parser.
+#
+# The build itself runs under `ssh -tt` (`bash /tmp/volum-box-runner-….sh`,
+# not `bash -s` on the pty, which would make bash interactive). A dead local
+# client then SIGHUPs that session, so it cannot keep the build lock. The
+# runner also records its pid; the next run kills a leftover volum-box-runner
+# for the same branch before taking a lock.
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
@@ -61,6 +67,21 @@ function Invoke-BoxBash([string] $script) {
   $script:BoxCode = $LASTEXITCODE
 }
 
+# Write the runner to a file without a tty, then run it as the session leader
+# on a forced tty. `bash -s` on a tty reads the script as an interactive prompt.
+function Invoke-BoxRunner([string] $script, [string] $slugName) {
+  $clean = $script -replace "`r", ""
+  $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($clean))
+  $remotePath = "/tmp/volum-box-runner-$slugName.sh"
+  $payload | & ssh @SshOpts $BoxHost "base64 -d > $remotePath"
+  if ($LASTEXITCODE -ne 0) {
+    $script:BoxCode = $LASTEXITCODE
+    return
+  }
+  & ssh -tt @SshOpts $BoxHost "exec -a volum-box-runner bash $remotePath"
+  $script:BoxCode = $LASTEXITCODE
+}
+
 try {
   & ssh @SshOpts $BoxHost "true"
   $preflight = $LASTEXITCODE
@@ -92,6 +113,36 @@ $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Command))
 $runner = @'
 set -euo pipefail
 export GIT_TERMINAL_PROMPT=0
+ROOT="$HOME/volum-linux"
+# Drop a previous runner for this branch whose SSH client died. Only a process
+# whose argv starts with volum-box-runner; other workers use their own slug.
+SESSION_DIR="$ROOT/locks/sessions"
+mkdir -p "$SESSION_DIR" "$ROOT/wt" "$ROOT/locks" "$ROOT/out" "$ROOT/logs" "$ROOT/tools/bin"
+SESSION_FILE="$SESSION_DIR/@@SLUG@@.pid"
+if [ -f "$SESSION_FILE" ]; then
+  old=$(cat "$SESSION_FILE" || true)
+  if [ -n "$old" ] && [ "$old" != "$$" ] && [ -d "/proc/$old" ]; then
+    cmd=$(tr '\0' ' ' < "/proc/$old/cmdline" || true)
+    case "$cmd" in
+      volum-box-runner*)
+        printf 'box: killing stale session %s\n' "$old" >&2
+        kill -TERM -- "-$old" 2>/dev/null || true
+        kill -TERM "$old" 2>/dev/null || true
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+          [ -d "/proc/$old" ] || break
+          sleep 1
+        done
+        if [ -d "/proc/$old" ]; then
+          kill -KILL -- "-$old" 2>/dev/null || true
+          kill -KILL "$old" 2>/dev/null || true
+        fi
+        ;;
+    esac
+  fi
+fi
+echo $$ > "$SESSION_FILE"
+trap 'rm -f "$SESSION_FILE"' EXIT
+shopt -s huponexit
 ROOT="$HOME/volum-linux"
 REPO="$ROOT/VoLum"
 WT="$ROOT/wt/@@SLUG@@"
@@ -156,7 +207,7 @@ rc=$?
 exit "$rc"
 '@
 $runner = $runner.Replace("@@SLUG@@", $slug).Replace("@@BRANCH@@", $Branch).Replace("@@SHA@@", $Sha).Replace("@@B64@@", $b64)
-Invoke-BoxBash $runner
+Invoke-BoxRunner $runner $slug
 if ($script:BoxCode -eq 255) {
   Write-Host "ssh unreachable: $BoxHost (connection lost during the command)"
   exit 2

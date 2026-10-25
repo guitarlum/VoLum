@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: 05, 06
 
 # 07 IGraphicsLinux core + VST3 X11 view + IRunLoop (ARENA)

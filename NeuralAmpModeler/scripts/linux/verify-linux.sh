@@ -32,6 +32,7 @@ bash NeuralAmpModeler/scripts/run-tests-linux.sh --clang --sanitize
 gates=(
   NeuralAmpModeler/scripts/validate-vst3-linux.sh
   NeuralAmpModeler/scripts/smoke-reaper-linux.sh
+  NeuralAmpModeler/scripts/linux/smoke-hosts-sanitize.sh
   NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh
   NeuralAmpModeler/scripts/e2e-standalone-linux.sh
   NeuralAmpModeler/scripts/linux/real-device-gate.sh

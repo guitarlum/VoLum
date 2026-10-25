@@ -28,3 +28,13 @@ May write:
 
 - Green `linux-package` job and a green dry run of the release leg, with run ids.
 - The tarball installs, launches, and uninstalls cleanly in each container.
+
+## Carried from ticket 10
+
+- **Runtime libraries:** the standalone needs GDK 3 at runtime (SWELL-GDK:
+  libgdk-3, gdk_pixbuf, gobject, glib, cairo) plus libXi. The VST3 must not:
+  check both NEEDED lists, so a GDK dependency creeping into the plug-in fails.
+- `install.sh` names the missing package when the standalone's libraries are
+  absent, and still installs the VST3. The container matrix runs one case
+  without GTK 3 to show it.
+- The spec's linked-libraries list gains the standalone's GDK 3 set.
