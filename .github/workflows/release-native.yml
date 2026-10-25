@@ -42,8 +42,7 @@ jobs:
   prepare_release:
     name: Prepare release
     runs-on: ubuntu-latest
-    permissions:
-      contents: ${{ inputs.dry_run == true && 'read' || 'write' }}
+    permissions: ${{ inputs.dry_run == true && fromJSON('{"contents":"read"}') || fromJSON('{"contents":"write"}') }}
     outputs:
       release_tag: ${{steps.meta.outputs.tag}}
       release_version: ${{steps.meta.outputs.version}}
@@ -157,8 +156,7 @@ jobs:
     name: Build
     needs: prepare_release
     runs-on: ${{matrix.os}}
-    permissions:
-      contents: ${{ inputs.dry_run == true && 'read' || 'write' }}
+    permissions: ${{ inputs.dry_run == true && fromJSON('{"contents":"read"}') || fromJSON('{"contents":"write"}') }}
     strategy:
       # A release is shipped as a single multi-platform unit. Aborting the other
       # leg on the first failure avoids uploading a half-broken release.

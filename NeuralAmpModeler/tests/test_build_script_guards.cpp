@@ -395,7 +395,8 @@ TEST_CASE("release publish steps stay closed unless the dry run is off")
   CHECK(workflow.find("linux_dry_run") == std::string::npos);
   CHECK(workflow.find("-X POST") == std::string::npos);
   CHECK(workflow.find("github.ref != 'refs/heads/main'") == std::string::npos);
-  CHECK(workflow.find("inputs.dry_run == true && 'read'") != std::string::npos);
+  CHECK(workflow.find("{\"contents\":\"read\"}") != std::string::npos);
+  CHECK(workflow.find("{\"contents\":\"write\"}") != std::string::npos);
 
   std::vector<std::string> lines;
   std::string cur;
