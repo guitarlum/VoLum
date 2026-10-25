@@ -76,22 +76,32 @@ static int ForEachNamed(Display* d, const char* name, int close)
   return found;
 }
 
-// Largest viewable descendant, so a click lands on the editor rather than the frame.
+// Deepest viewable descendant that is large enough to be the editor. A same-size
+// wrapper sits above the plug-in window; sending keys to the wrapper never
+// reaches it, because XSendEvent propagates to ancestors, not children.
 static Window LargestChild(Display* d, Window top, int* ox, int* oy, unsigned int* ow, unsigned int* oh)
 {
-  Window stack[64];
+  typedef struct
+  {
+    Window w;
+    int depth;
+  } Node;
+  Node stack[64];
   int n = 0;
-  stack[n++] = top;
+  stack[n].w = top;
+  stack[n].depth = 0;
+  n++;
   Window best = 0;
   unsigned int bestArea = 0;
+  int bestDepth = -1;
   int bx = 0, by = 0;
   unsigned int bw = 0, bh = 0;
   while (n > 0)
   {
-    Window w = stack[--n];
+    Node node = stack[--n];
     Window root, parent, *children = NULL;
     unsigned int count = 0;
-    if (!XQueryTree(d, w, &root, &parent, &children, &count))
+    if (!XQueryTree(d, node.w, &root, &parent, &children, &count))
       continue;
     for (unsigned int i = 0; i < count; ++i)
     {
@@ -99,12 +109,20 @@ static Window LargestChild(Display* d, Window top, int* ox, int* oy, unsigned in
       if (!XGetWindowAttributes(d, children[i], &attrs) || attrs.map_state != IsViewable)
         continue;
       if (n < 64)
-        stack[n++] = children[i];
+      {
+        stack[n].w = children[i];
+        stack[n].depth = node.depth + 1;
+        n++;
+      }
+      if (attrs.width < 800 || attrs.height < 500)
+        continue;
       const unsigned int area = (unsigned int)attrs.width * (unsigned int)attrs.height;
-      if (area > bestArea)
+      const int depth = node.depth + 1;
+      if (depth > bestDepth || (depth == bestDepth && area > bestArea))
       {
         best = children[i];
         bestArea = area;
+        bestDepth = depth;
         bx = attrs.x;
         by = attrs.y;
         bw = (unsigned int)attrs.width;
@@ -149,10 +167,11 @@ static int SendKey(Display* d, Window w, const char* name, int shift)
   ev.y = y;
   ev.x_root = x;
   ev.y_root = y;
+  XSetInputFocus(d, w, RevertToParent, CurrentTime);
   ev.type = KeyPress;
-  XSendEvent(d, w, True, KeyPressMask, (XEvent*)&ev);
+  XSendEvent(d, w, False, KeyPressMask, (XEvent*)&ev);
   ev.type = KeyRelease;
-  XSendEvent(d, w, True, KeyReleaseMask, (XEvent*)&ev);
+  XSendEvent(d, w, False, KeyReleaseMask, (XEvent*)&ev);
   XFlush(d);
   return 0;
 }
