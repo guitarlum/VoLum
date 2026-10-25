@@ -232,6 +232,15 @@ TEST_CASE("POST carries a fourth Chorus card wired to the Throat motif")
   RequireContains(motifs, "effect == EVoLumEffectFocus::CHORUS");
 }
 
+TEST_CASE("Linux GL2 loads the same heavier Josefin weights as Windows")
+{
+  const std::string build = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumLayoutBuild.inc.cpp");
+  RequireContains(build, "#if defined(OS_WIN) || defined(OS_LINUX)");
+  RequireContains(build, "pGraphics->LoadFont(\"Josefin-Bold\", JOSEFINSANS_BOLD_HEAVY_FN);");
+  // macOS stays on the lighter pair.
+  RequireContains(build, "pGraphics->LoadFont(\"Josefin-Sans\", JOSEFINSANS_FN);");
+}
+
 TEST_CASE("NAM fusion art draws the new figure and keeps the legacy one behind VOLUM_NAM_ART_LEGACY")
 {
   const std::string motifs = ReadText(RepoRoot() / "NeuralAmpModeler" / "VoLumTriptychMotifs.h");
