@@ -123,21 +123,21 @@ unlock_gui() {
 end_session() {
   [[ "$SESSION" == 1 ]] || return 0
   SESSION=0
-  if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" 2>/dev/null; then
+  # Kill, don't wait. A sender or jackd that ignores SIGTERM used to sit in
+  # wait until the CI job's guest timeout, after every MIDI check had passed.
+  if [[ -n "${APP_PID:-}" ]] && kill -0 "$APP_PID" 2>/dev/null; then
     kill -9 "$APP_PID" 2>/dev/null || true
-    wait "$APP_PID" 2>/dev/null || true
   fi
   APP_PID=""
-  if [[ -n "$JACK_PID" ]]; then
-    kill "$JACK_PID" 2>/dev/null || true
-    wait "$JACK_PID" 2>/dev/null || true
+  if [[ -n "${JACK_PID:-}" ]]; then
+    kill -9 "$JACK_PID" 2>/dev/null || true
   fi
   JACK_PID=""
-  if [[ -n "$XVFB_PID" ]]; then
-    kill "$XVFB_PID" 2>/dev/null || true
-    wait "$XVFB_PID" 2>/dev/null || true
+  if [[ -n "${XVFB_PID:-}" ]]; then
+    kill -9 "$XVFB_PID" 2>/dev/null || true
   fi
   XVFB_PID=""
+  disown -a 2>/dev/null || true
   unlock_gui
 }
 
@@ -1046,9 +1046,11 @@ print(json.load(open(sys.argv[1])).get("midiCh",""))
 PY
 )
   check_eq "[one channel 2] One channel = 2 survives the quit" 2 "$mch"
+  # The sender blocks in fgets until its fifo writer closes. Closing that fd
+  # and waiting reaped it on the desktop and hung the guest, after the checks.
+  kill -9 "$midi_pid" 2>/dev/null || true
   exec 8>&- || true
-  kill "$midi_pid" 2>/dev/null || true
-  wait "$midi_pid" 2>/dev/null || true
+  disown "$midi_pid" 2>/dev/null || disown -a 2>/dev/null || true
   end_session
 }
 

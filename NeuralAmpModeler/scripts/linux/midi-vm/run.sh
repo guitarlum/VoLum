@@ -120,7 +120,7 @@ write_files:
       mount "$(blkid -L VOLUM_OUT)" /mnt/out
       rc=1
       if [[ -f /mnt/out/payload/guest-run.sh ]]; then
-        bash /mnt/out/payload/guest-run.sh 2>&1 | tee -a /dev/ttyS0 /mnt/out/guest.log
+        bash /mnt/out/payload/guest-run.sh 2>&1 | tee /mnt/out/guest.log
         rc=${PIPESTATUS[0]}
       else
         log "VOLUM_MIDI_VM_GUEST_FAIL guest-run.sh missing"
