@@ -32,11 +32,11 @@ DROP=0
 PRIVATE=0
 SELF_TEST=0
 
-# Fixed from the private null-sink calibration on 2026-10-25 (15 s, gain
-# 1.0002, residual peak -76.57 dBFS, rms -82.40, 0 dropout samples). -40 is
-# looser than that peak and still under a dropped buffer, which lands near
-# -24 dBFS. It is not fitted per run. Dropout samples use a fixed ratio.
-NULL_PEAK_DB=-40
+# Fixed from the Babyface calibration on 2026-10-25 (20 s, gain 2.0000,
+# residual peak -75.24 dBFS, rms -86.68, 0 dropout samples). -60 is 15 dB
+# looser than that peak and still far under a dropped buffer, which lands
+# near -24 dBFS. It is not fitted per run. Dropout samples use a fixed ratio.
+NULL_PEAK_DB=-60
 DROPOUT_LIMIT=32
 
 while [[ $# -gt 0 ]]; do
