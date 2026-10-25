@@ -750,6 +750,62 @@ jobs:
           path: ${{ runner.temp }}/volum-e2e-linux
           if-no-files-found: warn
 
+  linux-package:
+    name: Linux package
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
+
+      - name: Get VST3 SDK
+        run: |
+          cd iPlug2/Dependencies/IPlug
+          ./download-vst3-sdk.sh master
+        shell: bash
+
+      - name: Provision Linux CI packages
+        run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci
+        shell: bash
+
+      - name: Package the tarball (g++-12)
+        run: |
+          export JOBS="$(nproc)"
+          bash NeuralAmpModeler/scripts/makedist-linux.sh --build
+        env:
+          CC: gcc-12
+          CXX: g++-12
+        shell: bash
+
+      - name: Upload Linux tarball (VoLum-linux-tarball)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-linux-tarball
+          path: build-linux/out/VoLum-*-linux-x86_64.tar.gz
+
+      - name: Portability matrix
+        run: |
+          tarball="$(echo build-linux/out/VoLum-*-linux-x86_64.tar.gz)"
+          bash NeuralAmpModeler/scripts/linux/package-matrix.sh \
+            --tarball "$tarball" \
+            --validator build-linux/validator
+        shell: bash
+
+      - name: Upload package matrix logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-linux-package-logs
+          path: build-linux/package-matrix/
+          if-no-files-found: warn
+
   coverage:
     name: Coverage report (VoLum + AudioDSPTools, non-blocking)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=VoLum
+GenericName=Guitar amplifier
+Comment=Neural amp modeler
+Exec=VoLum
+Icon=volum
+Terminal=false
+Categories=AudioVideo;Audio;
+StartupWMClass=VoLum
