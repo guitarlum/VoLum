@@ -64,6 +64,9 @@ macOS golden hash sets must not change.
   - Static libstdc++ and libgcc.
   - JACK, Pulse and curl are loaded at runtime (`dlopen` or weak link); ALSA,
     X11 and GL are linked.
+  - The standalone also links GDK 3 for SWELL (`libgdk-3.so.0`,
+    `libgdk_pixbuf-2.0.so.0`, `libgobject-2.0.so.0`, `libglib-2.0.so.0`,
+    `libcairo.so.2`) and `libXi.so.6`. The VST3 does not link those.
   - The VST3 bundle layout is `VoLum.vst3/Contents/x86_64-linux/VoLum.so` plus
     `Contents/Resources`.
 - **Golden DSP:** a Linux-specific expected hash set is pre-authorized. It is
