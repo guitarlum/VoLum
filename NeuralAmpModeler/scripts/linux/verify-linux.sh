@@ -39,10 +39,21 @@ gates=(
   NeuralAmpModeler/scripts/linux/ui-scenes.sh
 )
 
+# The Babyface route needs the owner's TotalMix loopback and Windows defaults, so
+# the repeatable run nulls the same app-to-Pulse path on a private null sink.
+# VOLUM_BABYFACE=1 runs it on the real device instead (ticket 12 report).
+gate_args() {
+  if [[ "$1" == */real-device-gate.sh && "${VOLUM_BABYFACE:-0}" != "1" ]]; then
+    echo "--private"
+  fi
+}
+
 for gate in "${gates[@]}"; do
   if [[ -f "$REPO_ROOT/$gate" ]]; then
-    echo "linux gate: $gate"
-    bash "$REPO_ROOT/$gate"
+    args="$(gate_args "$gate")"
+    echo "linux gate: $gate $args"
+    # shellcheck disable=SC2086
+    bash "$REPO_ROOT/$gate" $args
   elif [[ "$FINAL" == "1" ]]; then
     echo "missing gate: $gate" >&2
     exit 1
