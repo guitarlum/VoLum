@@ -26,9 +26,9 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
   pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
   pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
   pGraphics->LoadFont("Poiret-One", POIRETONE_FN);
-#ifdef OS_WIN
-  // NanoVG/GL2 on Windows renders these small Josefin caps thinner than macOS/Metal,
-  // so load one weight heavier there to match the macOS readability.
+#if defined(OS_WIN) || defined(OS_LINUX)
+  // NanoVG/GL2 renders these small Josefin caps thinner than macOS/Metal,
+  // so Windows and Linux (the same GL2 path) load one weight heavier.
   pGraphics->LoadFont("Josefin-Sans", JOSEFINSANS_BOLD_FN);
   pGraphics->LoadFont("Josefin-Bold", JOSEFINSANS_BOLD_HEAVY_FN);
 #else

@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Blocked by: 09, 10
 
 # 13 UI acceptance on Linux
