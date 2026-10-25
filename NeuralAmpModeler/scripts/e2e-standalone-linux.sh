@@ -32,13 +32,15 @@ ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 APP="$ROOT/build-linux/standalone/VoLum"
 OUT=""
 SCENARIO="all"
+REQUIRE_MIDI=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --app) APP="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --scenario) SCENARIO="$2"; shift 2 ;;
-    *) echo "usage: $0 [--app PATH] [--out DIR] [--scenario NAME]" >&2; exit 2 ;;
+    --require-midi) REQUIRE_MIDI=1; shift ;;
+    *) echo "usage: $0 [--app PATH] [--out DIR] [--scenario NAME] [--require-midi]" >&2; exit 2 ;;
   esac
 done
 
@@ -55,6 +57,7 @@ done
 CHECKS=0
 FAILED=0
 FAILURES=""
+SKIPS=""
 PREFILL="0:factory:12:factory:12:v1|1:factory:13:factory:13:v2|2:factory:6:factory:6:v1|3:factory:8:factory:8:v1|4:factory:0:factory:0:v2"
 
 check() {
@@ -74,6 +77,11 @@ check_eq() {
 }
 
 want() { [[ "$SCENARIO" == "all" || "$SCENARIO" == "$1" ]]; }
+
+skip() {
+  echo "  SKIP  [$LEG] $1 - $2"
+  SKIPS="${SKIPS}- [$LEG] $1: $2"$'\n'
+}
 
 # --- session: Xvfb, jackd dummy, sandbox library ---------------------------
 
@@ -835,7 +843,16 @@ scenario_midi() {
   echo ""
   echo "[midi] Program Change and CC 102 through an ALSA virtual port"
   if ! ensure_seq; then
-    check "ALSA sequencer /dev/snd/seq is present" 0 "snd-seq and snd-virmidi did not load"
+    # Same shape as the Windows harness when loopMIDI is absent: a missing port
+    # is a skip, and --require-midi makes it a failure. The WSL kernel is built
+    # with CONFIG_SND_SEQUENCER unset, and the GitHub azure image has no snd-seq
+    # module even after linux-modules-extra.
+    local why="no /dev/snd/seq (snd-seq did not load; this kernel has no sequencer module)"
+    if [[ "${REQUIRE_MIDI:-0}" == 1 ]]; then
+      check "ALSA sequencer /dev/snd/seq is present" 0 "$why"
+    else
+      skip "Program Change and CC 102 recall" "$why"
+    fi
     return
   fi
   check "ALSA sequencer /dev/snd/seq is present" 1
@@ -1433,6 +1450,10 @@ want dialog-import && scenario_dialog_import
 want dialog-builder && scenario_dialog_builder
 
 echo ""
+if [[ -n "$SKIPS" ]]; then
+  echo "SKIPS"
+  printf '%s' "$SKIPS"
+fi
 if [[ "$FAILED" -eq 0 ]]; then
   echo "ALL PASS  $CHECKS checks"
   exit 0
