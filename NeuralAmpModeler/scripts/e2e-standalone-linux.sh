@@ -813,6 +813,17 @@ ensure_seq() {
   [[ -e /dev/snd/seq ]] && return 0
   if sudo -n true 2>/dev/null; then
     sudo -n modprobe snd-seq 2>/dev/null || true
+    if [[ ! -e /dev/snd/seq ]]; then
+      # GitHub's azure kernel ships snd-seq in linux-modules-extra, not the
+      # base modules package. A kernel built with CONFIG_SND_SEQUENCER unset
+      # (the WSL kernel on the box) still has nothing to load.
+      local extra="linux-modules-extra-$(uname -r)"
+      if apt-cache show "$extra" >/dev/null 2>&1; then
+        sudo -n apt-get install -y --no-install-recommends "$extra" || true
+        sudo -n depmod -a || true
+        sudo -n modprobe snd-seq 2>/dev/null || true
+      fi
+    fi
     sudo -n modprobe snd-virmidi 2>/dev/null || true
     if [[ -e /dev/snd/seq ]]; then sudo -n chmod a+rw /dev/snd/seq || true; fi
   fi
@@ -1040,6 +1051,7 @@ scenario_preferences() {
     sleep 0.1
   done
   check "Preferences dialog opened" "$([[ -n "$pref" ]] && echo 1 || echo 0)"
+  sleep 0.6
   local drivers=0
   if wait_log "Preferences drivers: .*JACK" 8; then drivers=1; fi
   check "log lists JACK among Preferences drivers" "$drivers"
@@ -1050,7 +1062,12 @@ scenario_preferences() {
   local ocr=""
   if [[ -f "$SESS/preferences.png" ]]; then
     ocr=$(tesseract "$SESS/preferences.png" stdout --psm 6 2>/dev/null || true)
+    if ! printf '%s\n' "$ocr" | grep -a -q "JACK"; then
+      convert "$SESS/preferences.png" -resize 200% "$SESS/preferences-big.png" 2>/dev/null || true
+      ocr+=$'\n'"$(tesseract "$SESS/preferences-big.png" stdout --psm 6 2>/dev/null || true)"
+    fi
     printf '%s\n' "$ocr" >"$SESS/preferences.txt"
+    echo "  preferences ocr: $(printf '%s\n' "$ocr" | tr '\n' ' ')"
   fi
   local saw_jack=0 saw_system=0
   if printf '%s\n' "$ocr" | grep -a -q "JACK"; then saw_jack=1; fi

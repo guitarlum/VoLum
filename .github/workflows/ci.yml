@@ -675,9 +675,12 @@ jobs:
 
       - name: ALSA sequencer for MIDI recall
         run: |
+          sudo apt-get install -y --no-install-recommends "linux-modules-extra-$(uname -r)" || true
+          sudo depmod -a || true
           sudo modprobe snd-seq || true
           if [[ -e /dev/snd/seq ]]; then sudo chmod a+rw /dev/snd/seq || true; fi
           ls -l /dev/snd || true
+          find "/lib/modules/$(uname -r)" -name 'snd-seq.ko*' | head
         shell: bash
 
       - name: Standalone end-to-end scenarios
