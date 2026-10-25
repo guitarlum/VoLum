@@ -220,6 +220,8 @@ ALSA
   DATA="$XDG_DATA_HOME/VoLum"
   mkdir -p "$DATA"
   LOG="$DATA/volum.log"
+  # driver=1 / outdev=system selects the dummy JACK server. It is not evidence
+  # that the app chose that device: a check has to read what the app wrote back.
   cat >"$DATA/settings.ini" <<'INI'
 [audio]
 driver=1
@@ -1057,6 +1059,10 @@ scenario_preferences() {
   if printf '%s\n' "$listed" | grep -a -q "system"; then has_system=1; fi
   check "--list-audio-devices lists JACK" "$has_jack"
   check "--list-audio-devices lists the dummy device system" "$has_system"
+  # The seed already says driver=1 / outdev=system. Snapshot it so the check
+  # after quit can tell the app's rewrite from the bytes this script planted.
+  cp "$DATA/settings.ini" "$SESS/settings.seed"
+  log_mark
   launch --preferences
   local id
   id=$(wait_gfx || true)
@@ -1094,9 +1100,20 @@ scenario_preferences() {
   local rc
   quit_app term; rc=$APP_RC
   check_eq "SIGTERM while Preferences is open quits with exit 0" 0 "$rc"
-  local ini_jack=0
-  if [[ -f "$DATA/settings.ini" ]] && grep -a -q "^driver=1" "$DATA/settings.ini" && grep -a -q "^outdev=system" "$DATA/settings.ini"; then ini_jack=1; fi
-  check "settings.ini still names the JACK system device" "$ini_jack"
+  # Grepping the seed stays green when the combo label is renamed to "Jack":
+  # driver=1 does not contain the label. The app logs the label it put in the
+  # combo ("Preferences drivers: ...") and rewrites settings.ini on the way out.
+  local drivers_line label_jack=0 rewritten=0 ini_dev=0 ini_jack=0
+  drivers_line=$(log_since | grep -a "Preferences drivers:" || true)
+  if printf '%s\n' "$drivers_line" | grep -a -w -q "JACK"; then label_jack=1; fi
+  # UpdateINI adds the midi section and in2, which the seed does not have, so a
+  # byte-identical file means the process never wrote it back.
+  if [[ -f "$DATA/settings.ini" && -f "$SESS/settings.seed" ]] && ! cmp -s "$DATA/settings.ini" "$SESS/settings.seed"; then
+    rewritten=1
+  fi
+  if [[ -f "$DATA/settings.ini" ]] && grep -a -q "^outdev=system$" "$DATA/settings.ini"; then ini_dev=1; fi
+  if [[ $label_jack == 1 && $rewritten == 1 && $ini_dev == 1 ]]; then ini_jack=1; fi
+  check "settings.ini still names the JACK system device" "$ini_jack" "drivers='$(printf '%s' "$drivers_line" | tr '\n' ' ')' rewritten=$rewritten outdev=$ini_dev"
   check "volum-settings.json persisted" "$([[ -f "$DATA/volum-settings.json" ]] && echo 1 || echo 0)"
   end_session
 }
@@ -1245,7 +1262,10 @@ scenario_dialog_open() {
     local ae
     ae=$(compare -metric AE "$SESS/before-open.png" "$SESS/after-open.png" null: 2>&1 || true)
     echo "  open overlay AE=$ae"
-    if [[ "${ae%% *}" -gt 200 ]]; then differ=1; fi
+    # The Import click without an overlay is menu flicker, measured at 7377.
+    # The pack overlay covers most of the window, measured at about 530k.
+    # 100000 is between them, so flicker cannot pass this check.
+    if [[ "${ae%% *}" -gt 100000 ]]; then differ=1; fi
   fi
   check "the import screen is showing" "$differ"
   quit_app term >/dev/null
@@ -1378,7 +1398,6 @@ scenario_dialog_builder() {
   done
   sleep 0.6
   shot "$SESS/builder-added.png"
-  check "zenity returned the .nam" "$listed"
   local ae=0 differ=0
   if [[ -f "$SESS/builder-empty.png" && -f "$SESS/builder-added.png" ]]; then
     convert "$SESS/builder-empty.png" -crop 400x40+70+180 "$SESS/row-empty.png" 2>/dev/null || true
@@ -1398,6 +1417,10 @@ scenario_dialog_builder() {
   fi
   local saw=0
   if printf '%s\n' "$ocr" | grep -a -E -q "E2E|V30"; then saw=1; fi
+  # tools.log only proves the fake ran. A completion that returns before it
+  # applies the path still logs TOOL zenity. The draft has to name that .nam.
+  if [[ "$saw" != 1 ]]; then listed=0; fi
+  check "zenity returned the .nam" "$listed" "draft=$(printf '%s' "$ocr" | tr '\n' ' ')"
   check "the draft row changed" "$differ"
   check "the draft lists V30-E2E-1.nam" "$saw" "$ocr"
   quit_app term >/dev/null
