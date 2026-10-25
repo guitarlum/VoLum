@@ -198,6 +198,7 @@ drive() {
           else
             "$XTOOL" key "$child" "$tok"
           fi
+          sleep 0.08
         done
         ;;
       click)
