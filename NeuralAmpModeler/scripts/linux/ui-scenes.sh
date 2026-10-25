@@ -188,7 +188,17 @@ drive() {
     rest=${spec#* }
     case "$op" in
       key)
-        xdotool key --window "$child" "$rest"
+        "$XTOOL" key "$child" "$rest"
+        ;;
+      keys)
+        local tok
+        for tok in $rest; do
+          if [[ "$tok" == shift+* ]]; then
+            "$XTOOL" key "$child" "${tok#shift+}" shift
+          else
+            "$XTOOL" key "$child" "$tok"
+          fi
+        done
         ;;
       click)
         a=${rest%% *}
@@ -208,10 +218,6 @@ drive() {
         ;;
       type)
         xdotool type --window "$child" --delay 20 "$rest"
-        ;;
-      keys)
-        # shellcheck disable=SC2086
-        xdotool key --window "$child" --delay 30 $rest
         ;;
       backs)
         xdotool key --window "$child" --repeat "$rest" BackSpace

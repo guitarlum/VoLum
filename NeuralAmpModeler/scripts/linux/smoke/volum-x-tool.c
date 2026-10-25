@@ -121,6 +121,42 @@ static Window LargestChild(Display* d, Window top, int* ox, int* oy, unsigned in
   return best;
 }
 
+static int SendKey(Display* d, Window w, const char* name, int shift)
+{
+  KeySym ks = XStringToKeysym(name);
+  if (!ks)
+    return 1;
+  KeyCode kc = XKeysymToKeycode(d, ks);
+  if (!kc)
+    return 1;
+  XWindowAttributes attrs;
+  int x = 1, y = 1;
+  if (XGetWindowAttributes(d, w, &attrs))
+  {
+    x = attrs.width / 2;
+    y = attrs.height / 2;
+  }
+  XKeyEvent ev;
+  memset(&ev, 0, sizeof(ev));
+  ev.display = d;
+  ev.window = w;
+  ev.root = DefaultRootWindow(d);
+  ev.keycode = kc;
+  ev.state = shift ? ShiftMask : 0;
+  ev.time = CurrentTime;
+  ev.same_screen = True;
+  ev.x = x;
+  ev.y = y;
+  ev.x_root = x;
+  ev.y_root = y;
+  ev.type = KeyPress;
+  XSendEvent(d, w, True, KeyPressMask, (XEvent*)&ev);
+  ev.type = KeyRelease;
+  XSendEvent(d, w, True, KeyReleaseMask, (XEvent*)&ev);
+  XFlush(d);
+  return 0;
+}
+
 int main(int argc, char** argv)
 {
   Display* d = XOpenDisplay(NULL);
@@ -174,6 +210,17 @@ int main(int argc, char** argv)
       XFree(children);
     return 1;
   }
-  fprintf(stderr, "usage: volum-x-tool wait <name> <s> | close <name> | child <name>\n");
+  if (argc >= 4 && !strcmp(argv[1], "key"))
+  {
+    Window w = (Window)strtoul(argv[2], NULL, 10);
+    const int shift = argc >= 5 && !strcmp(argv[4], "shift");
+    if (SendKey(d, w, argv[3], shift))
+    {
+      fprintf(stderr, "volum-x-tool: unknown key %s\n", argv[3]);
+      return 1;
+    }
+    return 0;
+  }
+  fprintf(stderr, "usage: volum-x-tool wait <name> <s> | close <name> | child <name> | key <id> <keysym> [shift]\n");
   return 2;
 }
