@@ -314,7 +314,7 @@ EOF
 
 quit_app() {
   local how="${1:-term}"
-  [[ -n "$APP_PID" ]] || { echo hung; return 0; }
+  [[ -n "$APP_PID" ]] || { APP_RC=hung; return 0; }
   case "$how" in
     term) kill -TERM "$APP_PID" 2>/dev/null || true ;;
     term2)
@@ -333,13 +333,14 @@ quit_app() {
     kill -9 "$APP_PID" 2>/dev/null || true
     wait "$APP_PID" 2>/dev/null || true
     APP_PID=""
-    echo hung
+    APP_RC=hung
     return 0
   fi
-  local rc=0
-  wait "$APP_PID" || rc=$?
+  # wait has to run in this shell. A command substitution would be a subshell,
+  # and that subshell is not the parent of the app.
+  APP_RC=0
+  wait "$APP_PID" || APP_RC=$?
   APP_PID=""
-  echo "$rc"
 }
 
 wait_log() {
@@ -409,7 +410,7 @@ scenario_fresh() {
   check "app opened a window" "$([[ -n "$id" ]] && echo 1 || echo 0)"
   sleep 2
   local rc
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "SIGTERM quits with exit 0" 0 "$rc"
   check "volum-settings.json written" "$([[ -f "$DATA/volum-settings.json" ]] && echo 1 || echo 0)"
   check "volum.log written" "$([[ -f "$LOG" ]] && echo 1 || echo 0)"
@@ -468,7 +469,7 @@ PY
   id=$(wait_gfx || true)
   check "relaunch with a cleared board opened" "$([[ -n "$id" ]] && echo 1 || echo 0)"
   sleep 1
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "relaunch with a cleared board closed" 0 "$rc"
   local cleared
   cleared=$(json_py "$DATA/content/volum-content.json" <<'PY'
@@ -519,7 +520,7 @@ PY
   check "seeded launch opened" "$([[ -n "$id" ]] && echo 1 || echo 0)"
   sleep 2
   local rc
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "seeded launch closed" 0 "$rc"
   local after
   after=$(python3 -c 'import os,sys; print(os.stat(sys.argv[1]).st_mtime_ns)' "$DATA/volum-settings.json")
@@ -550,7 +551,7 @@ PY
   click_at 803 175 0.8
   shot "$SESS/preset-switch.png"
   sleep 0.5
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "preset-switch launch closed" 0 "$rc"
   local slot active
   slot=$(json_py "$DATA/volum-settings.json" <<'PY'
@@ -590,7 +591,7 @@ PY
   sleep 2
   click_at 80 172 0.8
   shot "$SESS/amp-switch.png"
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "amp-switch launch closed" 0 "$rc"
   local amp
   amp=$(json_py "$DATA/volum-settings.json" <<'PY'
@@ -644,7 +645,7 @@ scenario_pack() {
   if log_since | grep -a -q "export wrote "; then wrote=1; fi
   check "log line is export wrote" "$wrote"
   local rc
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "export launch closed" 0 "$rc"
   LAUNCH_ENV=()
   local zipok=0
@@ -677,7 +678,7 @@ INI
   local opened=0
   if wait_log "opened " 8; then opened=1; fi
   check "log line is opened" "$opened"
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "import launch closed" 0 "$rc"
   LAUNCH_ENV=()
   end_session
@@ -738,7 +739,7 @@ import_batch() {
   click_at 450 175 1.2
   shot "$SESS/import-$kind.png"
   local rc
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "[$kind] app closed" 0 "$rc"
   LAUNCH_ENV=()
   local count names uniq
@@ -944,7 +945,7 @@ PY
   if wait_log "recall slot=101 amp=factory:13 preset=factory:13:v2" 6; then ok=1; fi
   check "a burst ends on program 101" "$ok" "$(log_since | tr '\n' ' ')"
   local rc
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "app closed gracefully with the MIDI port open" 0 "$rc"
   local saved
   saved=$(json_py "$DATA/volum-settings.json" <<'PY'
@@ -985,7 +986,7 @@ PY
   ok=0
   if wait_log "recall slot=42 amp=factory:0 preset=factory:0:v2" 6; then ok=1; fi
   check "[one channel 2] channel-2 Program Change 42 recalls program 42" "$ok"
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "[one channel 2] app closed" 0 "$rc"
   local mch
   mch=$(json_py "$DATA/volum-settings.json" <<'PY'
@@ -1042,7 +1043,7 @@ scenario_preferences() {
   check "Preferences dialog shows JACK" "$saw_jack"
   check "Preferences dialog shows the dummy device system" "$saw_system"
   local rc
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "SIGTERM while Preferences is open quits with exit 0" 0 "$rc"
   local ini_jack=0
   if [[ -f "$DATA/settings.ini" ]] && grep -a -q "^driver=1" "$DATA/settings.ini" && grep -a -q "^outdev=system" "$DATA/settings.ini"; then ini_jack=1; fi
@@ -1062,7 +1063,7 @@ scenario_shutdown() {
   check "app opened a window" "$([[ -n "$id" ]] && echo 1 || echo 0)"
   sleep 2
   local rc
-  rc=$(quit_app term)
+  quit_app term; rc=$APP_RC
   check_eq "SIGTERM exits 0" 0 "$rc"
   local audio=0 plugin=0
   if [[ -f "$LOG" ]] && grep -a -q "audio teardown complete" "$LOG"; then audio=1; fi
@@ -1075,7 +1076,7 @@ scenario_shutdown() {
   id=$(wait_gfx || true)
   check "second launch opened" "$([[ -n "$id" ]] && echo 1 || echo 0)"
   sleep 1
-  rc=$(quit_app term2)
+  quit_app term2; rc=$APP_RC
   check_eq "a second SIGTERM exits at once with code 3" 3 "$rc"
   end_session
 }
