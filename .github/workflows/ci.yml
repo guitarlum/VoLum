@@ -55,8 +55,12 @@ jobs:
             BASE="${{ github.event.pull_request.base.sha }}"
           else
             BASE="${{ github.event.before }}"
+            # A dispatch or a new branch has no previous push: check everything since dev.
             if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
-              BASE="HEAD^"
+              BASE="$(git merge-base origin/dev HEAD)"
+              if [[ "$BASE" == "$(git rev-parse HEAD)" ]]; then
+                BASE="HEAD^"
+              fi
             fi
           fi
           mapfile -t files < <(git diff --name-only --diff-filter=ACMRT "$BASE" "${{ github.sha }}" -- '*.h' '*.cpp' \
