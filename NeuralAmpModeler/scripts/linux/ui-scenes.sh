@@ -458,7 +458,10 @@ prove_shift() {
 }
 
 host_keys() {
-  local tag="keys" 
+  # pass: the host log must contain a down. fail: that line must be absent,
+  # which is what --red expects after the XSendEvent forward is removed.
+  local expect="${1:-pass}"
+  local tag="keys"
   XDG="$OUT/xdg-$tag"
   DATA="$XDG/VoLum"
   seed_data "$DATA" ""
@@ -491,10 +494,32 @@ host_keys() {
   echo "  forward log: $(grep -a . "$fwd" 2>/dev/null | tr '\n' ' ')"
   echo "  host log: $(grep -a . "$hostlog" 2>/dev/null | tr '\n' ' ')"
   if grep -a -q '^down ' "$hostlog"; then
-    pass "unhandled q reached the standalone window"
+    if [[ "$expect" == fail ]]; then
+      fail "unhandled q still reached the host with the forward removed"
+    else
+      pass "unhandled q reached the standalone window"
+    fi
   else
-    fail "unhandled q did not reach the standalone window"
+    if [[ "$expect" == fail ]]; then
+      pass "unhandled q is red when the forward is removed"
+    else
+      fail "unhandled q did not reach the standalone window"
+    fi
   fi
+}
+
+prove_key_red() {
+  local gfx="$ROOT/iPlug2/IGraphics/Platforms/IGraphicsLinux.cpp"
+  local old='      XSendEvent(mDisplay, mParentWnd, kFalse, 0, &forward);'
+  local new='      (void)forward;'
+  mutate_once "$gfx" "$old" "$new" || { fail "key red could not edit the forward"; return; }
+  if ! rebuild_target VoLum-app; then
+    fail "key red rebuild"
+    return
+  fi
+  host_keys fail
+  restore_red
+  rebuild_target VoLum-app || fail "key red restore rebuild"
 }
 
 write_reaper_lua() {
@@ -995,13 +1020,16 @@ case "$MODE" in
     [[ -n "$OUT" ]] || OUT=$(mktemp -d /tmp/volum-ui-scenes.XXXXXX)
     echo "ui-scenes out $OUT"
     start_display
-    prove_shift "${RED_MAIN_REF:-$HOME/volum-linux/out/13/scenes/main-s1.png}"
+    prove_shift "${RED_MAIN_REF:-$ROOT/NeuralAmpModeler/tests/linux-ui-refs/main-s1.png}"
     prove_meter_red
     host_red
-    if git -C "$ROOT" diff --exit-code -- NeuralAmpModeler/VoLumLayoutBuild.inc.cpp NeuralAmpModeler/VoLumCustomOverlay.h >/dev/null; then
+    prove_key_red
+    if git -C "$ROOT" diff --quiet && git -C "$ROOT/iPlug2" diff --quiet; then
       pass "red proofs restored the source"
     else
       fail "red proofs left the source dirty"
+      git -C "$ROOT" diff --stat
+      git -C "$ROOT/iPlug2" diff --stat
     fi
     ;;
   *)

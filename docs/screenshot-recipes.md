@@ -329,5 +329,6 @@ call this script.
 REAPER's saved project chunk records a preset-menu Default reset, and that a
 name typed into the custom-amp field is in the content store. `--red` proves
 each of those fails when the source is broken: it edits the sidebar rect, the
-Default handler, or `StartTextEntry` in place, rebuilds, expects the gate to
-fail, and restores the file on every exit.
+meter update, the Default handler, `StartTextEntry`, or the `XSendEvent` key
+forward in place, rebuilds, expects the gate to fail, and restores every file
+on exit. The shift is scored against `tests/linux-ui-refs/main-s1.png`.
