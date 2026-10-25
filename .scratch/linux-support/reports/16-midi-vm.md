@@ -49,3 +49,13 @@ Run [40170411862](https://github.com/guitarlum/VoLum/actions/runs/40170411862) o
 `FAILED  9 of 20 checks`
 
 The failures are the recall checks: Program Change 9, CC 102 value 42, Active Sensing crowding, the empty program's ignored line, the burst, the saved PLAY cursor and preset, and both One-channel-2 recalls. The job is red. That sed is not on `3687a528`.
+
+## Follow-up
+
+Code head `b630bf32`, merged onto `feature/linux-support` `aec116b8`. CI run [40180499888](https://github.com/guitarlum/VoLum/actions/runs/40180499888). Every job succeeded, including macOS and Formatting.
+
+The sender now closes its sequencer port and client on a `quit` line after the checks. The guest writes and syncs the result file, then `poweroff -f`. The host still requires `ALL PASS` and rc 0. On this run the guest log is `ALL PASS  20 checks` and `VOLUM_MIDI_VM_GUEST_DONE rc=0` at about 26 seconds of guest uptime. The `MIDI recall in the guest` step is 34 seconds. There is no `Waiting for process: volum-alsa-midi`. The host `linux-e2e` job still skips MIDI and its other scenarios passed.
+
+The base image is `https://cloud-images.ubuntu.com/jammy/20261020/jammy-server-cloudimg-amd64.img`, SHA256 `2099e63da0b822ef8e05e3d596c1b402eaaae658fc08ab919cb8495bfcdc488b`, recorded in `image-key.txt`. That file is in the `actions/cache` key, so this run baked a new image (`image pin` prints that digest).
+
+The job wall time is **7 minutes 47 seconds** (`2026-10-25T09:24:21Z` to `2026-10-25T09:32:08Z`), including that cold bake.
