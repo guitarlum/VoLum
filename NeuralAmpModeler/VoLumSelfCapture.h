@@ -127,18 +127,18 @@ private:
 // Last thing the layout attaches, so its Draw runs after every standard control.
 inline void AttachIfRequested(iplug::igraphics::IGraphics* pGraphics)
 {
-#if defined(OS_WIN)
+  #if defined(OS_WIN)
   wchar_t dir[1024] = {};
   const DWORD len = GetEnvironmentVariableW(L"VOLUM_SELF_CAPTURE_DIR", dir, 1024);
   if (!pGraphics || len == 0 || len >= 1024)
     return;
   std::filesystem::path path(dir);
-#else
+  #else
   const char* dir = std::getenv("VOLUM_SELF_CAPTURE_DIR");
   if (!pGraphics || !dir || !dir[0])
     return;
   std::filesystem::path path(dir);
-#endif
+  #endif
   std::error_code ec;
   std::filesystem::create_directories(path, ec);
   pGraphics->AttachControl(new SelfCaptureControl(pGraphics->GetBounds(), std::move(path)));
