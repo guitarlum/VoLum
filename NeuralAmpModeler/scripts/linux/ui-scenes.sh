@@ -482,10 +482,6 @@ end
 steps[#steps + 1] = function()
   reaper.DeleteTrack(track)
   report("STEP deleted")
-  wait(1)
-end
-steps[#steps + 1] = function()
-  reaper.Main_SaveProjectEx(0, projectPath, 0)
   report("PASS")
   quit()
 end
