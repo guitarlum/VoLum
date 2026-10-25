@@ -21,10 +21,9 @@ echo "package-box: build container $name"
 docker_cmd run --rm --name "$name" \
   -v "$ROOT:/src" \
   -w /src \
-  -e DEBIAN_FRONTEND=noninteractive \
   -e "JOBS=$JOBS" \
   ubuntu:22.04 \
-  bash -lc 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends make && rm -rf /src/build-linux && bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci && bash NeuralAmpModeler/scripts/makedist-linux.sh --build'
+  bash NeuralAmpModeler/scripts/linux/package-build-inner.sh
 
 tarball="$(echo build-linux/out/VoLum-*-linux-x86_64.tar.gz)"
 [[ -f "$tarball" ]] || { echo "package-box: no tarball at $tarball" >&2; exit 1; }
