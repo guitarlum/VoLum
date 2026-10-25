@@ -665,7 +665,7 @@ jobs:
         shell: bash
 
       - name: Standalone audio smoke (Xvfb, jackd dummy)
-        run: bash NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh --app build-linux/standalone/VoLum --out "$RUNNER_TEMP/volum-smoke-app" --require-hide --require-rt
+        run: bash NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh --app build-linux/standalone/VoLum --out "$RUNNER_TEMP/volum-smoke-app" --require-hide --require-rt --strict-xruns
         shell: bash
 
       - name: UI scene diff and OUT meter

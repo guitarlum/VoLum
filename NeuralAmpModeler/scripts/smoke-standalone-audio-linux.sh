@@ -9,11 +9,14 @@
 #   1. VoLum opens its window and JACK ports and, after a --warmup (default 5 s)
 #      in which the first captures load and the editor starts, turns a -12 dBFS
 #      sine into a finite output above -50 dBFS in every second of --seconds
-#      (default 60) with zero xruns in that window, counted by the server's xrun
-#      callback and in the jackd log. Xruns during each launch, warm-up and quit,
-#      and in the 10 s windows of the later launches, are printed, not gated: on
-#      a VM the dummy driver itself wakes late now and then, and every client
-#      misses that cycle;
+#      (default 60). On CI (--strict-xruns) that window also has zero JACK xruns.
+#      On the box, a jackd xrun whose VoLum callbacks stayed inside the budget is
+#      a driver xrun: counted and printed, not a failure (reports/17-jack-xrun.md).
+#      A callback longer than the period, or longer than the budget fraction of
+#      the period, fails in both places. Xruns during each launch, warm-up and
+#      quit, and in the 10 s windows of the later launches, are printed, not
+#      gated: on a VM the dummy driver itself wakes late now and then, and every
+#      client misses that cycle;
 #   2. the close button (WM_DELETE_WINDOW) and SIGTERM quit with exit code 0
 #      within 20 s, after the audio and plug-in teardowns, and settings.ini and
 #      volum-settings.json are written;
@@ -47,6 +50,7 @@ AMP_B=9
 REQUIRE_HIDE=0
 REQUIRE_RT=0
 SANITIZED=0
+STRICT_XRUNS=0
 PERIOD=256
 
 while [[ $# -gt 0 ]]; do
@@ -62,7 +66,8 @@ while [[ $# -gt 0 ]]; do
     --amp-b) [[ "$2" == same ]] && AMP_B=$AMP_A || AMP_B="$2"; shift 2 ;;
     --require-hide) REQUIRE_HIDE=1; shift ;;
     --require-rt) REQUIRE_RT=1; shift ;;
-    *) echo "usage: $0 [--app PATH] [--out DIR] [--seconds N] [--warmup N] [--period N] [--sanitized] [--require-hide] [--require-rt] [--quit close|kill] [--stall-ms N] [--amp-b N|same]" >&2; exit 2 ;;
+    --strict-xruns) STRICT_XRUNS=1; shift ;;
+    *) echo "usage: $0 [--app PATH] [--out DIR] [--seconds N] [--warmup N] [--period N] [--sanitized] [--require-hide] [--require-rt] [--strict-xruns] [--quit close|kill] [--stall-ms N] [--amp-b N|same]" >&2; exit 2 ;;
   esac
 done
 
@@ -125,6 +130,13 @@ if [[ "$(ulimit -r)" == 0 ]] && command -v prlimit >/dev/null && sudo -n true 2>
   sudo -n prlimit --pid $$ --rtprio=95:95 --memlock=unlimited:unlimited
 fi
 echo "rtprio limit $(ulimit -r), memlock limit $(ulimit -l)"
+# The app records callback durations only when this is 1. CI and the box both set it.
+export VOLUM_CALLBACK_TIMING=1
+if [[ $STRICT_XRUNS -eq 1 ]]; then
+  echo "xrun mode: strict (jackd xruns fail this window)"
+else
+  echo "xrun mode: box (driver xruns not gated; reports/17-jack-xrun.md)"
+fi
 # A private server name, so nothing else's JACK server is used or disturbed.
 export JACK_DEFAULT_SERVER="volum-smoke-$$"
 export JACK_NO_AUDIO_RESERVATION=1
@@ -246,8 +258,22 @@ audio_checks() {
   jl=$(field "$probe" jackd_xrun_lines)
   if [[ $SANITIZED -eq 1 || $gate -eq 0 ]]; then
     echo "  [$name] xruns not gated here: callback ${xr:-none}, jackd log ${jl:-none}"
+    python3 "$SCRIPT_DIR/linux/smoke/callback-budget.py" --log "$OUT/$name.out" --probe "$OUT/$name.probe" --frames "$PERIOD" --rate 48000 --jack-xruns "${jl:-0}" >"$OUT/$name.budget" 2>&1 || true
+    sed 's/^/  /' "$OUT/$name.budget"
+    echo "  [$name] callback budget not gated here"
   else
-    check "[$name] zero JACK xruns over ${secs} s: xrun callback ${xr:-none}, jackd log ${jl:-none}" test "${xr:-x}" = 0 -a "${jl:-x}" = 0
+    if [[ $STRICT_XRUNS -eq 1 ]]; then
+      check "[$name] zero JACK xruns over ${secs} s: xrun callback ${xr:-none}, jackd log ${jl:-none}" test "${xr:-x}" = 0 -a "${jl:-x}" = 0
+    fi
+    local strict_arg=()
+    [[ $STRICT_XRUNS -eq 1 ]] && strict_arg=(--strict)
+    if python3 "$SCRIPT_DIR/linux/smoke/callback-budget.py" --log "$OUT/$name.out" --probe "$OUT/$name.probe" --frames "$PERIOD" --rate 48000 --jack-xruns "${jl:-0}" "${strict_arg[@]}" >"$OUT/$name.budget" 2>&1; then
+      sed 's/^/  /' "$OUT/$name.budget"
+      pass "[$name] callback budget $(sed -n 's/^window_max_us=/max /p; s/^budget_us=/budget /p' "$OUT/$name.budget" | tr '\n' ' ')"
+    else
+      sed 's/^/  /' "$OUT/$name.budget"
+      fail "[$name] callback budget $(sed -n 's/^verdict=//p; s/^window_max_us=/max /p; s/^budget_us=/budget /p; s/^reason=//p' "$OUT/$name.budget" | tr '\n' ' ')"
+    fi
   fi
   check "[$name] output finite (${nf:-?} non-finite samples)" test "${nf:-x}" = 0
   check "[$name] output audible: peak ${pk:-?} dBFS, ${act:-?}/${secs} s above -50 dBFS" test "${act:-0}" = "$secs"

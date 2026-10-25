@@ -97,6 +97,12 @@ naming what already exists.
 - `Q4-screenshot-harness-custom-amp-seed.md` — **mostly shipped.** Seeding, the
   scrollbar geometry test, the runbook, the `AGENTS.md` harness pointer, and the
   `AddCustomAmp` cross-link all landed. Remaining: a name-area shrink-to-fit test.
+- `Q5-realtime-sanitizer-audio-path.md` — a clang 20+ RealtimeSanitizer job that
+  marks the audio callback `[[clang::nonblocking]]`. The first run is expected to
+  report allocations already in the DSP path. Fixing them stays with `B7`.
+- `Q6-callback-timing-release-trend.md` — CI publishes p50, p99 and max callback
+  time from the 60 s window and fails when p99 regresses more than 20 percent
+  against the last release baseline. The 65 percent budget gate stays.
 - `P2-volum-1.2.0-rt-and-perf-hardening.md` — **re-scoped.** Now only the two
   UI-thread performance items: the preset dirty check builds two JSON trees per
   knob event, and settings still write on every idle tick that finds the flag set.

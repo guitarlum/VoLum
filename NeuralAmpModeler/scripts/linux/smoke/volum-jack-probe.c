@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 static jack_client_t* gClient;
@@ -73,6 +74,15 @@ static jack_client_t* Open(const char* name)
 }
 
 static double Dbfs(float v) { return v > 0.f ? 20.0 * log10(v) : -999.0; }
+
+static void PrintMono(const char* key)
+{
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+    return;
+  printf("%s=%lld\n", key, (long long)ts.tv_sec * 1000000000LL + (long long)ts.tv_nsec);
+  fflush(stdout);
+}
 
 static int PortsExist(jack_client_t* c, const char* client)
 {
@@ -157,6 +167,7 @@ int main(int argc, char** argv)
       sleep((unsigned)warmup);
     printf("warmup_seconds=%d warmup_xruns=%d\n", warmup, gXruns);
     fflush(stdout);
+    PrintMono("window_start_ns");
     gXruns = 0;
     gFrames = 0;
     gNonFinite = 0;
@@ -181,6 +192,7 @@ int main(int argc, char** argv)
       xrunsBefore = xruns;
       fflush(stdout);
     }
+    PrintMono("window_end_ns");
     jack_deactivate(gClient);
     jack_client_close(gClient);
     printf("xruns=%d frames=%ld nonfinite=%ld peak_dbfs=%.1f active_seconds=%d seconds=%d max_dsp_load=%.1f\n", gXruns,
