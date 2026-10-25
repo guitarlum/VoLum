@@ -83,10 +83,6 @@ naming what already exists.
   blocked on code signing. Design is settled, ~2-3 days. Ships value one release
   *after* the one that introduces it, so it wants to be early.
 
-### OS Support
-- `O1-linux-support-spike.md` — feasibility spike; can run in parallel with
-  anything. GitHub [#17](https://github.com/guitarlum/VoLum/issues/17).
-
 ### Quality / Testing
 - `Q2-volum-1.2.0-structure-decompose.md` — **partially shipped.**
   `VoLumCustomUi.h` is now a 35-line umbrella and the scrollbar is shared, but the
@@ -182,8 +178,8 @@ The two IR-loudness blockers that used to sit at #2 are done (see the ledger).
    squeezed between features.
 8. **Hygiene: `Q2`, `Q3`, `Q4` remainder, the UI polish table** in the ledger,
    which is cheap and highly visible.
-9. **`O1`** Linux spike, in parallel whenever. **`R3`** periodically. **`B8`**
-   whenever the packaging scripts are next touched. **`F13`** any time.
+9. **`R3`** periodically. **`B8`** whenever the packaging scripts are next touched.
+   **`F13`** any time.
 
 ## Done (archive)
 
