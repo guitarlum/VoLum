@@ -6,11 +6,11 @@ Status: **accepted**. The cold visual review passed. The scene gate is in CI and
 
 | | Branch | Sha |
 | --- | --- | --- |
-| Code head | `feature/linux-13-ui` | `3510ed70b95063c80ebe584de09b39d460a257f7` |
-| iPlug2 | `volum/linux-13` | `43813bc38b1e2f4b6f8638e31764fb4c60d10ae8` |
-| CI | [40166926643](https://github.com/guitarlum/VoLum/actions/runs/40166926643) | same code head, success, including macOS |
+| Code head | `feature/linux-13-ui` | `0c0daf87ba30072afa66a71e0a6a292dad1c4141` |
+| iPlug2 | `volum/linux-13` | `98519e71f28f813a316f8d7d03d7da5b3d56a2b8` |
+| CI | [40176527088](https://github.com/guitarlum/VoLum/actions/runs/40176527088) | same code head, success, every job including macOS and Formatting |
 
-`feature/linux-support` at `9c22f005` (ticket 08) is merged. Windows `run-tests-win.ps1` on that merge: 1478 passed, 0 failed. iPlug2 did not change for this round.
+`feature/linux-support` at `03eccfbe` (tickets 11 and 08) is merged. iPlug2 `volum/linux-13` includes `volum/linux` at `3d894cd8e`. Windows `run-tests-win.ps1` on the merge: 1479 passed, 0 failed. The commit after that only indents three preprocessor lines in `VoLumSelfCapture.h`.
 
 The Linux reference set is `NeuralAmpModeler/tests/linux-ui-refs/` (twelve PNGs and `manifest.txt`). Threshold is **0.99**. `verify-linux.sh` calls `ui-scenes.sh`, and the Linux standalone CI job runs `--gate`.
 
@@ -54,6 +54,18 @@ Each one edits the source, rebuilds, expects failure, and restores on every exit
 - Sidebar rect moved 18 px (`b.L + 6` to `b.L + 24`): SSIM **0.976326**, under 0.99, with the Sebago mask applied.
 - Preset Default handler removed: the REAPER project chunk does not contain `V30-THC-1`.
 - `StartTextEntry` returns immediately: `LinuxProofAmp` is not written to the content store.
+
+## Red proofs, rerun
+
+`--red` on `cd0335d8` (the commit before the preprocessor indent) scored the committed `tests/linux-ui-refs/main-s1.png` and then checked `git diff --quiet` in the repo and in `iPlug2`. Six checks, none failed. The source was clean afterwards.
+
+| Check | Result |
+| --- | --- |
+| Sidebar shifted 18 px | SSIM **0.976326**, under 0.99 |
+| OUT meter update removed | well mean **0.05**, stays dark |
+| Preset Default removed | chunk has no `V30-THC-1` |
+| `StartTextEntry` returns immediately | `LinuxProofAmp` is not saved |
+| `XSendEvent` forward removed | `VOLUM_HOST_KEY_LOG` has no `down` line |
 
 ## Not changed
 
