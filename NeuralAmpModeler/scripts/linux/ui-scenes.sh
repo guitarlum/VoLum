@@ -585,7 +585,7 @@ host_menu() {
   # Preset bar, then the first row under the open menu.
   drive "click 743 22" || { fail "popup menu: no editor window"; return; }
   sleep 0.8
-  drive "click 539 23" "click 450 77" "click 450 176" || { fail "popup menu: no editor window"; return; }
+  drive "click 539 23" "click 450 66" || { fail "popup menu: no editor window"; return; }
   sleep 0.8
   CAP="$work/home/.local/share/VoLum/capture"
   grab reaper-menu || true
@@ -613,6 +613,8 @@ host_text() {
   sleep 0.4
   drive "click 656 526" || true
   sleep 1
+  CAP="$work/home/.local/share/VoLum/capture"
+  grab reaper-text || true
   finish_reaper "$work" "$REAPER_PID"
   local content="$work/home/.local/share/VoLum/content/volum-content.json"
   if grep -a -q "LinuxProofAmp" "$content" 2>/dev/null; then
@@ -634,7 +636,7 @@ host_red() {
   before=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')
   drive "click 743 22" || true
   sleep 0.6
-  drive "click 539 23" "click 450 77" "click 450 176" || true
+  drive "click 539 23" "click 450 66" || true
   sleep 0.8
   finish_reaper "$work" "$REAPER_PID"
   after=$(md5sum "$work/home/.local/share/VoLum/volum-settings.json" | awk '{print $1}')

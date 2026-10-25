@@ -1175,6 +1175,12 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
     {
       auto* presetMenu = new VoLumListMenuControl(b);
       presetMenu->SetCallback([pPlugin](int code) {
+#if defined(OS_LINUX)
+        // UI-gate red proof. Unset, a row does what it says.
+        if (const char* br = std::getenv("VOLUM_BREAK_POPUP"))
+          if (br[0] == '1')
+            return;
+#endif
         auto* pGfx = pPlugin->GetUI();
         if (!pGfx)
           return;
@@ -1222,12 +1228,6 @@ void NeuralAmpModeler::_BuildVoLumLayout(IGraphics* pGraphics)
         // both the way _VolumRecallPreset splits them.
         const auto presets = volum::custom::PresetsForOwner(pPlugin->_VolumClaimPresetOps());
         const int factoryCount = static_cast<int>(pPlugin->_VolumFocusedFactoryPresets().size());
-#if defined(OS_LINUX)
-        // UI-gate red proof. Unset, a row recalls the preset.
-        if (const char* br = std::getenv("VOLUM_BREAK_POPUP"))
-          if (br[0] == '1')
-            return;
-#endif
         if (code >= 0 && code < static_cast<int>(presets.size()) + factoryCount)
           pPlugin->_VolumRecallPreset(code); // apply settings + drive the bar
       });
