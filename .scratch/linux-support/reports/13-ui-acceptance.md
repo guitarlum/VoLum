@@ -6,12 +6,12 @@ Status: **review pending**. Scenes are captured. The cold visual review has not 
 
 | | Branch | Sha |
 | --- | --- | --- |
-| Superproject scenes | `feature/linux-13-ui` | `c18583a2bd86fe9c88455fbf2d4a1c36dd37288e` |
-| iPlug2 | `volum/linux-13` | `5e102632fd298ef57d7321f5a1d0bd624495c422` |
+| Superproject | `feature/linux-13-ui` | `8c3545e6` |
+| iPlug2 | `volum/linux-13` | `43813bc38` |
 
-The commit that adds this report also teaches `ui-scenes.sh` to read the preset result out of the REAPER project's base64 VST chunk.
+Sabotage switches are gone from the plug-in. `git diff fdc226e5` on `VoLumLayoutBuild.inc.cpp` is the Josefin weight line, and `VoLumCustomOverlay.h` is unchanged. Red proofs edit those files in place, rebuild, expect failure, and restore them on every exit.
 
-iPlug2 changes are Linux-only except `GetScaleForHWND`: if `VOLUM_SCREEN_SCALE` is set it returns that scale, otherwise the monitor DPI path is unchanged. That hook is how the Windows shots at scale 1 and scale 2 were taken on a laptop that is not at 200% DPI. Nothing else in the Windows or macOS build changes.
+iPlug2 changes are Linux-only except `GetScaleForHWND`: inert unless `VOLUM_SCREEN_SCALE` is set. That hook is how the Windows shots at scale 1 and scale 2 were taken on a laptop that is not at 200% DPI.
 
 ## Scenes
 
@@ -26,9 +26,9 @@ Both sides are the GL framebuffer (`VOLUM_SELF_CAPTURE_DIR`), 900x600 at scale 1
 | pack export | 0.998539 | 0.998731 |
 | tuner | 0.999984 | 0.999984 |
 
-SSIM here is `1 - d`, where `d` is the normalized term ImageMagick 7 prints in parentheses for `compare -metric SSIM` (`0` is identical). Two Linux captures of main, one second apart, score **1.000000**. An 18 px sidebar shift (`VOLUM_UI_SHIFT_PROOF=1`) scores **0.953762**.
+SSIM here is `1 - d`, where `d` is the normalized term ImageMagick 7 prints in parentheses for `compare -metric SSIM` (`0` is identical). Two Linux captures of main, one second apart, score **1.000000**. Shifting the sidebar rect 18 px in the source and rebuilding scores **0.968077**.
 
-**Threshold: 0.99.** The worst real scene is SYSTEM at 0.994605. The shifted control is 0.953762. 0.99 sits between them. The SYSTEM gap is the model-information line: Windows shows plugin latency 1.8 ms and buffer 512, Linux shows round trip 16.0 ms and buffer 256, because the Linux capture is on jackd's 256-frame dummy cycle. The rest of that card matches. Shortcut text also differs by font rasterization; that is inside the 0.005 of the SYSTEM score.
+**Threshold: 0.99.** The worst real scene is SYSTEM at 0.994605. The shifted control is 0.968077. 0.99 sits between them. The SYSTEM gap is the model-information line: Windows shows plugin latency 1.8 ms and buffer 512, Linux shows round trip 16.0 ms and buffer 256, because the Linux capture is on jackd's 256-frame dummy cycle. The rest of that card matches. Shortcut text also differs by font rasterization; that is inside the 0.005 of the SYSTEM score.
 
 Images (Windows on the left of each pair):
 
@@ -44,11 +44,9 @@ Images (Windows on the left of each pair):
 **Popup menu in REAPER: PASS, on the decoded project from this run.** Default in the preset menu resets the open editor from Sunset Crunch / channel 3 to No Preset / channel 1 / `V30-THC-1.nam`. The plug-in state lives in the REAPER project chunk, not `volum-settings.json` (that file is the standalone's). Decoding the base64 VST chunk:
 
 - positive project: contains `V30-THC-1`
-- `VOLUM_BREAK_POPUP=1`: contains `V30-THC-3` and not `V30-THC-1`
+- Default handler removed in the source, then rebuilt: the chunk does not contain `V30-THC-1`
 
-The script now decodes that chunk. The run that produced the files grepped the raw `.rpp` and reported fail; the bytes above are from that same save.
-
-**Text entry in REAPER: not accepted.** The shot after the name sequence is still the PLAY screen, and `LinuxProofAmp` is not in the content store. `VOLUM_BREAK_TEXT_ENTRY=1` is in the script; it is not evidence until the positive check passes.
+**Text entry in REAPER: PASS.** The builder's name field opens the name dialog. Letters are delivered with `XSendEvent` to the deepest editor-sized window (the wrapper of the same size does not receive them: propagation goes to ancestors). `LinuxProofAmp` is in `volum-content.json`. The same sequence with `StartTextEntry` returning immediately does not write that name. The source is restored afterwards.
 
 ## Not the acceptance CI
 
