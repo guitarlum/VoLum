@@ -1,2 +1,5 @@
-v1
-jammy-server-cloudimg-amd64
+# Pinned Ubuntu 22.04 cloud image. actions/cache hashes this file, so a
+# different digest is a different image. Do not point this at jammy/current.
+url=https://cloud-images.ubuntu.com/jammy/20261020/jammy-server-cloudimg-amd64.img
+sha256=2099e63da0b822ef8e05e3d596c1b402eaaae658fc08ab919cb8495bfcdc488b
+name=jammy-server-cloudimg-amd64.img
