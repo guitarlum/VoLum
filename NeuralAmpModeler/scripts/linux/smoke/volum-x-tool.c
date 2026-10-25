@@ -167,7 +167,6 @@ static int SendKey(Display* d, Window w, const char* name, int shift)
   ev.y = y;
   ev.x_root = x;
   ev.y_root = y;
-  XSetInputFocus(d, w, RevertToParent, CurrentTime);
   ev.type = KeyPress;
   XSendEvent(d, w, False, KeyPressMask, (XEvent*)&ev);
   ev.type = KeyRelease;
