@@ -24,7 +24,7 @@ docker_cmd run --rm --name "$name" \
   -e DEBIAN_FRONTEND=noninteractive \
   -e "JOBS=$JOBS" \
   ubuntu:22.04 \
-  bash -lc 'bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci && bash NeuralAmpModeler/scripts/makedist-linux.sh --build'
+  bash -lc 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends make && rm -rf /src/build-linux && bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci && bash NeuralAmpModeler/scripts/makedist-linux.sh --build'
 
 tarball="$(echo build-linux/out/VoLum-*-linux-x86_64.tar.gz)"
 [[ -f "$tarball" ]] || { echo "package-box: no tarball at $tarball" >&2; exit 1; }
