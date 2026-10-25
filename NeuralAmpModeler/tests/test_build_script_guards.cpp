@@ -262,6 +262,71 @@ TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step 
   CHECK(mesa < validate);
 }
 
+TEST_CASE("clang-format CI checks a dispatched branch from its merge base with dev")
+{
+  // A workflow_dispatch has no github.event.before. Falling back to HEAD^ checked
+  // only the last commit, so a feature branch went green with unformatted files
+  // and dev's push run failed after the merge.
+  const std::string workflow = ReadRepoFile(".github/workflows/ci.yml");
+  const auto step = workflow.find("name: Check clang-format output");
+  REQUIRE(step != std::string::npos);
+  const auto end = workflow.find("shell: bash", step);
+  REQUIRE(end != std::string::npos);
+  const std::string body = workflow.substr(step, end - step);
+  const auto fallback = body.find("0000000000000000000000000000000000000000");
+  const auto mergeBase = body.find("git merge-base origin/dev HEAD");
+  const auto headParent = body.find("BASE=\"HEAD^\"");
+  REQUIRE(fallback != std::string::npos);
+  CHECK(mergeBase != std::string::npos);
+  CHECK(mergeBase > fallback);
+  CHECK(headParent > mergeBase);
+
+  const auto job = workflow.find("name: Formatting");
+  REQUIRE(job != std::string::npos);
+  CHECK(workflow.substr(job, step - job).find("fetch-depth: 0") != std::string::npos);
+}
+
+TEST_CASE("Linux plug-in hides static libstdc++ and the gate rejects an exported copy")
+{
+  // Facet ids in libstdc++.a are STB_GNU_UNIQUE. Exporting them makes a host
+  // locale bind the plug-in's num_put to the host codecvt, which crashes Carla.
+  // The stdio forks in the shared headers were a workaround; the link line is
+  // the constraint, and the headers stay on the shared ostream path.
+  const std::string cmake = ReadRepoFile("NeuralAmpModeler/projects/linux/CMakeLists.txt");
+  const auto vst3 = cmake.find("add_library(VoLum-vst3 SHARED");
+  const auto app = cmake.find("add_executable(VoLum-app");
+  REQUIRE(vst3 != std::string::npos);
+  REQUIRE(app != std::string::npos);
+  const std::string vst3Body = cmake.substr(vst3, app - vst3);
+  const std::string appBody = cmake.substr(app);
+  CHECK(vst3Body.find("-Wl,--exclude-libs,ALL") != std::string::npos);
+  CHECK(vst3Body.find("volum-vst3.version") != std::string::npos);
+  CHECK(appBody.find("-Wl,--exclude-libs,ALL") != std::string::npos);
+  CHECK(appBody.find("volum-app.version") != std::string::npos);
+  CHECK(cmake.find("if(NOT VOLUM_SANITIZE)") != std::string::npos);
+
+  const std::string version = ReadRepoFile("NeuralAmpModeler/projects/linux/volum-vst3.version");
+  CHECK(version.find("GetPluginFactory") != std::string::npos);
+  CHECK(version.find("ModuleEntry") != std::string::npos);
+  CHECK(version.find("ModuleExit") != std::string::npos);
+  CHECK(version.find("_ZN5iplug23IPlugLinuxCheckUIThreadEPKc") == std::string::npos);
+  CHECK(version.find("local:") != std::string::npos);
+  CHECK(cmake.find("VOLUM_UI_THREAD_PROBE") != std::string::npos);
+
+  const std::string probe = ReadRepoFile("NeuralAmpModeler/projects/linux/volum-vst3-probe.version");
+  CHECK(probe.find("_ZN5iplug23IPlugLinuxCheckUIThreadEPKc") != std::string::npos);
+  CHECK(probe.find("GetPluginFactory") != std::string::npos);
+
+  const std::string gate = ReadRepoFile("NeuralAmpModeler/scripts/validate-vst3-linux.sh");
+  CHECK(gate.find("check-stdlib-exports.sh") != std::string::npos);
+  CHECK(gate.find("ui-thread-probe.sh") != std::string::npos);
+
+  const std::string diag = ReadRepoFile("NeuralAmpModeler/VoLumDiagLog.h");
+  const std::string io = ReadRepoFile("NeuralAmpModeler/VoLumSettingsFileIO.h");
+  CHECK(diag.find("snprintf") == std::string::npos);
+  CHECK(io.find("snprintf") == std::string::npos);
+}
+
 TEST_CASE("release workflow builds the Mac assets on the editor-test runner")
 {
   // The build steps are gated on matrix.os. Pinning the runner to macos-15

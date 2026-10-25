@@ -55,8 +55,12 @@ jobs:
             BASE="${{ github.event.pull_request.base.sha }}"
           else
             BASE="${{ github.event.before }}"
+            # A dispatch or a new branch has no previous push: check everything since dev.
             if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
-              BASE="HEAD^"
+              BASE="$(git merge-base origin/dev HEAD)"
+              if [[ "$BASE" == "$(git rev-parse HEAD)" ]]; then
+                BASE="HEAD^"
+              fi
             fi
           fi
           mapfile -t files < <(git diff --name-only --diff-filter=ACMRT "$BASE" "${{ github.sha }}" -- '*.h' '*.cpp' \
@@ -564,6 +568,57 @@ jobs:
       - name: Sanitized unit tests (Clang ASan/UBSan)
         run: bash NeuralAmpModeler/scripts/run-tests-linux.sh --clang --sanitize
         shell: bash
+
+  linux-plugin:
+    name: Linux plugin gates
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
+
+      - name: Provision Linux CI packages and host tools
+        run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci --hosts
+        shell: bash
+
+      - name: Build the VST3 and the Steinberg validator
+        run: bash NeuralAmpModeler/scripts/build-linux.sh Release
+        shell: bash
+
+      - name: Validator, pluginval, UI-thread sites and Carla
+        run: |
+          export PATH="$HOME/volum-linux/tools/bin:$PATH"
+          export VOLUM_LINUX_ROOT="$HOME/volum-linux"
+          bash NeuralAmpModeler/scripts/validate-vst3-linux.sh --no-build
+        shell: bash
+
+      - name: REAPER render null and two instances
+        run: |
+          export PATH="$HOME/volum-linux/tools/bin:$PATH"
+          export VOLUM_LINUX_ROOT="$HOME/volum-linux"
+          bash NeuralAmpModeler/scripts/smoke-reaper-linux.sh
+        shell: bash
+
+      - name: Upload Linux VST3 (VoLum-linux-vst3)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-linux-vst3
+          path: build-linux/VoLum.vst3
+
+      - name: Upload Linux plugin gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoLum-linux-plugin-logs
+          path: build-linux/plugin-gates/
+          if-no-files-found: warn
 
   linux-app:
     name: Linux standalone

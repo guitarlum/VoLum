@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Idempotent VoLum Linux host setup for Ubuntu 22.04, 24.04 and 26.04.
 #
-#   bash provision-linux.sh        # apt, then pluginval, REAPER and Carla
-#   bash provision-linux.sh --ci   # apt build/test packages only
+#   bash provision-linux.sh                 # apt, then pluginval, REAPER and Carla
+#   bash provision-linux.sh --ci            # apt build/test packages only
+#   bash provision-linux.sh --ci --hosts    # apt, plus pluginval, REAPER and Carla
 #
 # --ci is for GitHub ubuntu-22.04/24.04 runners and cloud VMs. It installs the
-# apt toolchain and test packages (including xvfb, xdotool and jackd2) and does
-# not download pluginval, REAPER or Carla.
+# apt toolchain and test packages (including xvfb, xdotool, jackd2 and gdb) and
+# does not download pluginval, REAPER or Carla unless --hosts is also set.
 #
 # ubuntu-22.04 CI uses the archive compilers g++-12 and clang-15. gcc-12 could
 # not compile ResamplingContainer.h until the LanczosResampler alias was
@@ -19,14 +20,17 @@
 set -euo pipefail
 
 CI=0
-case "${1:-}" in
-  "") ;;
-  --ci) CI=1 ;;
-  *)
-    echo "usage: provision-linux.sh [--ci]" >&2
-    exit 1
-    ;;
-esac
+HOSTS=0
+for arg in "$@"; do
+  case "$arg" in
+    --ci) CI=1 ;;
+    --hosts) HOSTS=1 ;;
+    *)
+      echo "usage: provision-linux.sh [--ci] [--hosts]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 ROOT="${VOLUM_LINUX_ROOT:-$HOME/volum-linux}"
 URL="https://github.com/guitarlum/VoLum.git"
@@ -210,12 +214,16 @@ pkgs=(
   zenity
   tesseract-ocr
   python3-pip
+  gdb
   git
   curl
   ca-certificates
   unzip
   xz-utils
 )
+if apt-cache show libgl1-mesa-dri >/dev/null 2>&1; then
+  pkgs+=(libgl1-mesa-dri)
+fi
 if [ "$VERSION_ID" = "22.04" ]; then
   pkgs+=(gcc-12 g++-12 clang-15)
 fi
@@ -228,7 +236,7 @@ done
 carla_ver=""
 carla_sha=""
 carla_needed=0
-if [ "$CI" -eq 0 ]; then
+if [ "$CI" -eq 0 ] || [ "$HOSTS" -eq 1 ]; then
   case "$VERSION_ID" in
     22.04)
       carla_ver="2.4.2-0ubuntu2"
@@ -297,6 +305,7 @@ need_cmd xdotool
 need_cmd xdpyinfo
 need_cmd jackd
 need_cmd tesseract
+need_cmd gdb
 
 log "g++ $(g++ --version | head -n 1)"
 log "clang $(clang --version | head -n 1)"
@@ -306,7 +315,7 @@ fi
 if command -v clang++-15 >/dev/null 2>&1; then
   log "clang++-15 $(clang++-15 --version | head -n 1)"
 fi
-if [ "$CI" -eq 1 ]; then
+if [ "$CI" -eq 1 ] && [ "$HOSTS" -eq 0 ]; then
   log "ci mode: skipped pluginval, REAPER and Carla"
   log "done"
   exit 0
@@ -317,14 +326,16 @@ for lock in build1.lock build2.lock git.lock gui.lock; do
   [ -e "$ROOT/locks/$lock" ] || : >"$ROOT/locks/$lock"
 done
 
-if [ ! -e "$ROOT/VoLum" ]; then
-  log "cloning $URL"
-  git clone "$URL" "$ROOT/VoLum"
-elif [ ! -d "$ROOT/VoLum/.git" ]; then
-  log "$ROOT/VoLum exists and is not a git clone"
-  exit 1
-else
-  log "clone: already present"
+if [ "$CI" -eq 0 ]; then
+  if [ ! -e "$ROOT/VoLum" ]; then
+    log "cloning $URL"
+    git clone "$URL" "$ROOT/VoLum"
+  elif [ ! -d "$ROOT/VoLum/.git" ]; then
+    log "$ROOT/VoLum exists and is not a git clone"
+    exit 1
+  else
+    log "clone: already present"
+  fi
 fi
 
 pluginval_home="$ROOT/tools/pluginval"
