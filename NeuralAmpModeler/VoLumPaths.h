@@ -16,6 +16,7 @@
 #elif defined(__linux__)
   #include <dlfcn.h>
   #include <unistd.h>
+  #include "VoLumAppLinuxPolicy.h"
 #endif
 
 namespace volum
@@ -94,22 +95,21 @@ inline std::vector<std::filesystem::path> WindowsRigsCandidates(const std::files
 }
 
 #if defined(__linux__)
-// XDG Base Directory: an empty or relative XDG_DATA_HOME is not a path. Fall back to
-// $HOME/.local/share, then VoLum, the same folder the Windows files use under LOCALAPPDATA.
-inline bool LinuxAbsoluteXdg(const char* value)
-{
-  return value && value[0] == '/';
-}
-
+// The standalone's settings folder and this library folder are one function
+// (iplug::VoLumLinuxAppDataDir). An empty or relative XDG_DATA_HOME is not a path
+// (the XDG spec ignores it); the fallback is $HOME/.local/share/VoLum, the same
+// place the Windows files use under LOCALAPPDATA.
 inline std::filesystem::path LinuxVoLumDataDir()
 {
-  namespace fs = std::filesystem;
-  if (const char* xdg = std::getenv("XDG_DATA_HOME"); LinuxAbsoluteXdg(xdg))
-    return fs::path(xdg) / "VoLum";
-  const char* home = std::getenv("HOME");
-  if (!home || !*home)
+  const std::string dir = iplug::VoLumLinuxAppDataDir(std::getenv("XDG_DATA_HOME"), std::getenv("HOME"), "VoLum");
+  if (dir.empty())
     return {};
-  return fs::path(home) / ".local" / "share" / "VoLum";
+  // The policy string ends in a slash. That is an empty filename; the directory
+  // the library joins onto is the parent.
+  std::filesystem::path path(dir);
+  if (path.filename().empty())
+    path = path.parent_path();
+  return path;
 }
 
 // App: dladdr and /proc/self/exe name the same file, and the exe path is the one readlink

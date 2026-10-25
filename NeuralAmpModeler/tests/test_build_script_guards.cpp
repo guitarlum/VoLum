@@ -262,6 +262,30 @@ TEST_CASE("Windows pluginval waits for the verdict instead of trusting the step 
   CHECK(mesa < validate);
 }
 
+TEST_CASE("clang-format CI checks a dispatched branch from its merge base with dev")
+{
+  // A workflow_dispatch has no github.event.before. Falling back to HEAD^ checked
+  // only the last commit, so a feature branch went green with unformatted files
+  // and dev's push run failed after the merge.
+  const std::string workflow = ReadRepoFile(".github/workflows/ci.yml");
+  const auto step = workflow.find("name: Check clang-format output");
+  REQUIRE(step != std::string::npos);
+  const auto end = workflow.find("shell: bash", step);
+  REQUIRE(end != std::string::npos);
+  const std::string body = workflow.substr(step, end - step);
+  const auto fallback = body.find("0000000000000000000000000000000000000000");
+  const auto mergeBase = body.find("git merge-base origin/dev HEAD");
+  const auto headParent = body.find("BASE=\"HEAD^\"");
+  REQUIRE(fallback != std::string::npos);
+  CHECK(mergeBase != std::string::npos);
+  CHECK(mergeBase > fallback);
+  CHECK(headParent > mergeBase);
+
+  const auto job = workflow.find("name: Formatting");
+  REQUIRE(job != std::string::npos);
+  CHECK(workflow.substr(job, step - job).find("fetch-depth: 0") != std::string::npos);
+}
+
 TEST_CASE("Linux plug-in hides static libstdc++ and the gate rejects an exported copy")
 {
   // Facet ids in libstdc++.a are STB_GNU_UNIQUE. Exporting them makes a host

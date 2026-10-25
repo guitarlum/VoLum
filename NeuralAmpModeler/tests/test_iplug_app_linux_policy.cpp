@@ -78,6 +78,17 @@ TEST_CASE("Linux settings.ini folder is the library folder and ignores a relativ
   CHECK(iplug::VoLumLinuxAppDataDir("", "/home/u", "VoLum") == "/home/u/.local/share/VoLum/");
   CHECK(iplug::VoLumLinuxAppDataDir("relative/dir", "/home/u", "VoLum") == "/home/u/.local/share/VoLum/");
   CHECK(iplug::VoLumLinuxAppDataDir(nullptr, nullptr, "VoLum").empty());
+
+  // One implementation: VoLumPaths.h LinuxVoLumDataDir calls this function.
+  // A second copy that still accepted a relative XDG_DATA_HOME would not.
+  const std::string paths = ReadRepoText("NeuralAmpModeler/VoLumPaths.h");
+  const auto fn = paths.find("inline std::filesystem::path LinuxVoLumDataDir()");
+  REQUIRE(fn != std::string::npos);
+  const auto next = paths.find("inline std::filesystem::path LinuxChooseModuleFile", fn);
+  REQUIRE(next != std::string::npos);
+  const std::string body = paths.substr(fn, next - fn);
+  CHECK(body.find("VoLumLinuxAppDataDir(") != std::string::npos);
+  CHECK(body.find("LinuxAbsoluteXdg") == std::string::npos);
 }
 
 TEST_CASE("Linux quit signals cancel a modal first, then close, and a second one exits")

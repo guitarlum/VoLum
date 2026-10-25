@@ -55,8 +55,12 @@ jobs:
             BASE="${{ github.event.pull_request.base.sha }}"
           else
             BASE="${{ github.event.before }}"
+            # A dispatch or a new branch has no previous push: check everything since dev.
             if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
-              BASE="HEAD^"
+              BASE="$(git merge-base origin/dev HEAD)"
+              if [[ "$BASE" == "$(git rev-parse HEAD)" ]]; then
+                BASE="HEAD^"
+              fi
             fi
           fi
           mapfile -t files < <(git diff --name-only --diff-filter=ACMRT "$BASE" "${{ github.sha }}" -- '*.h' '*.cpp' \
@@ -693,6 +697,61 @@ jobs:
           path: |
             ${{ runner.temp }}/volum-smoke-app
             ${{ runner.temp }}/volum-smoke-app-asan
+          if-no-files-found: warn
+
+  linux-e2e:
+    name: Linux standalone e2e
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_only != true }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Check out submodules
+        run: bash NeuralAmpModeler/scripts/checkout-submodules.sh
+        shell: bash
+
+      - name: Get VST3 SDK
+        run: |
+          cd iPlug2/Dependencies/IPlug
+          ./download-vst3-sdk.sh master
+        shell: bash
+
+      - name: Provision Linux CI packages
+        run: bash NeuralAmpModeler/scripts/linux/provision-linux.sh --ci
+        shell: bash
+
+      - name: Build the standalone (g++-12)
+        run: |
+          cmake -S NeuralAmpModeler/projects/linux -B build-linux -DCMAKE_BUILD_TYPE=Release -DVOLUM_BUILD_VALIDATOR=OFF
+          cmake --build build-linux -j "$(nproc)" --target VoLum-app
+        env:
+          CC: gcc-12
+          CXX: g++-12
+        shell: bash
+
+      - name: ALSA sequencer for MIDI recall
+        run: |
+          sudo apt-get install -y --no-install-recommends "linux-modules-extra-$(uname -r)" || true
+          sudo depmod -a || true
+          sudo modprobe snd-seq || true
+          if [[ -e /dev/snd/seq ]]; then sudo chmod a+rw /dev/snd/seq || true; fi
+          ls -l /dev/snd || true
+          find "/lib/modules/$(uname -r)" -name 'snd-seq.ko*' | head
+        shell: bash
+
+      - name: Standalone end-to-end scenarios
+        run: bash NeuralAmpModeler/scripts/e2e-standalone-linux.sh --app build-linux/standalone/VoLum --out "$RUNNER_TEMP/volum-e2e-linux"
+        shell: bash
+
+      - name: Upload e2e output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-standalone-e2e
+          path: ${{ runner.temp }}/volum-e2e-linux
           if-no-files-found: warn
 
   coverage:

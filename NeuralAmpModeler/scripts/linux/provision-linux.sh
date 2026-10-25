@@ -212,6 +212,7 @@ pkgs=(
   imagemagick
   alsa-utils
   zenity
+  tesseract-ocr
   python3-pip
   gdb
   git
@@ -303,6 +304,7 @@ need_cmd xvfb-run
 need_cmd xdotool
 need_cmd xdpyinfo
 need_cmd jackd
+need_cmd tesseract
 need_cmd gdb
 
 log "g++ $(g++ --version | head -n 1)"
