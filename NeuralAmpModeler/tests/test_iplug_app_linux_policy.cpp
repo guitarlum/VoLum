@@ -179,6 +179,8 @@ TEST_CASE("Linux callback budget is 70 percent of the rounded-up period, applied
   CHECK(py.find("return 0 if n == 0 else min(n - 1, (n * 99) // 100)") != std::string::npos);
   CHECK(py.find("if max_us > period_us(frames, rate):\n        return \"fail-callback\"") != std::string::npos);
   CHECK(py.find("if p99_us > budget_us(frames, rate):\n        return \"fail-load\"") != std::string::npos);
+  // A dump cut short by a crash still has a window; the header count says how many rows it promised.
+  CHECK(py.find("and logged_count == len(rows)") != std::string::npos);
 }
 
 TEST_CASE("Linux callback window fails a stall or sustained load, and calls a jackd xrun the driver's otherwise")
@@ -244,6 +246,8 @@ TEST_CASE("Linux callback window fails a stall or sustained load, and calls a ja
   CHECK(smoke.find("VOLUM_CALLBACK_TIMING=1") != std::string::npos);
   CHECK(smoke.find("xrun mode: strict") != std::string::npos);
   CHECK(smoke.find("xrun mode: box") != std::string::npos);
+  CHECK(smoke.find("jx=$(( ${xr:-0} > ${jl:-0} ? ${xr:-0} : ${jl:-0} ))") != std::string::npos);
+  CHECK(smoke.find("--jack-xruns \"${jl:-0}\"") == std::string::npos);
   CHECK(smoke.find("microsoft") == std::string::npos);
   CHECK(smoke.find("uname") == std::string::npos);
 

@@ -88,6 +88,7 @@ def main():
     start = probe_field(probe, "window_start_ns")
     end = probe_field(probe, "window_end_ns")
     overflow = header_field(header, "overflow")
+    logged_count = header_field(header, "count")
     logged_frames = header_field(header, "frames")
     logged_rate = header_field(header, "rate")
     period = period_us(args.frames, args.rate)
@@ -106,6 +107,7 @@ def main():
         and end is not None
         and end >= start
         and overflow == 0
+        and logged_count == len(rows)
         and logged_frames == args.frames
         and logged_rate == args.rate
         and len(in_window) > 0
