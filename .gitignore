@@ -53,3 +53,4 @@ training/*.nam
 
 NeuralAmpModeler/ui-mockup/
 rigs/*/amp-pic-*
+__pycache__/
