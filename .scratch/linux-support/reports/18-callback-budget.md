@@ -15,26 +15,30 @@ No change to `main`, `dev` or `feature/linux-support`.
 
 `VOLUM_CALLBACK_TIMING=1` is read once in `IPlugAPPHost::Init`, before the audio thread. Unset, the callback does not read the clock. Set, each `AudioCallback` (the plug-in's processing included) stores its `CLOCK_MONOTONIC` duration in a fixed ring and an atomic max. No allocation, lock or stdio on that thread. The main thread prints the rows after `CloseAudio` has stopped the JACK thread.
 
-The period for 256 frames at 48000 Hz is 5334 us (rounded up). The box budget is 70 percent of that, 3733 us (`kVoLumLinuxCallbackBudgetThousandths = 700`). CI's budget is 80 percent, 4267 us (`kVoLumLinuxCallbackBudgetStrictThousandths = 800`), picked by the same `--strict-xruns` switch. A callback over the period or over its budget fails on the box and in CI.
+The period for 256 frames at 48000 Hz is 5334 us (rounded up). Two rules, the same on the box and in CI:
 
-`--strict-xruns` is what CI passes. Any jackd xrun in the 60 s window then fails, as before. The box does not pass that flag. A jackd xrun whose callbacks stayed inside the budget prints `driver xruns: N (not gated on WSL, root cause reports/17-jack-xrun.md)` and does not fail. The script does not look at the kernel or the distro to decide.
+- **Stall:** any callback in the window longer than the period fails (`fail-callback`).
+- **Load:** the 99th-percentile callback longer than 70 percent of the period, 3733 us (`kVoLumLinuxCallbackBudgetThousandths = 700`), fails (`fail-load`).
+
+`--strict-xruns` is what CI passes. Any jackd xrun in the 60 s window then fails, as before. The box does not pass that flag. A jackd xrun whose callbacks passed both rules prints `driver xruns: N (not gated on WSL, root cause reports/17-jack-xrun.md)` and does not fail. The script does not look at the kernel or the distro to decide.
 
 `--sanitized` still prints both and gates neither. The instrumented build is not the real-time budget.
 
-## Why 70 percent on the box and 80 percent on CI
+## Why the p99 and not the slowest callback
 
-Ten box windows at 48000/256, then three full smokes. Window maxima, us:
+The worker's first gate held the slowest single callback against a fraction of the period. Every recorded window (each 60 s, about 11256 callbacks, every callback logged), us:
 
-| | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| short | 2613 | 2847 | 1535 | 2726 | 2828 | 2518 | 2960 | 2690 | 2499 | 2724 |
-| full | 2270 | 2361 | 3161 | | | | | | | |
+| Window | p50 | p99 | max |
+| --- | --- | --- | --- |
+| box, 16 windows (10 short, 3 full, 3 at `0d028f37`) | 824 to 851 | 1355 to 2159 | 1535 to **4172** |
+| CI 40247591663 | 2663 | 2915 | **3905** |
+| CI 40248222369 | 2676 | 2837 | 3004 |
+| red proof: `usleep(4266)` on 4 callbacks | 862 | 1606 | 5465 |
+| red proof: 10 ms mutex | 852 | 1643 | 10460 |
 
-The box peak is 3161 us, 59 percent of 5334. 65 percent (3467 us) passed every one of those, and passed `verify-linux.sh --final` on `25ba2a1d`.
+The maximum is scheduler noise. One quiet box window right after a build hit 4172 us (78 percent) with p99 2159; CI's 3905 us was the only callback over 3300 in its window. A max budget of 65 percent failed CI, a box/CI split at 70/80 failed the box 1 run in 3, and 80 percent passed that box window by 95 us. The p99 skips the slowest 113 callbacks of the window, and it sits at 25 to 40 percent of the period on the box and 53 to 55 percent on the runner, which is about three times slower than the box (p50 2670 against 830 us).
 
-CI run [40247591663](https://github.com/guitarlum/VoLum/actions/runs/40247591663) on that same 65 percent head failed Linux standalone: the runner's window max was **3905 us**, 73 percent of the period, `verdict=fail-callback`. 70 percent is 3733 us, which is still under 3905. The replacement run 40248222369 at 80 percent peaked at 3004 us (56 percent).
-
-Coordinator review: one shared 80 percent line would let a box callback grow from its 59 percent peak by about a third before failing, on the machine that runs the release gate. The budget is split on the switch that already separates the two: the box keeps 70 percent (3733 us, 572 us above its peak, so a callback about a fifth slower fails), and CI gets 80 percent (4267 us, 362 us above its worst sample). A callback that uses the whole period fails in both.
+70 percent on the p99 leaves 30 points of headroom on the box and 15 on CI. A sustained cost rise of about 28 percent on the runner, or 70 percent on the box, fails it. Smaller trends are backlog `Q6`. Stalls, which the p99 hides on purpose, are the period rule's job: both red proofs exceed the period.
 
 ## Box
 

@@ -156,54 +156,65 @@ TEST_CASE("Linux callback timing is off unless VOLUM_CALLBACK_TIMING is exactly 
   CHECK(iplug::VoLumLinuxCallbackTimingEnabled("1"));
 }
 
-TEST_CASE("Linux callback budget is 70 percent of the rounded-up period on the box, 80 on CI")
+TEST_CASE("Linux callback budget is 70 percent of the rounded-up period, applied to the p99")
 {
-  // 256 / 48000 s = 5333.333 us, so the period is 5334 us, 70 percent is 3733 us
-  // and 80 percent is 4267 us.
+  // 256 / 48000 s = 5333.333 us, so the period is 5334 us and 70 percent is 3733 us.
   CHECK(iplug::kVoLumLinuxCallbackBudgetThousandths == 700);
-  CHECK(iplug::kVoLumLinuxCallbackBudgetStrictThousandths == 800);
   CHECK(iplug::VoLumLinuxCallbackPeriodUs(256, 48000) == 5334);
-  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 48000, false) == 3733);
-  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 48000, true) == 4267);
+  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 48000) == 3733);
   CHECK(iplug::VoLumLinuxCallbackPeriodUs(1024, 48000) == 21334);
   CHECK(iplug::VoLumLinuxCallbackPeriodUs(0, 48000) == 0);
-  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 0, false) == 0);
+  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 0) == 0);
+
+  // A 60 s window at 256 / 48 kHz holds about 11256 callbacks; its p99 skips the slowest 113.
+  CHECK(iplug::VoLumLinuxCallbackP99Index(0) == 0);
+  CHECK(iplug::VoLumLinuxCallbackP99Index(1) == 0);
+  CHECK(iplug::VoLumLinuxCallbackP99Index(100) == 99);
+  CHECK(iplug::VoLumLinuxCallbackP99Index(101) == 99);
+  CHECK(iplug::VoLumLinuxCallbackP99Index(11256) == 11143);
 
   const std::string py = ReadRepoText("NeuralAmpModeler/scripts/linux/smoke/callback-budget.py");
   CHECK(py.find("BUDGET_THOUSANDTHS = 700") != std::string::npos);
-  CHECK(py.find("BUDGET_STRICT_THOUSANDTHS = 800") != std::string::npos);
-  CHECK(py.find("return BUDGET_STRICT_THOUSANDTHS if strict else BUDGET_THOUSANDTHS") != std::string::npos);
   CHECK(py.find("(frames * 1000000 + rate - 1) // rate") != std::string::npos);
+  CHECK(py.find("return 0 if n == 0 else min(n - 1, (n * 99) // 100)") != std::string::npos);
+  CHECK(py.find("if max_us > period_us(frames, rate):\n        return \"fail-callback\"") != std::string::npos);
+  CHECK(py.find("if p99_us > budget_us(frames, rate):\n        return \"fail-load\"") != std::string::npos);
 }
 
-TEST_CASE("Linux callback window classifies a jackd xrun as the driver's only when callbacks stayed inside the budget")
+TEST_CASE("Linux callback window fails a stall or sustained load, and calls a jackd xrun the driver's otherwise")
 {
   using iplug::VoLumLinuxCallbackVerdict;
   const uint32_t frames = 256;
   const uint32_t rate = 48000;
-  const uint32_t inside = 2672; // measured on the box, about half the period
-  const uint32_t overBoxBudget = 3734;
-  const uint32_t overBudget = 4268;
+  // Box windows: p99 up to 2159 us, one lone callback at 4172 us (split-1).
+  const uint32_t p99 = 2159;
+  const uint32_t spike = 4172;
+  const uint32_t overBudget = 3734;
   const uint32_t overPeriod = 5335;
 
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 0, false, true)
-        == VoLumLinuxCallbackVerdict::Pass);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 3, false, true)
+  for (const bool strict : {false, true})
+  {
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, p99, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::Pass);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(5334, p99, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::Pass);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, 3733, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::Pass);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overPeriod, p99, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::FailCallback);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overPeriod, overBudget, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::FailCallback);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, overBudget, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::FailLoad);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, overBudget, frames, rate, 2, strict, true)
+          == VoLumLinuxCallbackVerdict::FailLoad);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, p99, frames, rate, 0, strict, false)
+          == VoLumLinuxCallbackVerdict::FailMissing);
+  }
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, p99, frames, rate, 3, false, true)
         == VoLumLinuxCallbackVerdict::DriverXrun);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 1, true, true)
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, p99, frames, rate, 1, true, true)
         == VoLumLinuxCallbackVerdict::FailStrictJack);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBoxBudget, frames, rate, 0, false, true)
-        == VoLumLinuxCallbackVerdict::FailCallback);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBoxBudget, frames, rate, 0, true, true)
-        == VoLumLinuxCallbackVerdict::Pass);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBudget, frames, rate, 0, false, true)
-        == VoLumLinuxCallbackVerdict::FailCallback);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBudget, frames, rate, 0, true, true)
-        == VoLumLinuxCallbackVerdict::FailCallback);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overPeriod, frames, rate, 0, false, true)
-        == VoLumLinuxCallbackVerdict::FailCallback);
-  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 0, false, false)
-        == VoLumLinuxCallbackVerdict::FailMissing);
 
   const std::string host = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_host.cpp");
   const auto init = host.find("bool IPlugAPPHost::Init()");

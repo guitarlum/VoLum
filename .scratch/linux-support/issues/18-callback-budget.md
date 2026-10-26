@@ -18,8 +18,8 @@ May write:
 
 ## Work
 
-- CI keeps the zero-JACK-xrun rule (`--strict-xruns`) and also checks the callback budget at 80 percent of the period.
-- The box fails the 60 s window when a callback exceeds its period or 70 percent of that period. A jackd xrun whose callbacks stayed inside the budget is printed as a driver xrun and does not fail.
+- CI keeps the zero-JACK-xrun rule (`--strict-xruns`) and also checks the callback rules below.
+- The box and CI fail the 60 s window when any callback exceeds its period (stall), or when the 99th-percentile callback exceeds 70 percent of the period (sustained load). A jackd xrun whose callbacks stayed inside the budget is printed as a driver xrun and does not fail.
 - `VOLUM_CALLBACK_TIMING=1` records callback durations. Unset, it does nothing. Linux only.
 - Doctests own the budget math, the classifier and the env parse.
 - Two backlog items: RealtimeSanitizer on the audio path, and a per-release callback-timing trend.

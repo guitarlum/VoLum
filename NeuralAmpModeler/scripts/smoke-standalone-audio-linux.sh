@@ -10,10 +10,10 @@
 #      in which the first captures load and the editor starts, turns a -12 dBFS
 #      sine into a finite output above -50 dBFS in every second of --seconds
 #      (default 60). On CI (--strict-xruns) that window also has zero JACK xruns.
-#      On the box, a jackd xrun whose VoLum callbacks stayed inside the budget is
+#      On the box, a jackd xrun whose VoLum callbacks passed both rules below is
 #      a driver xrun: counted and printed, not a failure (reports/17-jack-xrun.md).
-#      A callback longer than the period, or longer than the budget fraction of
-#      the period, fails in both places. Xruns during each launch, warm-up and
+#      A callback longer than the period, or a 99th-percentile callback longer
+#      than the budget fraction of the period, fails in both places. Xruns during each launch, warm-up and
 #      quit, and in the 10 s windows of the later launches, are printed, not
 #      gated: on a VM the dummy driver itself wakes late now and then, and every
 #      client misses that cycle;
@@ -269,10 +269,10 @@ audio_checks() {
     [[ $STRICT_XRUNS -eq 1 ]] && strict_arg=(--strict)
     if python3 "$SCRIPT_DIR/linux/smoke/callback-budget.py" --log "$OUT/$name.out" --probe "$OUT/$name.probe" --frames "$PERIOD" --rate 48000 --jack-xruns "${jl:-0}" "${strict_arg[@]}" >"$OUT/$name.budget" 2>&1; then
       sed 's/^/  /' "$OUT/$name.budget"
-      pass "[$name] callback budget $(sed -n 's/^window_max_us=/max /p; s/^budget_us=/budget /p' "$OUT/$name.budget" | tr '\n' ' ')"
+      pass "[$name] callback budget $(sed -n 's/^window_p99_us=/p99 /p; s/^window_max_us=/max /p; s/^period_us=/period /p; s/^budget_us=/budget /p' "$OUT/$name.budget" | tr '\n' ' ')"
     else
       sed 's/^/  /' "$OUT/$name.budget"
-      fail "[$name] callback budget $(sed -n 's/^verdict=//p; s/^window_max_us=/max /p; s/^budget_us=/budget /p; s/^reason=//p' "$OUT/$name.budget" | tr '\n' ' ')"
+      fail "[$name] callback budget $(sed -n 's/^verdict=//p; s/^window_p99_us=/p99 /p; s/^window_max_us=/max /p; s/^period_us=/period /p; s/^budget_us=/budget /p; s/^reason=//p' "$OUT/$name.budget" | tr '\n' ' ')"
     fi
   fi
   check "[$name] output finite (${nf:-?} non-finite samples)" test "${nf:-x}" = 0

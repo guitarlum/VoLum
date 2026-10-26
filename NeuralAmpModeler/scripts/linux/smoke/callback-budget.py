@@ -2,9 +2,10 @@
 """Classify one standalone smoke window.
 
 The integer rules match iplug::VoLumLinuxCallbackPeriodUs,
-VoLumLinuxCallbackBudgetUs and VoLumLinuxClassifyCallbackWindow in
-VoLumAppLinuxPolicy.h. The box budget is 700 thousandths of the period,
-the strict (CI) budget 800.
+VoLumLinuxCallbackBudgetUs, VoLumLinuxCallbackP99Index and
+VoLumLinuxClassifyCallbackWindow in VoLumAppLinuxPolicy.h. No callback may
+exceed the period, and the 99th-percentile callback may use 700 thousandths
+of it.
 """
 
 import argparse
@@ -13,8 +14,6 @@ import sys
 
 # kVoLumLinuxCallbackBudgetThousandths
 BUDGET_THOUSANDTHS = 700
-# kVoLumLinuxCallbackBudgetStrictThousandths
-BUDGET_STRICT_THOUSANDTHS = 800
 
 
 def period_us(frames, rate):
@@ -23,21 +22,21 @@ def period_us(frames, rate):
     return (frames * 1000000 + rate - 1) // rate
 
 
-def budget_thousandths(strict):
-    return BUDGET_STRICT_THOUSANDTHS if strict else BUDGET_THOUSANDTHS
+def budget_us(frames, rate):
+    return period_us(frames, rate) * BUDGET_THOUSANDTHS // 1000
 
 
-def budget_us(frames, rate, strict):
-    return period_us(frames, rate) * budget_thousandths(strict) // 1000
+def p99_index(n):
+    return 0 if n == 0 else min(n - 1, (n * 99) // 100)
 
 
-def classify(max_us, frames, rate, jack_xruns, strict, timing_complete):
+def classify(max_us, p99_us, frames, rate, jack_xruns, strict, timing_complete):
     if not timing_complete or frames <= 0 or rate <= 0:
         return "fail-missing"
-    period = period_us(frames, rate)
-    budget = budget_us(frames, rate, strict)
-    if max_us > period or max_us > budget:
+    if max_us > period_us(frames, rate):
         return "fail-callback"
+    if p99_us > budget_us(frames, rate):
+        return "fail-load"
     if jack_xruns > 0:
         return "fail-strict" if strict else "driver"
     return "pass"
@@ -92,7 +91,7 @@ def main():
     logged_frames = header_field(header, "frames")
     logged_rate = header_field(header, "rate")
     period = period_us(args.frames, args.rate)
-    budget = budget_us(args.frames, args.rate, args.strict)
+    budget = budget_us(args.frames, args.rate)
 
     # 20 ms past the probe's end stamp still belongs to the window, not to the quit.
     slack_ns = 20000000
@@ -111,13 +110,18 @@ def main():
         and logged_rate == args.rate
         and len(in_window) > 0
     )
-    max_us = max(in_window) if in_window else 0
-    verdict = classify(max_us, args.frames, args.rate, args.jack_xruns, args.strict, complete)
+    in_window.sort()
+    max_us = in_window[-1] if in_window else 0
+    p50_us = in_window[len(in_window) // 2] if in_window else 0
+    p99_us = in_window[p99_index(len(in_window))] if in_window else 0
+    verdict = classify(max_us, p99_us, args.frames, args.rate, args.jack_xruns, args.strict, complete)
+    print("window_p50_us=%d" % p50_us)
+    print("window_p99_us=%d" % p99_us)
     print("window_max_us=%d" % max_us)
     print("window_callbacks=%d" % len(in_window))
     print("period_us=%d" % period)
     print("budget_us=%d" % budget)
-    print("budget_thousandths=%d" % budget_thousandths(args.strict))
+    print("budget_thousandths=%d" % BUDGET_THOUSANDTHS)
     print("jack_xruns=%d" % args.jack_xruns)
     print("verdict=%s" % verdict)
     if verdict == "driver":

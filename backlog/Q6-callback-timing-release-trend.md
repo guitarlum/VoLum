@@ -1,10 +1,10 @@
 # Q6 — Callback-timing trend per release
 
-Not a 1.4.0 blocker. Ticket 18 gates a single run against a fixed fraction of the JACK period (70 percent on the box, 80 percent on CI). It does not say whether this release is slower than the last one.
+Not a 1.4.0 blocker. Ticket 18 gates a single run: no callback over the JACK period, and the p99 callback under 70 percent of it. It does not say whether this release is slower than the last one.
 
 ## Problem
 
-A change can raise p99 callback time from 1.6 ms toward 3.5 ms and still pass CI's 80 percent budget (about 4.3 ms at 48000 Hz / 256 frames). The regression shows up only when it crosses that line, which is late.
+A change can raise the box's p99 callback time from 1.5 ms toward 3.5 ms and still pass the 70 percent budget (3.7 ms at 48000 Hz / 256 frames). The regression shows up only when it crosses that line, which is late.
 
 ## Scope
 
