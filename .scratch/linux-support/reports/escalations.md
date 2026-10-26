@@ -62,3 +62,7 @@ its threshold predate this effort and were not touched.
   the macOS runner should print the ratio instead of failing, the way the arm64
   arm of the 0.5 check already does.
 - The loop does not widen the threshold (standing order).
+
+## E3 2026-10-26 05:00: one JACK xrun on the CI runner (strict rule, not VoLum)
+
+dev CI 40266166574 on 5d85046d (ticket 18 merge) failed Linux standalone run 1: `zero JACK xruns over 60 s: xrun callback 1, jackd log 1`, verdict `fail-strict`. VoLum's callbacks were inside both rules: p99 2872 us, max 3098 us against a 5334 us period. The run was cancelled by the next dev push; dev CI 40266709053 on d19eea30 is green, Linux standalone included. The zero-xrun rule is kept as is. If runner xruns recur, compare the window's callback timing first; a VoLum stall shows as a callback over the period.
