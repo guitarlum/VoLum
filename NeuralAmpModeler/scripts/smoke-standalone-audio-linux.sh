@@ -254,11 +254,13 @@ audio_checks() {
   local name="$1" secs="$2" gate="$3" probe="$OUT/$1.probe"
   local xr nf pk act
   xr=$(field "$probe" xruns); nf=$(field "$probe" nonfinite); pk=$(field "$probe" peak_dbfs); act=$(field "$probe" active_seconds)
-  local jl
+  local jl jx
   jl=$(field "$probe" jackd_xrun_lines)
+  # The xrun callback and the jackd log can each see an xrun the other missed.
+  jx=$(( ${xr:-0} > ${jl:-0} ? ${xr:-0} : ${jl:-0} ))
   if [[ $SANITIZED -eq 1 || $gate -eq 0 ]]; then
     echo "  [$name] xruns not gated here: callback ${xr:-none}, jackd log ${jl:-none}"
-    python3 "$SCRIPT_DIR/linux/smoke/callback-budget.py" --log "$OUT/$name.out" --probe "$OUT/$name.probe" --frames "$PERIOD" --rate 48000 --jack-xruns "${jl:-0}" >"$OUT/$name.budget" 2>&1 || true
+    python3 "$SCRIPT_DIR/linux/smoke/callback-budget.py" --log "$OUT/$name.out" --probe "$OUT/$name.probe" --frames "$PERIOD" --rate 48000 --jack-xruns "$jx" >"$OUT/$name.budget" 2>&1 || true
     sed 's/^/  /' "$OUT/$name.budget"
     echo "  [$name] callback budget not gated here"
   else
@@ -267,7 +269,7 @@ audio_checks() {
     fi
     local strict_arg=()
     [[ $STRICT_XRUNS -eq 1 ]] && strict_arg=(--strict)
-    if python3 "$SCRIPT_DIR/linux/smoke/callback-budget.py" --log "$OUT/$name.out" --probe "$OUT/$name.probe" --frames "$PERIOD" --rate 48000 --jack-xruns "${jl:-0}" "${strict_arg[@]}" >"$OUT/$name.budget" 2>&1; then
+    if python3 "$SCRIPT_DIR/linux/smoke/callback-budget.py" --log "$OUT/$name.out" --probe "$OUT/$name.probe" --frames "$PERIOD" --rate 48000 --jack-xruns "$jx" "${strict_arg[@]}" >"$OUT/$name.budget" 2>&1; then
       sed 's/^/  /' "$OUT/$name.budget"
       pass "[$name] callback budget $(sed -n 's/^window_p99_us=/p99 /p; s/^window_max_us=/max /p; s/^period_us=/period /p; s/^budget_us=/budget /p' "$OUT/$name.budget" | tr '\n' ' ')"
     else

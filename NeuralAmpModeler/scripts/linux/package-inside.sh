@@ -38,6 +38,8 @@ case "$CASE" in
     RED_UNINSTALL=0
     ;;
   fedora)
+    # Nothing here needs the Cisco codec repo, and its mirror timed out a CI run.
+    rm -f /etc/yum.repos.d/fedora-cisco-openh264.repo
     dnf install -y --setopt=install_weak_deps=False \
       gtk3 alsa-lib mesa-libGL mesa-dri-drivers libX11 libXi fontconfig freetype \
       libatomic libstdc++ \
