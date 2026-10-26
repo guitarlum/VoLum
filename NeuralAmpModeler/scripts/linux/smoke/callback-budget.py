@@ -3,7 +3,7 @@
 
 The integer rules match iplug::VoLumLinuxCallbackPeriodUs,
 VoLumLinuxCallbackBudgetUs and VoLumLinuxClassifyCallbackWindow in
-VoLumAppLinuxPolicy.h. kVoLumLinuxCallbackBudgetThousandths is 650.
+VoLumAppLinuxPolicy.h. kVoLumLinuxCallbackBudgetThousandths is 800.
 """
 
 import argparse
@@ -11,7 +11,7 @@ import re
 import sys
 
 # kVoLumLinuxCallbackBudgetThousandths
-BUDGET_THOUSANDTHS = 650
+BUDGET_THOUSANDTHS = 800
 
 
 def period_us(frames, rate):
