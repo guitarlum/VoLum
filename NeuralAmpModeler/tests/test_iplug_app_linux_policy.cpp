@@ -146,3 +146,109 @@ TEST_CASE("Linux Preferences offers the loadable drivers and maps the selection 
     "            v = (int) SendDlgItemMessage(hwndDlg, IDC_COMBO_AUDIO_DRIVER, CB_GETITEMDATA, v, 0);";
   CHECK(handler.find(byItemData) != std::string::npos);
 }
+
+TEST_CASE("Linux callback timing is off unless VOLUM_CALLBACK_TIMING is exactly 1")
+{
+  CHECK_FALSE(iplug::VoLumLinuxCallbackTimingEnabled(nullptr));
+  CHECK_FALSE(iplug::VoLumLinuxCallbackTimingEnabled(""));
+  CHECK_FALSE(iplug::VoLumLinuxCallbackTimingEnabled("0"));
+  CHECK_FALSE(iplug::VoLumLinuxCallbackTimingEnabled("yes"));
+  CHECK(iplug::VoLumLinuxCallbackTimingEnabled("1"));
+}
+
+TEST_CASE("Linux callback budget is 70 percent of the rounded-up period, applied to the p99")
+{
+  // 256 / 48000 s = 5333.333 us, so the period is 5334 us and 70 percent is 3733 us.
+  CHECK(iplug::kVoLumLinuxCallbackBudgetThousandths == 700);
+  CHECK(iplug::VoLumLinuxCallbackPeriodUs(256, 48000) == 5334);
+  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 48000) == 3733);
+  CHECK(iplug::VoLumLinuxCallbackPeriodUs(1024, 48000) == 21334);
+  CHECK(iplug::VoLumLinuxCallbackPeriodUs(0, 48000) == 0);
+  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 0) == 0);
+
+  // A 60 s window at 256 / 48 kHz holds about 11256 callbacks; its p99 skips the slowest 113.
+  CHECK(iplug::VoLumLinuxCallbackP99Index(0) == 0);
+  CHECK(iplug::VoLumLinuxCallbackP99Index(1) == 0);
+  CHECK(iplug::VoLumLinuxCallbackP99Index(100) == 99);
+  CHECK(iplug::VoLumLinuxCallbackP99Index(101) == 99);
+  CHECK(iplug::VoLumLinuxCallbackP99Index(11256) == 11143);
+
+  const std::string py = ReadRepoText("NeuralAmpModeler/scripts/linux/smoke/callback-budget.py");
+  CHECK(py.find("BUDGET_THOUSANDTHS = 700") != std::string::npos);
+  CHECK(py.find("(frames * 1000000 + rate - 1) // rate") != std::string::npos);
+  CHECK(py.find("return 0 if n == 0 else min(n - 1, (n * 99) // 100)") != std::string::npos);
+  CHECK(py.find("if max_us > period_us(frames, rate):\n        return \"fail-callback\"") != std::string::npos);
+  CHECK(py.find("if p99_us > budget_us(frames, rate):\n        return \"fail-load\"") != std::string::npos);
+}
+
+TEST_CASE("Linux callback window fails a stall or sustained load, and calls a jackd xrun the driver's otherwise")
+{
+  using iplug::VoLumLinuxCallbackVerdict;
+  const uint32_t frames = 256;
+  const uint32_t rate = 48000;
+  // Box windows: p99 up to 2159 us, one lone callback at 4172 us (split-1).
+  const uint32_t p99 = 2159;
+  const uint32_t spike = 4172;
+  const uint32_t overBudget = 3734;
+  const uint32_t overPeriod = 5335;
+
+  for (const bool strict : {false, true})
+  {
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, p99, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::Pass);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(5334, p99, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::Pass);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, 3733, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::Pass);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overPeriod, p99, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::FailCallback);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overPeriod, overBudget, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::FailCallback);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, overBudget, frames, rate, 0, strict, true)
+          == VoLumLinuxCallbackVerdict::FailLoad);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, overBudget, frames, rate, 2, strict, true)
+          == VoLumLinuxCallbackVerdict::FailLoad);
+    CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, p99, frames, rate, 0, strict, false)
+          == VoLumLinuxCallbackVerdict::FailMissing);
+  }
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, p99, frames, rate, 3, false, true)
+        == VoLumLinuxCallbackVerdict::DriverXrun);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(spike, p99, frames, rate, 1, true, true)
+        == VoLumLinuxCallbackVerdict::FailStrictJack);
+
+  const std::string host = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_host.cpp");
+  const auto init = host.find("bool IPlugAPPHost::Init()");
+  REQUIRE(init != std::string::npos);
+  const std::string initBody = host.substr(init, host.find("\nbool IPlugAPPHost::", init + 1) - init);
+  CHECK(initBody.find("VoLumLinuxCallbackTimingEnabled(std::getenv(\"VOLUM_CALLBACK_TIMING\"))") != std::string::npos);
+
+  const auto callback = host.find("int IPlugAPPHost::AudioCallback(");
+  REQUIRE(callback != std::string::npos);
+  const std::string callbackBody = host.substr(callback, host.find("\n// static\n", callback + 1) - callback);
+  CHECK(callbackBody.find("IPlugAPPLinuxCallbackSpan") != std::string::npos);
+  CHECK(callbackBody.find("getenv") == std::string::npos);
+
+  const std::string linuxcpp = ReadRepoText("iPlug2/IPlug/APP/IPlugAPP_linux.cpp");
+  const auto record = linuxcpp.find("void RecordCallback(");
+  REQUIRE(record != std::string::npos);
+  const std::string recordBody =
+    linuxcpp.substr(record, linuxcpp.find("\nIPlugAPPLinuxCallbackSpan::", record) - record);
+  CHECK(recordBody.find("fprintf") == std::string::npos);
+  CHECK(recordBody.find("printf") == std::string::npos);
+  CHECK(recordBody.find("malloc") == std::string::npos);
+  CHECK(recordBody.find("mutex") == std::string::npos);
+  CHECK(recordBody.find("getenv") == std::string::npos);
+
+  const std::string smoke = ReadRepoText("NeuralAmpModeler/scripts/smoke-standalone-audio-linux.sh");
+  CHECK(smoke.find("--strict-xruns") != std::string::npos);
+  CHECK(smoke.find("VOLUM_CALLBACK_TIMING=1") != std::string::npos);
+  CHECK(smoke.find("xrun mode: strict") != std::string::npos);
+  CHECK(smoke.find("xrun mode: box") != std::string::npos);
+  CHECK(smoke.find("microsoft") == std::string::npos);
+  CHECK(smoke.find("uname") == std::string::npos);
+
+  const std::string ci = ReadRepoText(".github/workflows/ci.yml");
+  CHECK(ci.find("smoke-standalone-audio-linux.sh --app build-linux/standalone/VoLum --out "
+                "\"$RUNNER_TEMP/volum-smoke-app\" --require-hide --require-rt --strict-xruns")
+        != std::string::npos);
+}

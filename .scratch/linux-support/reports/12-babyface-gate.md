@@ -57,3 +57,7 @@ The dropped buffer is 159 samples in the recording (the self-test hole is 167). 
 The callback writes an exact 440 Hz phase at the opened 48000 Hz rate from `Init`'s plan. When a take fails, the recording still has that sine at full level; what moves is the phase against the delay measured later in the same file. It takes up to about 1.4 s from the start of the file (about half a second after the tone arrives) to settle, and some opens settle before the aligner's 0.5 s skip (green 1, green 2, the calibration, `bf-green-1`). There is no logged gap over 50 ms and no single missing buffer. The coast is in the WSLg resample / loopback delay, after the callback. It is not another application's audio: a notification would not hold −18 dBFS of 440 Hz with a 100-sample period and no competing bin.
 
 The skip stays 0.5 s and the tolerance stays −60 dBFS. Lengthening either one would hide this.
+
+## Control without VoLum (coordinator, 2026-10-25)
+
+Same route, `paplay` of a 6 s 440 Hz sine at -24 dBFS (48000 Hz stereo) recorded with `parecord` (1 ch, 48000 Hz), five takes, phase per 10 ms window against the phase 0.5 s before the tone ends: take 1 locked at once (worst 1 deg), take 2 off by up to 6 deg for 1.96 s after arrival, take 3 off by up to 127 deg for 1.98 s, takes 4 and 5 locked at once (1-2 deg). The same opening coast appears with no VoLum process in the path, so it belongs to the WSLg RDP sink/source.
