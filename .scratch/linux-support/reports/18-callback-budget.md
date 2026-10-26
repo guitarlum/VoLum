@@ -1,13 +1,13 @@
 # 18 Callback budget gate
 
-Status: the gate is in. CI run [40248222369](https://github.com/guitarlum/VoLum/actions/runs/40248222369) is green on the code head, including Formatting, Linux standalone and macOS. This commit is report-only.
+Status: the gate is in. CI run [40256879294](https://github.com/guitarlum/VoLum/actions/runs/40256879294) is green on the code head `8a8ed405`, macOS included. Cold verifier (cross-family) ACCEPTED with no MUST-FIX. This commit is report-only.
 
 ## Heads
 
 | | Branch | Head |
 | --- | --- | --- |
-| Superproject | `feature/linux-18-callback-budget` | code `04b26ef561d2ecef16cbb4391b9cb2df81cf7297`; this report is the next commit |
-| iPlug2 | `volum/linux-18` (off `2a3ba520c`) | `a086b9280e54e29daa4e92ce1c694f1f672550bd` |
+| Superproject | `feature/linux-18-callback-budget` | code `8a8ed405`; this report is the next commit |
+| iPlug2 | `volum/linux-18` (off `2a3ba520c`) | `ccc4da534` |
 
 No change to `main`, `dev` or `feature/linux-support`.
 
@@ -42,11 +42,11 @@ The maximum is scheduler noise. One quiet box window right after a build hit 417
 
 ## Box
 
-Three full smokes in a row on `d5ac20a2` (the 65 percent gate, which is stricter than what shipped): **PASS, PASS, PASS**. Run 1 maxima 2270, 2361, 3161. Two of them printed one driver xrun and did not fail.
+Three full smokes in a row on the shipped gate (`8a8ed405`, iPlug2 `ccc4da534`): **PASS, PASS, PASS**. Run 1 p99 1446, 1430, 1333 us; max 2536, 2674, 2473 us. Two of them printed driver xruns and did not fail.
 
-`verify-linux.sh --final` on `25ba2a1d`: **exit 0, `linux gates: MET`**. GCC tests, Clang ASan/UBSan, validator, REAPER, sanitizer hosts, the smoke (`RESULT: PASS`), e2e (`ALL PASS 96 checks`), the private-sink real-device gate, and UI scenes. The first attempt died because this worker held `gui.lock` around the whole script and e2e waits for that lock; the rerun did not hold it. The scripts that need the lock take it themselves.
+Earlier, three full smokes on `d5ac20a2` (max gate at 65 percent) passed, and `verify-linux.sh --final` on `25ba2a1d` was **exit 0, `linux gates: MET`**: GCC tests, Clang ASan/UBSan, validator, REAPER, sanitizer hosts, the smoke, e2e (`ALL PASS 96 checks`), the private-sink real-device gate and UI scenes. The first attempt died because the worker held `gui.lock` around the whole script and e2e waits for that lock; the rerun did not hold it. The commits since only change the classifier, its doctests and the smoke's pass line.
 
-Windows `run-tests-win.ps1` on the 80 percent tests: **1484 passed, 0 failed**.
+Windows `run-tests-win.ps1` on `8a8ed405`: **1484 passed, 0 failed**.
 
 ## Red proofs
 
@@ -58,8 +58,9 @@ Source was mutated on the box, the app rebuilt, run 1 of the smoke executed, the
 | Callback takes a mutex the main loop holds for 10 ms about every 2 s | `FAIL`, `window_max_us=10460`, `verdict=fail-callback` |
 | Classifier, callbacks at 2672 us, 2 jackd xruns, `--strict` | exit 1, `verdict=fail-strict` |
 | Same log, box mode | exit 0, `verdict=driver`, the driver-xrun line |
+| 2400 us busy wait in every callback (`8a8ed405`) | `FAIL`, p50 3233, `window_p99_us=4662` (over 3733), max 7562, `verdict=fail-callback` |
 
-5465 and 10460 are also over both shipped budgets (3733 and 4267 us). The sleep and mutex proofs were run against the 65 percent build; the recorded maxima still fail 80 percent. They were not re-run after the constant change.
+The sleep and mutex proofs ran on the earlier max-gate builds; their recorded maxima (5465, 10460) are over the period, which the shipped stall rule fails. The busy-wait window also broke the period, so the stall verdict came first; its p99 alone fails the load rule. The doctests pin the load rule on its own: with it reading the max instead of the p99, `run-tests-win.ps1` fails 8 checks (1483 of 1484 cases). Splitting the budget 70/80 by box and CI was tried at `0d028f37` and dropped: its 70 percent max line failed the box 1 run in 3 (4172 us).
 
 ## Backlog
 
@@ -67,5 +68,11 @@ Source was mutated on the box, the app rebuilt, run 1 of the smoke executed, the
 
 ## Uncertain
 
-- CI's 80 percent limit has two runner samples behind it (3905 and 3004 us). A later runner window could sit above 4267 us without a VoLum change. The report would then need a new sample, not a quieter fraction.
-- The three full greens and `verify-linux --final` ran at 65 percent (`d5ac20a2` and `25ba2a1d`), stricter than the box's 70 percent.
+- The stall rule still reads the single slowest callback against the full period. No recorded window came closer than 4172 us (78 percent); a runner on slower hardware could. The fix would be a new sample and a look at what stalled, not a looser rule.
+- The p99 on CI (53 to 55 percent) has two runner samples. GitHub may move the job to a slower CPU type; 70 percent is then the first thing to fail.
+
+## Coordinator follow-ups
+
+- The classifier does not compare parsed rows with the header `count`, so a torn dump with a non-empty window could pass (verifier SHOULD-FIX).
+- The box hands the classifier only the jackd log count; an xrun the probe saw without a log line is labelled `pass` rather than `driver`. Both exit 0, so this is the label only. CI fails it on the strict check.
+- Both go into the follow-up with the Fedora openh264 mirror fix.
