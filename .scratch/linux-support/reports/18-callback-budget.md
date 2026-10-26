@@ -15,13 +15,13 @@ No change to `main`, `dev` or `feature/linux-support`.
 
 `VOLUM_CALLBACK_TIMING=1` is read once in `IPlugAPPHost::Init`, before the audio thread. Unset, the callback does not read the clock. Set, each `AudioCallback` (the plug-in's processing included) stores its `CLOCK_MONOTONIC` duration in a fixed ring and an atomic max. No allocation, lock or stdio on that thread. The main thread prints the rows after `CloseAudio` has stopped the JACK thread.
 
-The period for 256 frames at 48000 Hz is 5334 us (rounded up). The budget is 80 percent of that, 4267 us (`kVoLumLinuxCallbackBudgetThousandths = 800`). A callback over the period or over the budget fails on the box and in CI.
+The period for 256 frames at 48000 Hz is 5334 us (rounded up). The box budget is 70 percent of that, 3733 us (`kVoLumLinuxCallbackBudgetThousandths = 700`). CI's budget is 80 percent, 4267 us (`kVoLumLinuxCallbackBudgetStrictThousandths = 800`), picked by the same `--strict-xruns` switch. A callback over the period or over its budget fails on the box and in CI.
 
 `--strict-xruns` is what CI passes. Any jackd xrun in the 60 s window then fails, as before. The box does not pass that flag. A jackd xrun whose callbacks stayed inside the budget prints `driver xruns: N (not gated on WSL, root cause reports/17-jack-xrun.md)` and does not fail. The script does not look at the kernel or the distro to decide.
 
 `--sanitized` still prints both and gates neither. The instrumented build is not the real-time budget.
 
-## Why 80 percent
+## Why 70 percent on the box and 80 percent on CI
 
 Ten box windows at 48000/256, then three full smokes. Window maxima, us:
 
@@ -32,7 +32,9 @@ Ten box windows at 48000/256, then three full smokes. Window maxima, us:
 
 The box peak is 3161 us, 59 percent of 5334. 65 percent (3467 us) passed every one of those, and passed `verify-linux.sh --final` on `25ba2a1d`.
 
-CI run [40247591663](https://github.com/guitarlum/VoLum/actions/runs/40247591663) on that same 65 percent head failed Linux standalone: the runner's window max was **3905 us**, 73 percent of the period, `verdict=fail-callback`. 70 percent is 3734 us, which is still under 3905. The budget is 80 percent (4267 us): 1106 us above the box peak and 362 us above that runner sample. A callback that uses the whole period still fails. The replacement run is 40248222369.
+CI run [40247591663](https://github.com/guitarlum/VoLum/actions/runs/40247591663) on that same 65 percent head failed Linux standalone: the runner's window max was **3905 us**, 73 percent of the period, `verdict=fail-callback`. 70 percent is 3733 us, which is still under 3905. The replacement run 40248222369 at 80 percent peaked at 3004 us (56 percent).
+
+Coordinator review: one shared 80 percent line would let a box callback grow from its 59 percent peak by about a third before failing, on the machine that runs the release gate. The budget is split on the switch that already separates the two: the box keeps 70 percent (3733 us, 572 us above its peak, so a callback about a fifth slower fails), and CI gets 80 percent (4267 us, 362 us above its worst sample). A callback that uses the whole period fails in both.
 
 ## Box
 
@@ -53,7 +55,7 @@ Source was mutated on the box, the app rebuilt, run 1 of the smoke executed, the
 | Classifier, callbacks at 2672 us, 2 jackd xruns, `--strict` | exit 1, `verdict=fail-strict` |
 | Same log, box mode | exit 0, `verdict=driver`, the driver-xrun line |
 
-5465 and 10460 are also over the shipped 4267 us budget. The sleep and mutex proofs were run against the 65 percent build; the recorded maxima still fail 80 percent. They were not re-run after the constant change.
+5465 and 10460 are also over both shipped budgets (3733 and 4267 us). The sleep and mutex proofs were run against the 65 percent build; the recorded maxima still fail 80 percent. They were not re-run after the constant change.
 
 ## Backlog
 
@@ -61,5 +63,5 @@ Source was mutated on the box, the app rebuilt, run 1 of the smoke executed, the
 
 ## Uncertain
 
-- The 80 percent limit has one CI sample behind it (3905 us). A later runner window could sit above 4267 us without a VoLum change. The report would then need a new sample, not a quieter fraction.
-- The three full greens and `verify-linux --final` ran at 65 percent (`d5ac20a2` and `25ba2a1d`). `04b26ef5` only raises the budget. CI's Linux standalone job on `04b26ef5` is the run of the shipped gate on the GitHub runner.
+- CI's 80 percent limit has two runner samples behind it (3905 and 3004 us). A later runner window could sit above 4267 us without a VoLum change. The report would then need a new sample, not a quieter fraction.
+- The three full greens and `verify-linux --final` ran at 65 percent (`d5ac20a2` and `25ba2a1d`), stricter than the box's 70 percent.

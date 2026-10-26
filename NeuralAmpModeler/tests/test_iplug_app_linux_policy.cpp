@@ -156,18 +156,23 @@ TEST_CASE("Linux callback timing is off unless VOLUM_CALLBACK_TIMING is exactly 
   CHECK(iplug::VoLumLinuxCallbackTimingEnabled("1"));
 }
 
-TEST_CASE("Linux callback budget is 80 percent of the period, and the period rounds up")
+TEST_CASE("Linux callback budget is 70 percent of the rounded-up period on the box, 80 on CI")
 {
-  // 256 / 48000 s = 5333.333 us, so the period is 5334 us and 80 percent is 4267 us.
-  CHECK(iplug::kVoLumLinuxCallbackBudgetThousandths == 800);
+  // 256 / 48000 s = 5333.333 us, so the period is 5334 us, 70 percent is 3733 us
+  // and 80 percent is 4267 us.
+  CHECK(iplug::kVoLumLinuxCallbackBudgetThousandths == 700);
+  CHECK(iplug::kVoLumLinuxCallbackBudgetStrictThousandths == 800);
   CHECK(iplug::VoLumLinuxCallbackPeriodUs(256, 48000) == 5334);
-  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 48000) == 4267);
+  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 48000, false) == 3733);
+  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 48000, true) == 4267);
   CHECK(iplug::VoLumLinuxCallbackPeriodUs(1024, 48000) == 21334);
   CHECK(iplug::VoLumLinuxCallbackPeriodUs(0, 48000) == 0);
-  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 0) == 0);
+  CHECK(iplug::VoLumLinuxCallbackBudgetUs(256, 0, false) == 0);
 
   const std::string py = ReadRepoText("NeuralAmpModeler/scripts/linux/smoke/callback-budget.py");
-  CHECK(py.find("BUDGET_THOUSANDTHS = 800") != std::string::npos);
+  CHECK(py.find("BUDGET_THOUSANDTHS = 700") != std::string::npos);
+  CHECK(py.find("BUDGET_STRICT_THOUSANDTHS = 800") != std::string::npos);
+  CHECK(py.find("return BUDGET_STRICT_THOUSANDTHS if strict else BUDGET_THOUSANDTHS") != std::string::npos);
   CHECK(py.find("(frames * 1000000 + rate - 1) // rate") != std::string::npos);
 }
 
@@ -177,6 +182,7 @@ TEST_CASE("Linux callback window classifies a jackd xrun as the driver's only wh
   const uint32_t frames = 256;
   const uint32_t rate = 48000;
   const uint32_t inside = 2672; // measured on the box, about half the period
+  const uint32_t overBoxBudget = 3734;
   const uint32_t overBudget = 4268;
   const uint32_t overPeriod = 5335;
 
@@ -186,6 +192,10 @@ TEST_CASE("Linux callback window classifies a jackd xrun as the driver's only wh
         == VoLumLinuxCallbackVerdict::DriverXrun);
   CHECK(iplug::VoLumLinuxClassifyCallbackWindow(inside, frames, rate, 1, true, true)
         == VoLumLinuxCallbackVerdict::FailStrictJack);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBoxBudget, frames, rate, 0, false, true)
+        == VoLumLinuxCallbackVerdict::FailCallback);
+  CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBoxBudget, frames, rate, 0, true, true)
+        == VoLumLinuxCallbackVerdict::Pass);
   CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBudget, frames, rate, 0, false, true)
         == VoLumLinuxCallbackVerdict::FailCallback);
   CHECK(iplug::VoLumLinuxClassifyCallbackWindow(overBudget, frames, rate, 0, true, true)

@@ -1,10 +1,10 @@
 # Q6 — Callback-timing trend per release
 
-Not a 1.4.0 blocker. Ticket 18 gates a single run against 80 percent of the JACK period. It does not say whether this release is slower than the last one.
+Not a 1.4.0 blocker. Ticket 18 gates a single run against a fixed fraction of the JACK period (70 percent on the box, 80 percent on CI). It does not say whether this release is slower than the last one.
 
 ## Problem
 
-A change can raise p99 callback time from 1.6 ms toward 3.5 ms and still pass the 80 percent budget (about 4.3 ms at 48000 Hz / 256 frames). The regression shows up only when it crosses that line, which is late.
+A change can raise p99 callback time from 1.6 ms toward 3.5 ms and still pass CI's 80 percent budget (about 4.3 ms at 48000 Hz / 256 frames). The regression shows up only when it crosses that line, which is late.
 
 ## Scope
 
@@ -15,5 +15,5 @@ A change can raise p99 callback time from 1.6 ms toward 3.5 ms and still pass th
 
 ## Out of scope
 
-- Using the trend in place of the zero-xrun rule on CI or the 80 percent budget. Both stay.
+- Using the trend in place of the zero-xrun rule on CI or the callback budgets. They stay.
 - Failing on a single noisy p99 sample. The comparison is one 60 s window on the GitHub runner, which is where the zero-xrun rule already holds.

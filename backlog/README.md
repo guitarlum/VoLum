@@ -102,7 +102,7 @@ naming what already exists.
   report allocations already in the DSP path. Fixing them stays with `B7`.
 - `Q6-callback-timing-release-trend.md` — CI publishes p50, p99 and max callback
   time from the 60 s window and fails when p99 regresses more than 20 percent
-  against the last release baseline. The 80 percent budget gate stays.
+  against the last release baseline. The callback budget gates stay.
 - `P2-volum-1.2.0-rt-and-perf-hardening.md` — **re-scoped.** Now only the two
   UI-thread performance items: the preset dirty check builds two JSON trees per
   knob event, and settings still write on every idle tick that finds the flag set.

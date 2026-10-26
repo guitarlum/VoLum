@@ -3,7 +3,8 @@
 
 The integer rules match iplug::VoLumLinuxCallbackPeriodUs,
 VoLumLinuxCallbackBudgetUs and VoLumLinuxClassifyCallbackWindow in
-VoLumAppLinuxPolicy.h. kVoLumLinuxCallbackBudgetThousandths is 800.
+VoLumAppLinuxPolicy.h. The box budget is 700 thousandths of the period,
+the strict (CI) budget 800.
 """
 
 import argparse
@@ -11,7 +12,9 @@ import re
 import sys
 
 # kVoLumLinuxCallbackBudgetThousandths
-BUDGET_THOUSANDTHS = 800
+BUDGET_THOUSANDTHS = 700
+# kVoLumLinuxCallbackBudgetStrictThousandths
+BUDGET_STRICT_THOUSANDTHS = 800
 
 
 def period_us(frames, rate):
@@ -20,15 +23,19 @@ def period_us(frames, rate):
     return (frames * 1000000 + rate - 1) // rate
 
 
-def budget_us(frames, rate):
-    return period_us(frames, rate) * BUDGET_THOUSANDTHS // 1000
+def budget_thousandths(strict):
+    return BUDGET_STRICT_THOUSANDTHS if strict else BUDGET_THOUSANDTHS
+
+
+def budget_us(frames, rate, strict):
+    return period_us(frames, rate) * budget_thousandths(strict) // 1000
 
 
 def classify(max_us, frames, rate, jack_xruns, strict, timing_complete):
     if not timing_complete or frames <= 0 or rate <= 0:
         return "fail-missing"
     period = period_us(frames, rate)
-    budget = budget_us(frames, rate)
+    budget = budget_us(frames, rate, strict)
     if max_us > period or max_us > budget:
         return "fail-callback"
     if jack_xruns > 0:
@@ -85,7 +92,7 @@ def main():
     logged_frames = header_field(header, "frames")
     logged_rate = header_field(header, "rate")
     period = period_us(args.frames, args.rate)
-    budget = budget_us(args.frames, args.rate)
+    budget = budget_us(args.frames, args.rate, args.strict)
 
     # 20 ms past the probe's end stamp still belongs to the window, not to the quit.
     slack_ns = 20000000
@@ -110,7 +117,7 @@ def main():
     print("window_callbacks=%d" % len(in_window))
     print("period_us=%d" % period)
     print("budget_us=%d" % budget)
-    print("budget_thousandths=%d" % BUDGET_THOUSANDTHS)
+    print("budget_thousandths=%d" % budget_thousandths(args.strict))
     print("jack_xruns=%d" % args.jack_xruns)
     print("verdict=%s" % verdict)
     if verdict == "driver":
